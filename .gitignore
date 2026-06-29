@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+.vite/
+.omc/
+*.log
+.DS_Store
+Thumbs.db
+*.local
+.env
+.env.*

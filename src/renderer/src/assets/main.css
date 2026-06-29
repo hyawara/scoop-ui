@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --mica-bg: rgba(243, 243, 243, 0.6);
+}
+
+.dark {
+  --mica-bg: rgba(32, 32, 32, 0.6);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: transparent;
+  overflow: hidden;
+}
+
+#app {
+  height: 100vh;
+  width: 100vw;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--mica-bg);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Glow effect for search box */
+.search-glow:focus-within {
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+/* Micro-card animation */
+.micro-card-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.micro-card-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.micro-card-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.micro-card-leave-to {
+  opacity: 0;
+}

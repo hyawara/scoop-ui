@@ -1,0 +1,22 @@
+appId: com.hyawara.scoop-ui
+productName: Scoop UI
+copyright: Copyright © 2025 hyawara
+directories:
+  output: release
+  buildResources: resources
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+files:
+  - dist/**/*
+extraResources:
+  - from: node_modules/iconv-lite
+    to: node_modules/iconv-lite
+    filter:
+      - "**/*"
