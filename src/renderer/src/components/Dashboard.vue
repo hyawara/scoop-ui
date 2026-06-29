@@ -37,6 +37,10 @@ const installedNames = computed(() =>
   new Set(packagesStore.installed.map((p: any) => p.name))
 )
 
+const updatableNames = computed(() =>
+  new Set(packagesStore.updatable.map((p: any) => p.name))
+)
+
 function handleInstall(pkgName: string) {
   packagesStore.install(pkgName)
   message.info(`正在安装 ${pkgName}...`)
@@ -145,11 +149,11 @@ function handleUninstall(pkg: any) {
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
                       <span class="font-medium text-sm truncate text-gray-700 dark:text-gray-200">{{ pkg.name }}</span>
-                      <NTag size="small" :bordered="false" type="info">{{ pkg.version || 'unknown' }}</NTag>
+                      <NTag size="small" :bordered="false" type="info">{{ pkg.version }}</NTag>
                     </div>
                   </div>
                   <div class="flex items-center gap-1 flex-shrink-0">
-                    <NButton v-if="pkg.updatable" text size="small" type="warning" @click="handleUpdate(pkg)">
+                    <NButton v-if="updatableNames.has(pkg.name)" text size="small" type="warning" @click="handleUpdate(pkg)">
                       <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
                       更新
                     </NButton>
@@ -183,7 +187,7 @@ function handleUninstall(pkg: any) {
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
                       <span class="font-medium text-sm text-gray-700 dark:text-gray-200">{{ pkg.name }}</span>
-                      <NTag size="small" :bordered="false" type="warning">可更新</NTag>
+                      <NTag size="small" :bordered="false" type="warning">{{ pkg.oldVersion }} → {{ pkg.newVersion }}</NTag>
                     </div>
                   </div>
                   <NButton size="small" type="warning" @click="handleUpdate(pkg)" :loading="packagesStore.loading">

@@ -189,29 +189,39 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // List installed packages
+  // List installed packages (scoop list outputs fixed-width table: Name, Version, Source, Updated, Info)
   ipcMain.handle('scoop:listInstalled', async () => {
     const { stdout } = await execScoop('list')
     const lines = stdout.split('\n')
     const result: { name: string; version: string; bucket: string }[] = []
+    let pastHeader = false
     for (const line of lines) {
-      const m = line.match(/^\s{2}(\S[\w.\-+]+)\s+(\S+)(?:\s+\[(\w+)\])?/)
-      if (m) {
-        result.push({ name: m[1], version: m[2], bucket: m[3] || '' })
+      if (!pastHeader) {
+        if (/^-+\s+-+/.test(line)) { pastHeader = true }
+        continue
+      }
+      const fields = line.trim().split(/\s{2,}/)
+      if (fields.length >= 2 && fields[0] && fields[1]) {
+        result.push({ name: fields[0].trim(), version: fields[1].trim(), bucket: fields[2]?.trim() || '' })
       }
     }
     return result
   })
 
-  // List updatable packages
+  // List updatable packages (scoop status: Name, Installed Version, Latest Version, ...)
   ipcMain.handle('scoop:listUpdatable', async () => {
     const { stdout } = await execScoop('status')
     const lines = stdout.split('\n')
     const result: { name: string; oldVersion: string; newVersion: string }[] = []
+    let pastHeader = false
     for (const line of lines) {
-      const m = line.match(/^\s{2}(\S[\w.\-+]+):\s+(\S+)\s+->\s+(\S+)/)
-      if (m) {
-        result.push({ name: m[1], oldVersion: m[2], newVersion: m[3] })
+      if (!pastHeader) {
+        if (/^-+\s+-+/.test(line)) { pastHeader = true }
+        continue
+      }
+      const fields = line.trim().split(/\s{2,}/)
+      if (fields.length >= 3 && fields[0] && fields[1] && fields[2]) {
+        result.push({ name: fields[0].trim(), oldVersion: fields[1].trim(), newVersion: fields[2].trim() })
       }
     }
     return result
