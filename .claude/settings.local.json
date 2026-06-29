@@ -7,7 +7,8 @@
       "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/autopilot-state.json)",
       "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultrawork-state.json)",
       "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ralph-state.json)",
-      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultraqa-state.json)"
+      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultraqa-state.json)",
+      "Bash(rtk ls *)"
     ]
   }
 }

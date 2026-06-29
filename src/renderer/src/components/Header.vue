@@ -76,16 +76,16 @@ async function refreshAll() {
         <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">Scoop UI</span>
       </div>
       <div class="h-5 w-px bg-gray-200 dark:bg-gray-700" />
-      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-900/40">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-        <span class="text-xs text-green-700 dark:text-green-400 font-medium">Scoop 正常</span>
+      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-900/40 border border-green-700/30">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+        <span class="text-xs text-emerald-300 font-medium">Scoop 正常</span>
       </div>
     </div>
 
     <!-- Center: Search Box -->
     <div class="flex-1 flex justify-center no-drag">
       <div class="search-glow w-full max-w-md">
-        <div class="search-wrapper flex items-center gap-2 px-4 py-2 bg-black/[0.03] dark:bg-white/[0.05] rounded-full transition-all duration-300">
+        <div class="search-wrapper flex items-center gap-2 px-4 py-2 bg-white/[0.06] border border-white/[0.1] rounded-full transition-all duration-300">
           <SearchOutline class="w-4 h-4 text-gray-400 flex-shrink-0" />
           <input
             ref="searchInputRef"

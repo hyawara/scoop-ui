@@ -192,7 +192,7 @@ async function removeBucket(name: string) {
           :pane-style="{ padding: '0', height: '100%' }"
         >
           <template #prefix>
-            <span class="font-semibold text-base text-slate-800 dark:text-gray-200 ml-5">应用管理</span>
+            <span class="font-semibold text-base text-slate-800 text-slate-100 ml-5">应用管理</span>
           </template>
           <template #suffix>
             <div class="flex items-center gap-1 mr-3">
@@ -248,7 +248,7 @@ async function removeBucket(name: string) {
                 <div class="flex flex-col items-center justify-center pt-10 pb-5 px-8 flex-shrink-0">
                   <NEmpty description="暂无已安装的软件包">
                     <template #icon>
-                      <NIcon :component="CubeOutline" size="48" class="text-gray-300 dark:text-gray-600" />
+                      <NIcon :component="CubeOutline" size="48" class="text-gray-300 text-slate-600" />
                     </template>
                     <template #extra>
                       <p class="text-xs text-gray-400 mt-1">使用顶部搜索框查找并安装软件</p>
@@ -268,7 +268,7 @@ async function removeBucket(name: string) {
                         <div class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform" :class="pkg.color">
                           <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
                         </div>
-                        <span class="text-xs font-medium text-slate-700 dark:text-gray-300">{{ pkg.name }}</span>
+                        <span class="text-xs font-medium text-slate-700 text-slate-300">{{ pkg.name }}</span>
                         <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
                         <NButton size="tiny" secondary :disabled="installedNames.has(pkg.name)"
                           :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
@@ -282,14 +282,14 @@ async function removeBucket(name: string) {
 
               <NScrollbar v-else class="h-full custom-scrollbar">
                 <!-- 正在检查更新... -->
-                <div v-if="checkingUpdates" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-slate-50/60 dark:bg-gray-800/30 border border-slate-100 dark:border-gray-700/30">
-                  <div class="w-3.5 h-3.5 border-2 border-t-transparent border-slate-400 rounded-full animate-spin" />
+                <div v-if="checkingUpdates" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                  <div class="w-3.5 h-3.5 border-2 border-t-transparent border-slate-500 rounded-full animate-spin" />
                   <span class="text-xs text-slate-400">正在检查可更新列表...</span>
                 </div>
                 <!-- 有可更新软件时显示更新横幅 -->
-                <div v-else-if="updatableNames.size > 0" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
-                  <NIcon :component="RefreshOutline" size="16" class="text-blue-500 flex-shrink-0" />
-                  <span class="text-xs text-blue-700 dark:text-blue-300 flex-1">
+                <div v-else-if="updatableNames.size > 0" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-blue-950/30 border border-blue-500/20">
+                  <NIcon :component="RefreshOutline" size="16" class="text-blue-400 flex-shrink-0" />
+                  <span class="text-xs text-blue-300 flex-1">
                     有 <strong>{{ updatableNames.size }}</strong> 个软件可更新
                   </span>
                   <NButton size="tiny" type="primary" secondary :loading="updatingAll" @click="handleUpdateAll" class="!rounded-lg">
@@ -298,7 +298,7 @@ async function removeBucket(name: string) {
                 </div>
                 <div class="flex flex-col gap-1.5 p-4">
                   <div v-for="pkg in packagesStore.installed" :key="pkg.name"
-                    class="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] transition-colors micro-card"
+                    class="flex items-center gap-3 p-3 rounded-xl bg-[#1e222b] hover:bg-[#262b36] border border-white/[0.06] hover:border-white/[0.1] transition-all micro-card"
                   >
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
                       <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
@@ -314,7 +314,7 @@ async function removeBucket(name: string) {
                     </div>
                     <div class="flex items-center gap-1.5 flex-shrink-0">
                       <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
-                        class="!bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300 font-mono"
+                        class="!bg-amber-500/10 !text-amber-400 font-mono" style="border: 1px solid rgba(251,191,36,0.3)"
                       >→ {{ getNewVersion(pkg.name) }}</NTag>
                       <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
                         <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
@@ -333,7 +333,7 @@ async function removeBucket(name: string) {
             <div class="flex flex-col h-full overflow-y-auto">
               <div class="flex flex-col items-center justify-center pt-10 pb-5 px-8 flex-shrink-0">
                 <NEmpty description="在搜索框中探索新软件">
-                  <template #icon><NIcon :component="CompassOutline" size="48" class="text-gray-300 dark:text-gray-600" /></template>
+                  <template #icon><NIcon :component="CompassOutline" size="48" class="text-gray-300 text-slate-600" /></template>
                   <template #extra><p class="text-xs text-gray-400 mt-1">支持数千款开源软件的一键安装</p></template>
                 </NEmpty>
               </div>
@@ -350,7 +350,7 @@ async function removeBucket(name: string) {
                       <div class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform" :class="pkg.color">
                         <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
                       </div>
-                      <span class="text-xs font-medium text-slate-700 dark:text-gray-300">{{ pkg.name }}</span>
+                      <span class="text-xs font-medium text-slate-700 text-slate-300">{{ pkg.name }}</span>
                       <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
                       <NButton size="tiny" secondary :disabled="installedNames.has(pkg.name)"
                         @click.stop="handleInstall(pkg.name)" class="!mt-1 btn-hover-scale w-full !rounded-lg"
@@ -399,7 +399,7 @@ async function removeBucket(name: string) {
                 <span class="text-white text-xs font-bold uppercase">{{ b.name[0] }}</span>
               </div>
               <div class="flex-1 min-w-0">
-                <span class="font-medium text-sm text-gray-700 dark:text-gray-200">{{ b.name }}</span>
+                <span class="font-medium text-sm text-gray-700 text-slate-100">{{ b.name }}</span>
                 <p class="text-[10px] text-gray-400 truncate">{{ b.source }}</p>
               </div>
               <NPopconfirm @positive-click="removeBucket(b.name)">

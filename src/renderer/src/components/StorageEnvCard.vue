@@ -63,8 +63,8 @@ async function migrate() {
 <template>
   <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col gap-3 p-4">
     <div class="flex items-center justify-between mb-1">
-      <span class="font-semibold text-sm text-slate-800 dark:text-gray-200">存储与环境管理</span>
-      <ServerOutline class="w-4 h-4 text-gray-400" />
+      <span class="font-semibold text-sm text-slate-100">存储与环境管理</span>
+      <ServerOutline class="w-4 h-4 text-slate-400" />
     </div>
 
     <div class="grid grid-cols-12 gap-4 items-start">
@@ -78,16 +78,17 @@ async function migrate() {
           :gap-degree="60"
           :stroke-width="6"
         >
-          <span class="text-[10px] text-gray-500">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
+          <span class="text-[10px] text-slate-400">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
         </NProgress>
-        <span class="text-[10px] text-gray-400">{{ settingsStore.cacheInfo.files || 0 }} 个缓存文件</span>
+        <span class="text-[10px] text-slate-500">{{ settingsStore.cacheInfo.files || 0 }} 个缓存文件</span>
         <NButton
           size="tiny"
-          type="error"
           :loading="settingsStore.loading"
           @click="clearCache"
           class="w-full btn-hover-scale !rounded-lg"
           :disabled="settingsStore.cacheInfo.files === 0"
+          style="background: rgba(136,19,55,0.35); color: #fda4af; border: 1px solid rgba(159,68,86,0.5);"
+          :hover="{}"
         >
           <template #icon><TrashOutline class="w-3 h-3" /></template>
           清除缓存
@@ -99,11 +100,11 @@ async function migrate() {
         <!-- Scoop Root -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5">
-            <FolderOutline class="w-3 h-3 text-gray-400 flex-shrink-0" />
-            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Scoop Root</span>
+            <FolderOutline class="w-3 h-3 text-slate-400 flex-shrink-0" />
+            <span class="text-[10px] text-slate-400 font-medium">Scoop Root</span>
           </div>
           <span
-            class="font-medium text-[11px] text-gray-800 dark:text-gray-200 truncate max-w-[100px] text-right"
+            class="font-medium text-[11px] text-slate-200 truncate max-w-[100px] text-right"
             :title="settingsStore.scoopEnv.scoop || '使用默认路径'"
           >
             {{ settingsStore.scoopEnv.scoop || '使用默认路径' }}
@@ -113,11 +114,11 @@ async function migrate() {
         <!-- Global -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5">
-            <FolderOutline class="w-3 h-3 text-gray-400 flex-shrink-0" />
-            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Global</span>
+            <FolderOutline class="w-3 h-3 text-slate-400 flex-shrink-0" />
+            <span class="text-[10px] text-slate-400 text-slate-400 font-medium">Global</span>
           </div>
           <span
-            class="font-medium text-[11px] text-gray-800 dark:text-gray-200 truncate max-w-[100px] text-right"
+            class="font-medium text-[11px] text-slate-200 text-slate-200 truncate max-w-[100px] text-right"
             :title="settingsStore.scoopEnv.global || '未配置原生路径'"
           >
             {{ settingsStore.scoopEnv.global || '未配置原生路径' }}
@@ -127,19 +128,19 @@ async function migrate() {
         <!-- Aria2 -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5">
-            <RocketOutline class="w-3 h-3 text-gray-400 flex-shrink-0" />
-            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Aria2 加速</span>
+            <RocketOutline class="w-3 h-3 text-slate-400 flex-shrink-0" />
+            <span class="text-[10px] text-slate-400 text-slate-400 font-medium">Aria2 加速</span>
           </div>
           <span
             class="text-[10px] font-medium"
-            :class="settingsStore.aria2Enabled ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
+            :class="settingsStore.aria2Enabled ? 'text-green-400' : 'text-slate-400'"
           >
             <span v-if="settingsStore.aria2Enabled" class="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-1 animate-pulse" />
             {{ settingsStore.aria2Enabled ? '已启用' : '未检测到' }}
           </span>
         </div>
 
-        <div class="h-px bg-gray-100 dark:bg-gray-700/50" />
+        <div class="h-px bg-white/[0.06]" />
 
         <!-- 磁盘空间 -->
         <div>
@@ -151,7 +152,7 @@ async function migrate() {
             :show-indicator="false"
             color="#6B5BED"
           />
-          <p class="text-[10px] text-gray-400 mt-1">{{ diskInfo }}</p>
+          <p class="text-[10px] text-slate-400 mt-1">{{ diskInfo }}</p>
         </div>
 
         <NButton size="tiny" dashed @click="showMigrate = true" class="w-full btn-hover-scale !rounded-lg">
