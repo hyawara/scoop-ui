@@ -22,14 +22,26 @@ const appStore = useAppStore()
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
 
-const isDark = ref(false)
+const isDark = ref(true)
 const searchQuery = ref('')
 
 const themeOverrides = {
   common: {
     borderRadius: '8px',
-    primaryColor: '#6B5BED',
-    primaryColorHover: '#7B6FF0',
+    primaryColor: '#7B6FF0',
+    primaryColorHover: '#9F94F5',
+    bodyColor: 'transparent',
+    cardColor: 'transparent',
+    modalColor: '#1a1c24',
+    actionColor: '#1a1c24',
+    scrollbarColor: 'rgba(255,255,255,0.12)',
+    scrollbarColorHover: 'rgba(255,255,255,0.2)',
+    dividerColor: 'rgba(255,255,255,0.06)',
+    inputColor: 'rgba(255,255,255,0.04)',
+    inputColorFocus: 'rgba(255,255,255,0.08)',
+    popoverColor: '#1a1c24',
+    tableColor: 'transparent',
+    tagColor: 'rgba(255,255,255,0.06)',
   },
 }
 

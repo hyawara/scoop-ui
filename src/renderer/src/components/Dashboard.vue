@@ -224,7 +224,7 @@ async function removeBucket(name: string) {
               </div>
               <div
                 ref="logContainerRef"
-                class="flex-1 overflow-y-auto bg-[#1e1e20] p-4"
+                class="flex-1 overflow-y-auto bg-[#0b0c10] p-4"
               >
                 <div class="font-mono text-xs text-green-400/90 leading-relaxed space-y-0.5">
                   <div v-for="(line, i) in logs" :key="i" class="whitespace-pre-wrap break-all">
@@ -298,17 +298,17 @@ async function removeBucket(name: string) {
                 </div>
                 <div class="flex flex-col gap-1.5 p-4">
                   <div v-for="pkg in packagesStore.installed" :key="pkg.name"
-                    class="flex items-center gap-3 p-3 rounded-xl bg-gray-50/80 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors micro-card"
+                    class="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] transition-colors micro-card"
                   >
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
                       <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
                     </div>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
-                        <span class="font-medium text-sm truncate text-gray-700 dark:text-gray-200">{{ pkg.name }}</span>
-                        <NTag size="small" :bordered="false" type="info">{{ pkg.version }}</NTag>
+                        <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
+                        <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
                         <NTag v-if="pkg.global" size="small" :bordered="false"
-                          class="!bg-blue-100 !text-blue-700 dark:!bg-blue-900/40 dark:!text-blue-300"
+                          class="!bg-blue-900/40 !text-blue-300"
                         >🌐 Global</NTag>
                       </div>
                     </div>
@@ -316,10 +316,10 @@ async function removeBucket(name: string) {
                       <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
                         class="!bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300 font-mono"
                       >→ {{ getNewVersion(pkg.name) }}</NTag>
-                      <NButton v-if="updatableNames.has(pkg.name)" text size="small" type="warning" @click="handleUpdate(pkg)">
+                      <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
                         <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
                       </NButton>
-                      <NButton text size="small" type="error" @click="handleUninstall(pkg)">
+                      <NButton text size="small" class="!text-rose-400 hover:!text-rose-500" @click="handleUninstall(pkg)">
                         <template #icon><NIcon :component="TrashOutline" size="14" /></template>
                       </NButton>
                     </div>

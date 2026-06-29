@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --app-bg: #f3f4f6;
+  --app-bg: #0f1115;
 }
 
 .dark {
-  --app-bg: #1a1a1f;
+  --app-bg: #0f1115;
 }
 
 * {
@@ -30,27 +30,31 @@ body {
   background: var(--app-bg);
 }
 
-/* Card glass effect */
+/* Card glass effect for dark mode */
 .glass-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(24, 26, 32, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
   transition: all 0.3s ease;
 }
 
 .glass-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border-color: rgba(255, 255, 255, 0.09);
   transform: translateY(-1px);
 }
 
-.dark .glass-card {
-  background: rgba(40, 40, 45, 0.9);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+/* Fallback light theme glass (not used by default but kept for compatibility) */
+:root.light .glass-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 }
 
-.dark .glass-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+:root.light .glass-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .drag-region {
@@ -61,19 +65,14 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Search box glow */
+/* Search box glow for dark mode */
 .search-glow:focus-within .search-wrapper {
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(107, 91, 237, 0.15), 0 0 24px rgba(107, 91, 237, 0.1);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(107, 91, 237, 0.25), 0 0 24px rgba(107, 91, 237, 0.15);
   transition: all 0.3s ease;
 }
 
-.dark .search-glow:focus-within .search-wrapper {
-  background: rgba(50, 50, 55, 1);
-  box-shadow: 0 0 0 3px rgba(139, 127, 255, 0.2), 0 0 24px rgba(139, 127, 255, 0.15);
-}
-
-/* Scrollbar styling */
+/* Scrollbar styling for dark mode */
 ::-webkit-scrollbar {
   width: 5px;
 }
@@ -83,27 +82,24 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.15);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  opacity: 0;
-  transition: opacity 0.2s;
 }
 
 *:hover::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.25);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(128, 128, 128, 0.4);
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* Custom scrollbar for NScrollbar containers */
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.15);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.3);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* Button hover animation */

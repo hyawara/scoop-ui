@@ -76,8 +76,8 @@ async function refreshAll() {
         <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">Scoop UI</span>
       </div>
       <div class="h-5 w-px bg-gray-200 dark:bg-gray-700" />
-      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-50 dark:bg-green-900/30">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500" />
+      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-900/40">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
         <span class="text-xs text-green-700 dark:text-green-400 font-medium">Scoop 正常</span>
       </div>
     </div>
@@ -94,7 +94,7 @@ async function refreshAll() {
             placeholder="搜索 Scoop 软件包..."
             class="bg-transparent border-none outline-none text-sm w-full text-gray-700 dark:text-gray-200 placeholder-gray-400"
           />
-          <kbd class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border bg-slate-100 dark:bg-gray-800 shadow-sm dark:shadow-black/20 border-slate-200/70 dark:border-gray-600/50 text-gray-400 dark:text-gray-500 flex-shrink-0">
+          <kbd class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border bg-white/[0.04] shadow-sm border-white/[0.08] text-slate-500 flex-shrink-0">
             Ctrl+K
           </kbd>
         </div>
