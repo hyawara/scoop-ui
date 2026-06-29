@@ -9,8 +9,14 @@ export interface PSResult {
   code: number | null
 }
 
-// Locate git-bash executable
+// Locate git-bash executable — prefer scoop-installed git
 function findBashExe(): string {
+  // 1. Scoop-installed git: $SCOOP/apps/git/current/bin/bash.exe
+  const scoopRoot = process.env['SCOOP'] || join(process.env['USERPROFILE'] || '', 'scoop')
+  const scoopGit = join(scoopRoot, 'apps', 'git', 'current', 'bin', 'bash.exe')
+  if (existsSync(scoopGit)) return scoopGit
+
+  // 2. Common system-wide install locations
   const candidates = [
     join(process.env['PROGRAMFILES'] || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
     join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
