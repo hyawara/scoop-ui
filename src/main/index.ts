@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
-import { registerScoopIPC } from './ipc/scoop'
+import { registerScoopIPC } from './ipc/scoop.js'
 
 let mainWindow: BrowserWindow | null = null
 
