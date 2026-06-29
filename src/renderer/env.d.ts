@@ -44,6 +44,8 @@ interface Window {
     migrateScoop: (newPath: string) => Promise<void>
     onProgress: (callback: (data: ProgressData) => void) => void
     removeProgressListener: () => void
+    onLog: (callback: (data: ProgressData) => void) => void
+    removeLogListener: () => void
     windowControl: {
       minimize: () => void
       maximize: () => void

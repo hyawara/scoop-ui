@@ -3,7 +3,11 @@
     "allow": [
       "Bash(rm /c/Users/huangy/workspace/scoop-ui/tsconfig.node.tsbuildinfo)",
       "Bash(git -C /c/Users/huangy/workspace/scoop-ui rm --cached tsconfig.node.tsbuildinfo)",
-      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/autopilot-state.json /c/Users/huangy/workspace/scoop-ui/.omc/state/ralph-state.json /c/Users/huangy/workspace/scoop-ui/.omc/state/ultrawork-state.json /c/Users/huangy/workspace/scoop-ui/.omc/state/ultraqa-state.json)"
+      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/autopilot-state.json /c/Users/huangy/workspace/scoop-ui/.omc/state/ralph-state.json /c/Users/huangy/workspace/scoop-ui/.omc/state/ultrawork-state.json /c/Users/huangy/workspace/scoop-ui/.omc/state/ultraqa-state.json)",
+      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/autopilot-state.json)",
+      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultrawork-state.json)",
+      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ralph-state.json)",
+      "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultraqa-state.json)"
     ]
   }
 }

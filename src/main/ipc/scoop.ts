@@ -1,6 +1,13 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { execPowerShell, execScoop, execScoopJSON } from '../utils/powershell.js'
 
+function sendProgress(win: BrowserWindow | null, data: any) {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('scoop:progress', data)
+    win.webContents.send('scoop:log', data)
+  }
+}
+
 const SCOOP_INSTALL_SCRIPT = `
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 irm get.scoop.sh | iex
@@ -55,13 +62,11 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:installScoop', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     await execPowerShell(SCOOP_INSTALL_SCRIPT, (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'message',
           package: 'scoop',
           message: data.trim(),
         })
-      }
     })
   })
 
@@ -99,13 +104,11 @@ export function registerScoopIPC(): void {
 
     const win = BrowserWindow.fromWebContents(event.sender)
     return execScoop(args.join(' '), (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'install',
           package: name,
           message: data.trim(),
         })
-      }
     })
   })
 
@@ -117,13 +120,11 @@ export function registerScoopIPC(): void {
     const args = `uninstall ${name}${global ? ' --global' : ''}`
     const win = BrowserWindow.fromWebContents(event.sender)
     return execScoop(args, (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'uninstall',
           package: name,
           message: data.trim(),
         })
-      }
     })
   })
 
@@ -132,13 +133,11 @@ export function registerScoopIPC(): void {
     const args = name ? `update ${name}` : 'update --all'
     const win = BrowserWindow.fromWebContents(event.sender)
     return execScoop(args, (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'update',
           package: name || '*',
           message: data.trim(),
         })
-      }
     })
   })
 
@@ -146,13 +145,11 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:cleanup', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return execScoop('cleanup --all', (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'message',
           package: 'scoop',
           message: data.trim(),
         })
-      }
     })
   })
 
@@ -179,13 +176,11 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:clearCache', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return execScoop('cache rm *', (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'message',
           package: 'scoop',
           message: data.trim(),
         })
-      }
     })
   })
 
@@ -249,11 +244,9 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:updateAll', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return execScoop('update --all', (data) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('scoop:progress', {
+        sendProgress(win, {
           type: 'update', package: '*', message: data.trim(),
         })
-      }
     })
   })
 
@@ -340,13 +333,11 @@ export function registerScoopIPC(): void {
       await execPowerShell(
         `Copy-Item -Path $env:SCOOP -Destination '${newPath.replace(/'/g, "''")}' -Recurse -Force; [Environment]::SetEnvironmentVariable('SCOOP', '${newPath.replace(/'/g, "''")}', 'User')`,
         (data) => {
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('scoop:progress', {
+            sendProgress(win, {
               type: 'message',
               package: 'scoop',
               message: data.trim(),
             })
-          }
         }
       )
     }

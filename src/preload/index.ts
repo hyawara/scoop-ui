@@ -35,6 +35,13 @@ contextBridge.exposeInMainWorld('scoopAPI', {
     ipcRenderer.removeAllListeners('scoop:progress')
   },
 
+  onLog: (callback: (data: any) => void) => {
+    ipcRenderer.on('scoop:log', (_event, data) => callback(data))
+  },
+  removeLogListener: () => {
+    ipcRenderer.removeAllListeners('scoop:log')
+  },
+
   windowControl: {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
