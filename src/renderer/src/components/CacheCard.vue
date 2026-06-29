@@ -18,13 +18,13 @@ async function clearCache() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl h-full glass-card" content-class="h-full">
-    <div class="flex items-center justify-between mb-3">
+  <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col gap-3 p-0 pt-4 px-4 pb-4">
+    <div class="flex items-center justify-between">
       <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">缓存管理</span>
       <FolderOpenOutline class="w-4 h-4 text-gray-400" />
     </div>
 
-    <div class="flex items-center gap-4 mt-2">
+    <div class="flex items-center gap-4">
       <div class="flex-shrink-0">
         <NProgress
           type="dashboard"
@@ -32,12 +32,13 @@ async function clearCache() {
           :color="settingsStore.cacheInfo.files > 10 ? '#f0a020' : '#6B5BED'"
           :gap-offset-degree="0"
           :gap-degree="60"
+          :stroke-width="8"
         >
           <span class="text-xs text-gray-500">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
         </NProgress>
       </div>
 
-      <div class="flex-1 flex flex-col gap-2.5">
+      <div class="flex-1 flex flex-col gap-2">
         <div class="flex justify-between text-xs text-gray-500">
           <span>缓存文件</span>
           <span class="font-mono tabular-nums">{{ settingsStore.cacheInfo.files || 0 }} 个</span>
@@ -51,7 +52,7 @@ async function clearCache() {
           size="small"
           :loading="settingsStore.loading"
           @click="clearCache"
-          class="mt-1 btn-hover-scale"
+          class="btn-hover-scale active:!scale-95"
           :disabled="settingsStore.cacheInfo.files === 0"
         >
           <template #icon>

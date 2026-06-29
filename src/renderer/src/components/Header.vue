@@ -94,7 +94,7 @@ async function refreshAll() {
             placeholder="搜索 Scoop 软件包..."
             class="bg-transparent border-none outline-none text-sm w-full text-gray-700 dark:text-gray-200 placeholder-gray-400"
           />
-          <kbd class="inline-flex items-center px-1.5 h-5 text-[10px] font-medium rounded-md bg-gray-200/70 dark:bg-gray-700/70 text-gray-400 dark:text-gray-500 flex-shrink-0">
+          <kbd class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border bg-slate-100 dark:bg-gray-800 shadow-sm dark:shadow-black/20 border-slate-200/70 dark:border-gray-600/50 text-gray-400 dark:text-gray-500 flex-shrink-0">
             Ctrl+K
           </kbd>
         </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { NCard, NButton, NModal, NInput, NSpace, NProgress, useMessage } from 'naive-ui'
-import { FolderOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
+import { FolderOutline, SwapHorizontalOutline, ServerOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -14,12 +14,6 @@ onMounted(async () => {
   await settingsStore.loadEnv()
   await settingsStore.loadDiskSpace()
 })
-
-function getDiskLabel(path: string): string {
-  if (!path) return '未知'
-  const match = path.match(/^([A-Z]):/i)
-  return match ? `${match[1]}盘` : path
-}
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 GB'
@@ -60,54 +54,66 @@ async function migrate() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl h-full glass-card" content-class="h-full">
-    <div class="flex items-center justify-between mb-3">
+  <NCard :bordered="false" class="!rounded-xl glass-card h-full" content-class="h-full flex flex-col p-0">
+    <div class="flex items-center justify-between mb-3 pt-4 px-4">
       <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">存储路径</span>
-      <FolderOutline class="w-4 h-4 text-gray-400" />
+      <ServerOutline class="w-4 h-4 text-gray-400" />
     </div>
 
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-3 flex-1 px-4 pb-4">
       <!-- Scoop Root -->
-      <div class="flex flex-col gap-0.5">
-        <span class="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Scoop Root</span>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <FolderOutline class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span class="text-[11px] text-gray-400 dark:text-gray-500 font-medium">Scoop Root</span>
+        </div>
         <span
-          class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate"
-          :title="settingsStore.scoopEnv.scoop || '未设置'"
+          class="font-semibold text-xs text-gray-800 dark:text-gray-200 truncate max-w-[140px] text-right"
+          :title="settingsStore.scoopEnv.scoop || '使用默认路径'"
         >
-          {{ settingsStore.scoopEnv.scoop || '未设置' }}
+          {{ settingsStore.scoopEnv.scoop || '使用默认路径' }}
         </span>
       </div>
 
       <!-- Global -->
-      <div class="flex flex-col gap-0.5">
-        <span class="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Global</span>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <FolderOutline class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span class="text-[11px] text-gray-400 dark:text-gray-500 font-medium">Global</span>
+        </div>
         <span
-          class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate"
-          :title="settingsStore.scoopEnv.global || '未设置'"
+          class="font-semibold text-xs text-gray-800 dark:text-gray-200 truncate max-w-[140px] text-right"
+          :title="settingsStore.scoopEnv.global || '未配置原生路径'"
         >
-          {{ settingsStore.scoopEnv.global || '未设置' }}
+          {{ settingsStore.scoopEnv.global || '未配置原生路径' }}
         </span>
       </div>
 
+      <!-- Divider -->
+      <div class="h-px bg-gray-100 dark:bg-gray-700/50 my-1" />
+
       <!-- Disk space bar -->
-      <div class="my-2">
+      <div>
         <NProgress
           type="line"
           :percentage="diskPercent"
-          :height="6"
-          :border-radius="3"
+          :height="5"
+          :border-radius="2"
           :show-indicator="false"
           color="#6B5BED"
         />
         <p class="text-[11px] text-gray-400 mt-1.5">{{ diskInfo }}</p>
       </div>
 
-      <NButton size="small" @click="showMigrate = true" class="w-full">
-        <template #icon>
-          <SwapHorizontalOutline class="w-3.5 h-3.5" />
-        </template>
-        迁移目录
-      </NButton>
+      <!-- Migrate button pinned to bottom -->
+      <div class="flex-1 flex items-end">
+        <NButton size="small" dashed @click="showMigrate = true" class="w-full btn-hover-scale">
+          <template #icon>
+            <SwapHorizontalOutline class="w-3.5 h-3.5" />
+          </template>
+          迁移目录
+        </NButton>
+      </div>
     </div>
 
     <!-- Migrate Modal -->

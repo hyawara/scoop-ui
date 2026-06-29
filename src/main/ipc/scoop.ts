@@ -233,8 +233,8 @@ export function registerScoopIPC(): void {
   // Get scoop environment
   ipcMain.handle('scoop:getEnv', async () => {
     const { stdout } = await execPowerShell('echo "SCOOP=$env:SCOOP; GLOBAL=$env:SCOOP_GLOBAL"')
-    const scoop = stdout.match(/SCOOP=(.+)/)?.[1]?.trim() || ''
-    const global = stdout.match(/GLOBAL=(.+)/)?.[1]?.trim() || ''
+    const scoop = stdout.match(/SCOOP=([^;\s]+)/)?.[1]?.trim() || ''
+    const global = stdout.match(/GLOBAL=([^;\s]+)/)?.[1]?.trim() || ''
     return { scoop, global }
   })
 

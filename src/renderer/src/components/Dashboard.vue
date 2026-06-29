@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import {
   NCard,
   NTabs,
@@ -13,7 +14,6 @@ import {
 import {
   DownloadOutline,
   TrashOutline,
-  CloudDownloadOutline,
   CubeOutline,
   CheckmarkDoneOutline,
   CompassOutline,
@@ -26,9 +26,20 @@ import ProxyCard from '@/components/ProxyCard.vue'
 const packagesStore = usePackagesStore()
 const message = useMessage()
 
-function handleInstall(pkg: any) {
-  packagesStore.install(pkg.name)
-  message.info(`正在安装 ${pkg.name}...`)
+const recommendedPackages = [
+  { name: 'git', icon: 'G', desc: '版本控制', bucket: 'main', color: 'from-orange-500 to-red-500' },
+  { name: 'curl', icon: 'C', desc: 'HTTP 请求', bucket: 'main', color: 'from-green-500 to-teal-500' },
+  { name: 'neovim', icon: 'N', desc: '终端编辑器', bucket: 'main', color: 'from-green-600 to-emerald-600' },
+  { name: 'fzf', icon: 'F', desc: '模糊搜索', bucket: 'main', color: 'from-purple-500 to-pink-500' },
+]
+
+const installedNames = computed(() =>
+  new Set(packagesStore.installed.map((p: any) => p.name))
+)
+
+function handleInstall(pkgName: string) {
+  packagesStore.install(pkgName)
+  message.info(`正在安装 ${pkgName}...`)
 }
 
 function handleUpdate(pkg: any) {
@@ -44,40 +55,79 @@ function handleUninstall(pkg: any) {
 
 <template>
   <div class="grid grid-cols-12 gap-4 h-full">
-    <!-- Card 1: 应用管理核心 (左侧大卡片) -->
-    <NCard :bordered="false" class="col-span-7 row-span-2 !rounded-xl overflow-hidden glass-card" content-class="!p-0">
+    <!-- === Card 1: 应用管理 (左侧大卡片，跨 7 列) === -->
+    <NCard
+      :bordered="false"
+      class="col-span-7 row-span-3 !rounded-xl overflow-hidden glass-card min-h-0"
+      content-class="!p-0 flex flex-col h-full"
+    >
       <NTabs
         type="line"
         size="large"
         :default-value="'installed'"
-        class="h-full flex flex-col"
-        :pane-style="{ padding: '0' }"
+        class="flex-1 flex flex-col"
+        :pane-style="{ padding: '0', height: '100%' }"
       >
         <template #prefix>
           <span class="font-semibold text-sm ml-5 text-gray-700 dark:text-gray-200">应用管理</span>
         </template>
 
-        <NTabPane name="installed" tab="已安装">
-          <NScrollbar style="max-height: calc(100vh - 260px)">
-            <div v-if="packagesStore.loading" class="flex justify-center py-16">
-              <div class="flex flex-col items-center gap-3">
-                <div class="w-6 h-6 border-2 border-t-transparent border-purple-500 rounded-full animate-spin" />
-                <span class="text-xs text-gray-400">加载中...</span>
+        <!-- Tab: 已安装 -->
+        <NTabPane name="installed" tab="已安装" class="flex-1">
+          <div v-if="packagesStore.loading" class="flex justify-center py-16">
+            <div class="flex flex-col items-center gap-3">
+              <div class="w-6 h-6 border-2 border-t-transparent border-purple-500 rounded-full animate-spin" />
+              <span class="text-xs text-gray-400">加载中...</span>
+            </div>
+          </div>
+
+          <div v-else-if="packagesStore.installed.length === 0" class="flex flex-col items-center justify-center py-8 px-6">
+            <NEmpty description="暂无已安装的软件包">
+              <template #icon>
+                <NIcon :component="CubeOutline" size="48" class="text-gray-300 dark:text-gray-600" />
+              </template>
+              <template #extra>
+                <p class="text-xs text-gray-400 mt-1">使用顶部搜索框查找并安装软件</p>
+              </template>
+            </NEmpty>
+
+            <!-- 热门推荐 -->
+            <div class="w-full mt-6 pt-5 border-t border-gray-100 dark:border-gray-700/50">
+              <div class="flex items-center gap-2 mb-4">
+                <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">热门推荐</span>
+                <div class="flex-1 h-px bg-gray-100 dark:bg-gray-700/50" />
+              </div>
+              <div class="grid grid-cols-4 gap-3">
+                <div
+                  v-for="pkg in recommendedPackages"
+                  :key="pkg.name"
+                  class="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-50/60 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-all duration-200 group"
+                >
+                  <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
+                    :class="pkg.color"
+                  >
+                    <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                  </div>
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ pkg.name }}</span>
+                  <span class="text-[10px] text-gray-400 -mt-1">{{ pkg.desc }}</span>
+                  <NButton
+                    size="tiny"
+                    secondary
+                    :disabled="installedNames.has(pkg.name)"
+                    :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
+                    @click.stop="handleInstall(pkg.name)"
+                    class="!mt-1 btn-hover-scale"
+                  >
+                    {{ installedNames.has(pkg.name) ? '已安装' : '安装' }}
+                  </NButton>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div v-else-if="packagesStore.installed.length === 0" class="flex items-center justify-center py-20">
-              <NEmpty description="暂无已安装的软件包">
-                <template #icon>
-                  <NIcon :component="CubeOutline" size="48" class="text-gray-300 dark:text-gray-600" />
-                </template>
-                <template #extra>
-                  <p class="text-xs text-gray-400 mt-1">使用顶部搜索框查找并安装软件</p>
-                </template>
-              </NEmpty>
-            </div>
-
-            <div v-else class="flex flex-col gap-1.5 p-4">
+          <NScrollbar v-else style="max-height: calc(100vh - 200px)">
+            <div class="flex flex-col gap-1.5 p-4">
               <div
                 v-for="pkg in packagesStore.installed"
                 :key="pkg.name"
@@ -93,7 +143,13 @@ function handleUninstall(pkg: any) {
                   </div>
                 </div>
                 <div class="flex items-center gap-1 flex-shrink-0">
-                  <NButton v-if="pkg.updatable" text size="small" type="warning" @click="handleUpdate(pkg)">
+                  <NButton
+                    v-if="pkg.updatable"
+                    text
+                    size="small"
+                    type="warning"
+                    @click="handleUpdate(pkg)"
+                  >
                     <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
                     更新
                   </NButton>
@@ -106,9 +162,10 @@ function handleUninstall(pkg: any) {
           </NScrollbar>
         </NTabPane>
 
-        <NTabPane name="updatable" tab="有可更新">
-          <NScrollbar style="max-height: calc(100vh - 260px)">
-            <div v-if="packagesStore.updatable.length === 0" class="flex items-center justify-center py-20">
+        <!-- Tab: 有可更新 -->
+        <NTabPane name="updatable" tab="有可更新" class="flex-1">
+          <NScrollbar style="max-height: calc(100vh - 200px)">
+            <div v-if="packagesStore.updatable.length === 0" class="flex flex-col items-center justify-center py-20">
               <NEmpty description="所有软件均为最新版本">
                 <template #icon>
                   <NIcon :component="CheckmarkDoneOutline" size="48" class="text-gray-300 dark:text-gray-600" />
@@ -138,8 +195,9 @@ function handleUninstall(pkg: any) {
           </NScrollbar>
         </NTabPane>
 
-        <NTabPane name="discover" tab="软件发现">
-          <div class="flex items-center justify-center py-20">
+        <!-- Tab: 软件发现 -->
+        <NTabPane name="discover" tab="软件发现" class="flex-1">
+          <div class="flex flex-col items-center justify-center py-12 px-6">
             <NEmpty description="在搜索框中探索新软件">
               <template #icon>
                 <NIcon :component="CompassOutline" size="48" class="text-gray-300 dark:text-gray-600" />
@@ -148,24 +206,57 @@ function handleUninstall(pkg: any) {
                 <p class="text-xs text-gray-400 mt-1">支持数千款开源软件的一键安装</p>
               </template>
             </NEmpty>
+
+            <div class="w-full mt-6 pt-5 border-t border-gray-100 dark:border-gray-700/50">
+              <div class="flex items-center gap-2 mb-4">
+                <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">热门发现</span>
+                <div class="flex-1 h-px bg-gray-100 dark:bg-gray-700/50" />
+              </div>
+              <div class="grid grid-cols-4 gap-3">
+                <div
+                  v-for="pkg in recommendedPackages"
+                  :key="pkg.name"
+                  class="flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-50/60 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-all duration-200 group"
+                >
+                  <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
+                    :class="pkg.color"
+                  >
+                    <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                  </div>
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ pkg.name }}</span>
+                  <span class="text-[10px] text-gray-400 -mt-1">{{ pkg.desc }}</span>
+                  <NButton
+                    size="tiny"
+                    secondary
+                    :disabled="installedNames.has(pkg.name)"
+                    @click.stop="handleInstall(pkg.name)"
+                    class="!mt-1 btn-hover-scale"
+                  >
+                    {{ installedNames.has(pkg.name) ? '已安装' : '安装' }}
+                  </NButton>
+                </div>
+              </div>
+            </div>
           </div>
         </NTabPane>
       </NTabs>
     </NCard>
 
-    <!-- Card 2: 缓存清理 (右上) -->
-    <div class="col-span-5">
+    <!-- === 右侧列（跨 5 列）=== -->
+    <div class="col-span-5 flex flex-col gap-4 h-full">
+      <!-- Card 2: 缓存清理 -->
       <CacheCard />
-    </div>
 
-    <!-- Card 3: 存储路径 (右下左) -->
-    <div class="col-span-3">
-      <StorageCard />
-    </div>
-
-    <!-- Card 4: 代理开关 (右下右) -->
-    <div class="col-span-2">
-      <ProxyCard />
+      <!-- 底部分栏：存储路径 + 网络代理（等高） -->
+      <div class="grid grid-cols-5 gap-4 flex-1 min-h-0">
+        <div class="col-span-3">
+          <StorageCard />
+        </div>
+        <div class="col-span-2">
+          <ProxyCard />
+        </div>
+      </div>
     </div>
   </div>
 </template>
