@@ -66,30 +66,27 @@ async function refreshAll() {
 </script>
 
 <template>
-  <header class="drag-region flex items-center h-12 px-4 gap-4 border-b border-black/5 dark:border-white/10">
+  <header class="drag-region flex items-center py-3 px-6 gap-6 border-b border-black/[0.06] dark:border-white/[0.08]">
     <!-- Left: Logo & Status -->
-    <div class="flex items-center gap-3 no-drag">
-      <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+    <div class="flex items-center gap-3 no-drag flex-shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-sm">
           <span class="text-white text-xs font-bold">S</span>
         </div>
-        <span class="font-semibold text-sm">Scoop UI</span>
+        <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">Scoop UI</span>
       </div>
-      <div class="h-4 w-px bg-gray-300 dark:bg-gray-600" />
-      <div class="flex items-center gap-2">
-        <span class="inline-flex items-center gap-1 text-xs">
-          <span class="w-1.5 h-1.5 rounded-full bg-green-500" />
-          <span class="text-gray-500 dark:text-gray-400">Scoop 正常</span>
-        </span>
+      <div class="h-5 w-px bg-gray-200 dark:bg-gray-700" />
+      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-50 dark:bg-green-900/30">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500" />
+        <span class="text-xs text-green-700 dark:text-green-400 font-medium">Scoop 正常</span>
       </div>
     </div>
 
     <!-- Center: Search Box -->
     <div class="flex-1 flex justify-center no-drag">
-      <div class="search-glow w-full max-w-md relative rounded-lg overflow-hidden transition-all">
-        <div class="absolute inset-0 bg-gradient-to-r from-purple-400/20 via-blue-400/20 to-cyan-400/20 opacity-0 focus-within:opacity-100 transition-opacity pointer-events-none" />
-        <div class="relative flex items-center bg-black/5 dark:bg-white/10 rounded-lg px-3 py-1.5">
-          <NIcon :component="SearchOutline" size="16" class="text-gray-400 mr-2" />
+      <div class="search-glow w-full max-w-md">
+        <div class="search-wrapper flex items-center gap-2 px-4 py-2 bg-black/[0.03] dark:bg-white/[0.05] rounded-full transition-all duration-300">
+          <SearchOutline class="w-4 h-4 text-gray-400 flex-shrink-0" />
           <input
             ref="searchInputRef"
             :value="searchQuery"
@@ -97,7 +94,7 @@ async function refreshAll() {
             placeholder="搜索 Scoop 软件包..."
             class="bg-transparent border-none outline-none text-sm w-full text-gray-700 dark:text-gray-200 placeholder-gray-400"
           />
-          <kbd class="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ml-2">
+          <kbd class="inline-flex items-center px-1.5 h-5 text-[10px] font-medium rounded-md bg-gray-200/70 dark:bg-gray-700/70 text-gray-400 dark:text-gray-500 flex-shrink-0">
             Ctrl+K
           </kbd>
         </div>
@@ -105,7 +102,7 @@ async function refreshAll() {
     </div>
 
     <!-- Right: Actions & Window Controls -->
-    <div class="flex items-center gap-1 no-drag">
+    <div class="flex items-center gap-0.5 no-drag flex-shrink-0">
       <NButton text @click="refreshAll" size="small">
         <template #icon>
           <NIcon :component="RefreshOutline" size="16" />
@@ -122,7 +119,7 @@ async function refreshAll() {
         </template>
       </NButton>
 
-      <div class="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
+      <div class="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1.5" />
 
       <NButton text @click="minimize" size="small">
         <template #icon>

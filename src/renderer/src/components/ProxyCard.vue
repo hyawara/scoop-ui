@@ -27,13 +27,14 @@ async function handleToggle(val: boolean) {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl h-full" content-class="h-full">
-    <div class="flex items-center justify-between mb-2">
-      <span class="font-semibold text-sm">网络代理</span>
+  <NCard :bordered="false" class="!rounded-xl h-full glass-card" content-class="h-full flex flex-col">
+    <div class="flex items-center justify-between mb-3">
+      <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">网络代理</span>
       <GlobeOutline class="w-4 h-4 text-gray-400" />
     </div>
 
-    <div class="flex flex-col gap-3 mt-2">
+    <div class="flex flex-col space-y-4 flex-1">
+      <!-- Status switch -->
       <div class="flex items-center justify-between">
         <span class="text-xs text-gray-500">代理状态</span>
         <NSwitch
@@ -43,34 +44,38 @@ async function handleToggle(val: boolean) {
         />
       </div>
 
-      <div>
-        <NSelect
-          v-model:value="proxyType"
-          size="small"
-          :options="[
-            { label: 'HTTP', value: 'http' },
-            { label: 'SOCKS5', value: 'socks5' },
-          ]"
-          class="mb-2"
-        />
-        <NInput
-          v-model:value="proxyAddress"
-          size="small"
-          placeholder="127.0.0.1:7890"
-          :disabled="!proxyEnabled"
-        />
-      </div>
+      <!-- Type dropdown -->
+      <NSelect
+        v-model:value="proxyType"
+        size="medium"
+        :options="[
+          { label: 'HTTP', value: 'http' },
+          { label: 'SOCKS5', value: 'socks5' },
+        ]"
+      />
 
-      <NButton
-        size="small"
-        type="primary"
-        :disabled="!proxyAddress"
-        :loading="settingsStore.loading"
-        @click="handleToggle(!proxyEnabled)"
-        block
-      >
-        {{ proxyEnabled ? '关闭代理' : '启用代理' }}
-      </NButton>
+      <!-- Address input -->
+      <NInput
+        v-model:value="proxyAddress"
+        size="medium"
+        placeholder="127.0.0.1:7890"
+        :disabled="!proxyEnabled"
+      />
+
+      <!-- Action button -->
+      <div class="flex-1 flex items-end">
+        <NButton
+          size="medium"
+          secondary
+          :disabled="!proxyAddress"
+          :loading="settingsStore.loading"
+          @click="handleToggle(!proxyEnabled)"
+          block
+          class="btn-hover-scale"
+        >
+          {{ proxyEnabled ? '关闭代理' : '启用代理' }}
+        </NButton>
+      </div>
     </div>
   </NCard>
 </template>

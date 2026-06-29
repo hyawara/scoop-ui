@@ -39,7 +39,7 @@ const diskInfo = computed(() => {
   if (!ds) return ''
   if (Array.isArray(ds)) {
     const drive = ds.find((d: any) => d.Used != null)
-    if (drive) return `${formatBytes(drive.Free)} 可用`
+    if (drive) return `${formatBytes(drive.Free)} / ${formatBytes(drive.Used + drive.Free)} 可用`
   }
   if (ds.Used != null && ds.Free != null) {
     return `${formatBytes(ds.Free)} / ${formatBytes(ds.Used + ds.Free)} 可用`
@@ -60,27 +60,37 @@ async function migrate() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl h-full" content-class="h-full">
-    <div class="flex items-center justify-between mb-2">
-      <span class="font-semibold text-sm">存储路径</span>
+  <NCard :bordered="false" class="!rounded-xl h-full glass-card" content-class="h-full">
+    <div class="flex items-center justify-between mb-3">
+      <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">存储路径</span>
       <FolderOutline class="w-4 h-4 text-gray-400" />
     </div>
 
-    <div class="flex flex-col gap-2 mt-2">
-      <div class="flex justify-between items-center text-xs">
-        <span class="text-gray-500">Scoop Root</span>
-        <span class="font-mono text-xs truncate max-w-[140px]" :title="settingsStore.scoopEnv.scoop || '未设置'">
-          {{ getDiskLabel(settingsStore.scoopEnv.scoop) || '未设置' }}
-        </span>
-      </div>
-      <div class="flex justify-between items-center text-xs">
-        <span class="text-gray-500">Global</span>
-        <span class="font-mono text-xs truncate max-w-[140px]" :title="settingsStore.scoopEnv.global || '未设置'">
-          {{ getDiskLabel(settingsStore.scoopEnv.global) || '未设置' }}
+    <div class="flex flex-col gap-3">
+      <!-- Scoop Root -->
+      <div class="flex flex-col gap-0.5">
+        <span class="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Scoop Root</span>
+        <span
+          class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate"
+          :title="settingsStore.scoopEnv.scoop || '未设置'"
+        >
+          {{ settingsStore.scoopEnv.scoop || '未设置' }}
         </span>
       </div>
 
-      <div class="mt-2">
+      <!-- Global -->
+      <div class="flex flex-col gap-0.5">
+        <span class="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">Global</span>
+        <span
+          class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate"
+          :title="settingsStore.scoopEnv.global || '未设置'"
+        >
+          {{ settingsStore.scoopEnv.global || '未设置' }}
+        </span>
+      </div>
+
+      <!-- Disk space bar -->
+      <div class="my-2">
         <NProgress
           type="line"
           :percentage="diskPercent"
@@ -89,10 +99,10 @@ async function migrate() {
           :show-indicator="false"
           color="#6B5BED"
         />
-        <p class="text-xs text-gray-400 mt-1">{{ diskInfo }}</p>
+        <p class="text-[11px] text-gray-400 mt-1.5">{{ diskInfo }}</p>
       </div>
 
-      <NButton size="small" @click="showMigrate = true" class="mt-1">
+      <NButton size="small" @click="showMigrate = true" class="w-full">
         <template #icon>
           <SwapHorizontalOutline class="w-3.5 h-3.5" />
         </template>
