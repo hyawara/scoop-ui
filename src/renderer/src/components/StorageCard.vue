@@ -55,8 +55,8 @@ async function migrate() {
 
 <template>
   <NCard :bordered="false" class="!rounded-xl glass-card h-full" content-class="h-full flex flex-col p-0">
-    <div class="flex items-center justify-between mb-3 pt-4 px-4">
-      <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">存储路径</span>
+    <div class="flex items-center justify-between pt-4 px-4 pb-3">
+      <span class="font-semibold text-base text-slate-800 dark:text-gray-200">存储路径</span>
       <ServerOutline class="w-4 h-4 text-gray-400" />
     </div>
 
@@ -68,7 +68,7 @@ async function migrate() {
           <span class="text-[11px] text-gray-400 dark:text-gray-500 font-medium">Scoop Root</span>
         </div>
         <span
-          class="font-semibold text-xs text-gray-800 dark:text-gray-200 truncate max-w-[140px] text-right"
+          class="font-semibold text-xs text-gray-800 dark:text-gray-200 truncate max-w-[120px] text-right"
           :title="settingsStore.scoopEnv.scoop || '使用默认路径'"
         >
           {{ settingsStore.scoopEnv.scoop || '使用默认路径' }}
@@ -82,17 +82,15 @@ async function migrate() {
           <span class="text-[11px] text-gray-400 dark:text-gray-500 font-medium">Global</span>
         </div>
         <span
-          class="font-semibold text-xs text-gray-800 dark:text-gray-200 truncate max-w-[140px] text-right"
+          class="font-semibold text-xs text-gray-800 dark:text-gray-200 truncate max-w-[120px] text-right"
           :title="settingsStore.scoopEnv.global || '未配置原生路径'"
         >
           {{ settingsStore.scoopEnv.global || '未配置原生路径' }}
         </span>
       </div>
 
-      <!-- Divider -->
       <div class="h-px bg-gray-100 dark:bg-gray-700/50 my-1" />
 
-      <!-- Disk space bar -->
       <div>
         <NProgress
           type="line"
@@ -105,9 +103,8 @@ async function migrate() {
         <p class="text-[11px] text-gray-400 mt-1.5">{{ diskInfo }}</p>
       </div>
 
-      <!-- Migrate button pinned to bottom -->
       <div class="flex-1 flex items-end">
-        <NButton size="small" dashed @click="showMigrate = true" class="w-full btn-hover-scale">
+        <NButton size="small" dashed @click="showMigrate = true" class="w-full btn-hover-scale !rounded-lg">
           <template #icon>
             <SwapHorizontalOutline class="w-3.5 h-3.5" />
           </template>
@@ -116,12 +113,9 @@ async function migrate() {
       </div>
     </div>
 
-    <!-- Migrate Modal -->
     <NModal v-model:show="showMigrate" preset="card" title="迁移 Scoop 目录" style="width: 500px">
       <NSpace vertical>
-        <p class="text-sm text-gray-500">
-          将当前 Scoop 安装目录迁移到新的位置。此操作会复制所有现有数据，并更新系统环境变量。
-        </p>
+        <p class="text-sm text-gray-500">将当前 Scoop 安装目录迁移到新的位置。此操作会复制所有现有数据，并更新系统环境变量。</p>
         <NInput v-model:value="newPath" placeholder="例如: D:\Scoop" />
         <NButton type="primary" :loading="settingsStore.loading" @click="migrate" block>
           开始迁移

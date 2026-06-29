@@ -74,7 +74,7 @@ function toggleTheme() {
                 @toggle-theme="toggleTheme"
               />
 
-              <div class="flex-1 overflow-hidden p-4">
+              <div class="flex-1 overflow-hidden mx-auto max-w-[1400px] w-full px-6 py-4">
                 <Transition name="fade" mode="out-in">
                   <Dashboard v-if="!searchQuery.trim()" />
                   <SearchPanel v-else :query="searchQuery" />

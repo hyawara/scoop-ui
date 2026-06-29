@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { NCard, NSwitch, NInput, NSelect, NButton, useMessage } from 'naive-ui'
-import {
-  GlobeOutline,
-  FlashOutline,
-  DesktopOutline,
-  CloseCircleOutline,
-} from '@vicons/ionicons5'
+import { GlobeOutline, Flash, FlashOffOutline, CloseCircleOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -51,8 +46,8 @@ async function clearAll() {
 
 <template>
   <NCard :bordered="false" class="!rounded-xl glass-card h-full" content-class="h-full flex flex-col p-0">
-    <div class="flex items-center justify-between mb-3 pt-4 px-4">
-      <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">网络代理</span>
+    <div class="flex items-center justify-between pt-4 px-4 pb-3">
+      <span class="font-semibold text-base text-slate-800 dark:text-gray-200">网络代理</span>
       <GlobeOutline class="w-4 h-4 text-gray-400" />
     </div>
 
@@ -60,11 +55,7 @@ async function clearAll() {
       <!-- Status switch -->
       <div class="flex items-center justify-between">
         <span class="text-xs text-gray-500">代理状态</span>
-        <NSwitch
-          v-model:value="proxyEnabled"
-          @update:value="handleToggle"
-          size="small"
-        />
+        <NSwitch v-model:value="proxyEnabled" @update:value="handleToggle" size="small" />
       </div>
 
       <!-- Type dropdown -->
@@ -77,53 +68,69 @@ async function clearAll() {
         ]"
       />
 
-      <!-- Address input -->
+      <!-- Address input + Clear suffix -->
       <NInput
         v-model:value="proxyAddress"
         size="small"
         placeholder="127.0.0.1:7890"
         :disabled="!proxyEnabled"
-      />
+      >
+        <template #suffix>
+          <NButton
+            v-if="proxyAddress || proxyEnabled"
+            text
+            size="tiny"
+            @click="clearAll"
+            class="!p-0 text-gray-400 hover:text-red-400 transition-colors"
+          >
+            <template #icon>
+              <CloseCircleOutline class="w-3.5 h-3.5" />
+            </template>
+          </NButton>
+        </template>
+      </NInput>
 
       <!-- Quick preset buttons -->
-      <div class="flex flex-col gap-1.5">
-        <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">快捷设置</span>
+      <div>
+        <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-1.5 block">快捷设置</span>
         <div class="grid grid-cols-2 gap-1.5">
           <NButton
             size="tiny"
             secondary
             @click="applyPreset('127.0.0.1:7890', 'http')"
-            class="btn-hover-scale !justify-start"
+            class="btn-hover-scale !rounded-lg"
           >
             <template #icon>
-              <FlashOutline class="w-3 h-3" />
+              <Flash class="w-3 h-3 text-amber-500" />
             </template>
-            <span class="text-[10px]">本地 7890</span>
+            ⚡ 7890
           </NButton>
           <NButton
             size="tiny"
             secondary
             @click="applyPreset('127.0.0.1:1080', 'socks5')"
-            class="btn-hover-scale !justify-start"
+            class="btn-hover-scale !rounded-lg"
           >
             <template #icon>
-              <DesktopOutline class="w-3 h-3" />
+              <FlashOffOutline class="w-3 h-3 text-blue-500" />
             </template>
-            <span class="text-[10px]">SOCKS5 1080</span>
+            🔒 SOCKS5
           </NButton>
         </div>
+      </div>
+
+      <!-- Enable/Disable action -->
+      <div class="flex-1 flex items-end">
         <NButton
-          size="tiny"
-          dashed
-          @click="clearAll"
+          size="small"
+          secondary
+          :disabled="!proxyAddress"
+          :loading="settingsStore.loading"
+          @click="handleToggle(!proxyEnabled)"
           block
-          class="btn-hover-scale"
-          :disabled="!proxyEnabled && !proxyAddress"
+          class="btn-hover-scale !rounded-lg"
         >
-          <template #icon>
-            <CloseCircleOutline class="w-3 h-3" />
-          </template>
-          <span class="text-[10px]">清除代理</span>
+          {{ proxyEnabled ? '关闭代理' : '启用代理' }}
         </NButton>
       </div>
     </div>

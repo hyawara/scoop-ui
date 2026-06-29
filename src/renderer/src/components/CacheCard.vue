@@ -20,7 +20,7 @@ async function clearCache() {
 <template>
   <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col gap-3 p-0 pt-4 px-4 pb-4">
     <div class="flex items-center justify-between">
-      <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">缓存管理</span>
+      <span class="font-semibold text-base text-slate-800 dark:text-gray-200">缓存管理</span>
       <FolderOpenOutline class="w-4 h-4 text-gray-400" />
     </div>
 
@@ -52,7 +52,7 @@ async function clearCache() {
           size="small"
           :loading="settingsStore.loading"
           @click="clearCache"
-          class="btn-hover-scale active:!scale-95"
+          class="btn-hover-scale active:!scale-95 !rounded-lg"
           :disabled="settingsStore.cacheInfo.files === 0"
         >
           <template #icon>
