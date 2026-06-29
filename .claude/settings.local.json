@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm /c/Users/huangy/workspace/scoop-ui/tsconfig.node.tsbuildinfo)",
+      "Bash(git -C /c/Users/huangy/workspace/scoop-ui rm --cached tsconfig.node.tsbuildinfo)"
+    ]
+  }
+}

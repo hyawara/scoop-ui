@@ -6,6 +6,7 @@ release/
 *.log
 .DS_Store
 Thumbs.db
+*.tsbuildinfo
 *.local
 .env
 .env.*
