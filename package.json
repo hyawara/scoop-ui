@@ -1,14 +1,17 @@
 {
   "name": "scoop-ui",
+  "type": "module",
   "version": "1.0.0",
   "description": "A modern GUI for Scoop package manager on Windows, built with Electron and Vue 3",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build:main": "tsc -p tsconfig.node.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
     "preview": "vite preview",
-    "electron:dev": "vite build && electron .",
-    "electron:build": "vite build && electron-builder"
+    "electron:dev": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder"
   },
   "keywords": [
     "scoop",

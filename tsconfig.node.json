@@ -10,7 +10,7 @@
     "esModuleInterop": true,
     "lib": ["ES2020"],
     "skipLibCheck": true,
-    "outDir": "./dist/main",
+    "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
       "@main/*": ["./src/main/*"]

@@ -30,7 +30,7 @@ async function clearCache() {
           type="dashboard"
           :percentage="Math.min(settingsStore.cacheInfo.files * 5, 100)"
           :color="settingsStore.cacheInfo.files > 10 ? '#f0a020' : '#6B5BED'"
-          :gap-offset- degree="0"
+          :gap-offset-degree="0"
           :gap-degree="60"
         >
           <span class="text-xs text-gray-500">{{ settingsStore.cacheInfo.size || 0 }} MB</span>

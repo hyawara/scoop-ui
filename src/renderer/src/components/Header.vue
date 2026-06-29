@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, inject, type Ref } from 'vue'
 import { NButton, NIcon, useMessage } from 'naive-ui'
+import { usePackagesStore } from '@/stores/packages'
+import { useSettingsStore } from '@/stores/settings'
 import {
   SearchOutline,
   SettingsOutline,
@@ -50,8 +52,6 @@ function closeWindow() {
 }
 
 async function refreshAll() {
-  const { usePackagesStore } = await import('@/stores/packages')
-  const { useSettingsStore } = await import('@/stores/settings')
   const packagesStore = usePackagesStore()
   const settingsStore = useSettingsStore()
   await Promise.all([
