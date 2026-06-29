@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, execSync, ChildProcess } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import iconv from 'iconv-lite'
@@ -11,20 +11,27 @@ export interface PSResult {
 
 // Locate git-bash executable — prefer scoop-installed git
 function findBashExe(): string {
-  const userProfile = process.env['USERPROFILE'] || ''
-  const scoopRoots = [
-    process.env['SCOOP'],                                    // $SCOOP env var
-    join(userProfile, 'scoop'),                              // default: ~/scoop
-    join(userProfile, 'install', 'scoop'),                   // custom: ~/install/scoop
-    join(userProfile, 'scoop', 'apps', 'scoop', 'current'),  // scoop self-update
-  ].filter(Boolean) as string[]
+  // 1. Ask scoop directly where git is installed
+  try {
+    const gitPrefix = execSync('powershell -NoProfile -NonInteractive -Command "scoop prefix git"', {
+      encoding: 'utf-8',
+      windowsHide: true,
+      timeout: 10000,
+    }).trim()
+    if (gitPrefix) {
+      const bashPath = join(gitPrefix, 'bin', 'bash.exe')
+      if (existsSync(bashPath)) return bashPath
+    }
+  } catch { /* scoop not found or git not installed */ }
 
-  for (const root of scoopRoots) {
-    const bashPath = join(root, 'apps', 'git', 'current', 'bin', 'bash.exe')
+  // 2. Check $SCOOP env var
+  const scoopEnv = process.env['SCOOP']
+  if (scoopEnv) {
+    const bashPath = join(scoopEnv, 'apps', 'git', 'current', 'bin', 'bash.exe')
     if (existsSync(bashPath)) return bashPath
   }
 
-  // Fallback: system-wide git installations
+  // 3. System-wide git installations
   const candidates = [
     join(process.env['PROGRAMFILES'] || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
     join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
