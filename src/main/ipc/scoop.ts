@@ -193,8 +193,21 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:listInstalled', async () => {
     const { stdout } = await execScoop('list')
     const lines = stdout.split('\n')
-    const result: { name: string; version: string; bucket: string }[] = []
+    const result: { name: string; version: string; bucket: string; global: boolean }[] = []
     let pastHeader = false
+
+    // Get globally installed packages for cross-reference
+    let globalSet = new Set<string>()
+    try {
+      const g = await execScoop('list --global')
+      for (const l of g.stdout.split('\n')) {
+        const parts = l.trim().split(/\s{2,}/)
+        if (parts[0] && !parts[0].startsWith('-') && !parts[0].startsWith('Name')) {
+          globalSet.add(parts[0].trim())
+        }
+      }
+    } catch { /* no global packages */ }
+
     for (const line of lines) {
       if (!pastHeader) {
         if (/^-+\s+-+/.test(line)) { pastHeader = true }
@@ -202,7 +215,12 @@ export function registerScoopIPC(): void {
       }
       const fields = line.trim().split(/\s{2,}/)
       if (fields.length >= 2 && fields[0] && fields[1]) {
-        result.push({ name: fields[0].trim(), version: fields[1].trim(), bucket: fields[2]?.trim() || '' })
+        result.push({
+          name: fields[0].trim(),
+          version: fields[1].trim(),
+          bucket: fields[2]?.trim() || '',
+          global: globalSet.has(fields[0].trim()),
+        })
       }
     }
     return result
@@ -225,6 +243,55 @@ export function registerScoopIPC(): void {
       }
     }
     return result
+  })
+
+  // Update all packages
+  ipcMain.handle('scoop:updateAll', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return execScoop('update --all', (data) => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('scoop:progress', {
+          type: 'update', package: '*', message: data.trim(),
+        })
+      }
+    })
+  })
+
+  // Check Aria2 status
+  ipcMain.handle('scoop:checkAria2', async () => {
+    const { stdout } = await execScoop('config aria2-enabled')
+    const enabled = stdout.trim().toLowerCase() === 'true'
+    return { enabled }
+  })
+
+  // List buckets
+  ipcMain.handle('scoop:listBuckets', async () => {
+    const { stdout } = await execScoop('bucket list')
+    const lines = stdout.split('\n')
+    const result: { name: string; source: string }[] = []
+    let pastHeader = false
+    for (const line of lines) {
+      if (!pastHeader) {
+        if (/^-+\s+-+/.test(line)) { pastHeader = true }
+        continue
+      }
+      const fields = line.trim().split(/\s{2,}/)
+      if (fields.length >= 2 && fields[0] && !fields[0].startsWith('Name')) {
+        result.push({ name: fields[0].trim(), source: fields[1]?.trim() || '' })
+      }
+    }
+    return result
+  })
+
+  // Add bucket
+  ipcMain.handle('scoop:addBucket', async (_event, name: string, repo?: string) => {
+    const cmd = repo ? `bucket add ${name} ${repo}` : `bucket add ${name}`
+    return execScoop(cmd)
+  })
+
+  // Remove bucket
+  ipcMain.handle('scoop:removeBucket', async (_event, name: string) => {
+    return execScoop(`bucket rm ${name}`)
   })
 
   // Set proxy

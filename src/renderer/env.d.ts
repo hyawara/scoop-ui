@@ -32,6 +32,11 @@ interface Window {
     clearCache: () => Promise<void>
     listInstalled: () => Promise<any[]>
     listUpdatable: () => Promise<any[]>
+    updateAll: () => Promise<void>
+    checkAria2: () => Promise<{ enabled: boolean }>
+    listBuckets: () => Promise<{ name: string; source: string }[]>
+    addBucket: (name: string, repo?: string) => Promise<void>
+    removeBucket: (name: string) => Promise<void>
     setProxy: (proxy: string) => Promise<void>
     removeProxy: () => Promise<void>
     getEnv: () => Promise<{ scoop: string; global: string }>

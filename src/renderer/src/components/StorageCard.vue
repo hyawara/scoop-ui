@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { NCard, NButton, NModal, NInput, NSpace, NProgress, useMessage } from 'naive-ui'
-import { FolderOutline, SwapHorizontalOutline, ServerOutline } from '@vicons/ionicons5'
+import { FolderOutline, SwapHorizontalOutline, ServerOutline, RocketOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -13,6 +13,7 @@ const newPath = ref('')
 onMounted(async () => {
   await settingsStore.loadEnv()
   await settingsStore.loadDiskSpace()
+  await settingsStore.checkAria2()
 })
 
 function formatBytes(bytes: number): string {
@@ -90,6 +91,21 @@ async function migrate() {
       </div>
 
       <div class="h-px bg-gray-100 dark:bg-gray-700/50 my-1" />
+
+      <!-- Aria2 Status -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <RocketOutline class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span class="text-[11px] text-gray-400 dark:text-gray-500 font-medium">Aria2 加速</span>
+        </div>
+        <span
+          class="text-[11px] font-medium"
+          :class="settingsStore.aria2Enabled ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
+        >
+          <span v-if="settingsStore.aria2Enabled" class="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-1 animate-pulse" />
+          {{ settingsStore.aria2Enabled ? '已启用' : '未检测到' }}
+        </span>
+      </div>
 
       <div>
         <NProgress
