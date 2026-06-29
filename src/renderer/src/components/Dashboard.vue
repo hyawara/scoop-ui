@@ -63,6 +63,7 @@ const loadingBuckets = ref(false)
 const addBucketModal = ref(false)
 const newBucketName = ref('')
 const newBucketRepo = ref('')
+const checkingUpdates = ref(false)
 const updatingAll = ref(false)
 
 // Terminal log state
@@ -92,8 +93,11 @@ onMounted(() => {
       addLogLine(data.message)
     }
   })
-  // 异步加载可更新列表，不阻塞已安装列表显示
-  packagesStore.loadUpdatable()
+  // 异步加载可更新列表，显示加载状态避免突然出现更新提示
+  checkingUpdates.value = true
+  packagesStore.loadUpdatable().finally(() => {
+    checkingUpdates.value = false
+  })
 })
 
 onUnmounted(() => {
@@ -277,8 +281,13 @@ async function removeBucket(name: string) {
               </div>
 
               <NScrollbar v-else class="h-full custom-scrollbar">
+                <!-- 正在检查更新... -->
+                <div v-if="checkingUpdates" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-slate-50/60 dark:bg-gray-800/30 border border-slate-100 dark:border-gray-700/30">
+                  <div class="w-3.5 h-3.5 border-2 border-t-transparent border-slate-400 rounded-full animate-spin" />
+                  <span class="text-xs text-slate-400">正在检查可更新列表...</span>
+                </div>
                 <!-- 有可更新软件时显示更新横幅 -->
-                <div v-if="updatableNames.size > 0" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
+                <div v-else-if="updatableNames.size > 0" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
                   <NIcon :component="RefreshOutline" size="16" class="text-blue-500 flex-shrink-0" />
                   <span class="text-xs text-blue-700 dark:text-blue-300 flex-1">
                     有 <strong>{{ updatableNames.size }}</strong> 个软件可更新
