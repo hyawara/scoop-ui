@@ -70,7 +70,21 @@ export function registerScoopIPC(): void {
     if (!/^[a-zA-Z0-9._\- ]{1,100}$/.test(query)) {
       throw new Error('Invalid search query')
     }
-    return execScoopJSON(`search ${query} --json`)
+    const { stdout } = await execScoop(`search ${query}`)
+    const lines = stdout.split('\n')
+    const result: { name: string; version: string; description: string; bucket: string }[] = []
+    let inTable = false
+    for (const line of lines) {
+      if (!inTable) {
+        if (/^----/.test(line.trim())) { inTable = true }
+        continue
+      }
+      const m = line.match(/^(\S[\w.\-+]+)\s+(\S+)(?:\s+([^\s]+))?\s*(.*)$/)
+      if (m && m[1].length > 0) {
+        result.push({ name: m[1], version: m[2] || '', bucket: m[3] || '', description: (m[4] || '').trim() })
+      }
+    }
+    return result
   })
 
   // Install a package
@@ -177,12 +191,30 @@ export function registerScoopIPC(): void {
 
   // List installed packages
   ipcMain.handle('scoop:listInstalled', async () => {
-    return execScoopJSON('list --json')
+    const { stdout } = await execScoop('list')
+    const lines = stdout.split('\n')
+    const result: { name: string; version: string; bucket: string }[] = []
+    for (const line of lines) {
+      const m = line.match(/^\s{2}(\S[\w.\-+]+)\s+(\S+)(?:\s+\[(\w+)\])?/)
+      if (m) {
+        result.push({ name: m[1], version: m[2], bucket: m[3] || '' })
+      }
+    }
+    return result
   })
 
   // List updatable packages
   ipcMain.handle('scoop:listUpdatable', async () => {
-    return execScoopJSON('status --json')
+    const { stdout } = await execScoop('status')
+    const lines = stdout.split('\n')
+    const result: { name: string; oldVersion: string; newVersion: string }[] = []
+    for (const line of lines) {
+      const m = line.match(/^\s{2}(\S[\w.\-+]+):\s+(\S+)\s+->\s+(\S+)/)
+      if (m) {
+        result.push({ name: m[1], oldVersion: m[2], newVersion: m[3] })
+      }
+    }
+    return result
   })
 
   // Set proxy
