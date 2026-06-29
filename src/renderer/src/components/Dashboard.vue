@@ -28,7 +28,6 @@ import {
   AddOutline,
   CloseOutline,
   StopCircleOutline,
-  TerminalOutline,
 } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import StorageEnvCard from '@/components/StorageEnvCard.vue'
@@ -51,6 +50,11 @@ const installedNames = computed(() =>
 const updatableNames = computed(() =>
   new Set(packagesStore.updatable.map((p: any) => p.name))
 )
+
+function getNewVersion(name: string): string {
+  const pkg = packagesStore.updatable.find((p: any) => p.name === name)
+  return pkg?.newVersion || ''
+}
 
 // Bucket drawer state
 const showBucketDrawer = ref(false)
@@ -88,6 +92,8 @@ onMounted(() => {
       addLogLine(data.message)
     }
   })
+  // 异步加载可更新列表，不阻塞已安装列表显示
+  packagesStore.loadUpdatable()
 })
 
 onUnmounted(() => {
@@ -193,7 +199,13 @@ async function removeBucket(name: string) {
             </div>
           </template>
 
-          <NTabPane name="installed" tab="已安装" class="flex-1 overflow-hidden">
+          <NTabPane name="installed" class="flex-1 overflow-hidden">
+            <template #tab>
+              <span>已安装</span>
+              <span v-if="updatableNames.size > 0"
+                class="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+              >{{ updatableNames.size }}</span>
+            </template>
             <!-- 全屏终端日志模式: loading 且有日志时铺满整个左侧卡片 -->
             <div v-if="packagesStore.loading && logVisible" class="flex flex-col h-full">
               <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800/50">
@@ -265,6 +277,16 @@ async function removeBucket(name: string) {
               </div>
 
               <NScrollbar v-else class="h-full custom-scrollbar">
+                <!-- 有可更新软件时显示更新横幅 -->
+                <div v-if="updatableNames.size > 0" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
+                  <NIcon :component="RefreshOutline" size="16" class="text-blue-500 flex-shrink-0" />
+                  <span class="text-xs text-blue-700 dark:text-blue-300 flex-1">
+                    有 <strong>{{ updatableNames.size }}</strong> 个软件可更新
+                  </span>
+                  <NButton size="tiny" type="primary" secondary :loading="updatingAll" @click="handleUpdateAll" class="!rounded-lg">
+                    一键全部更新
+                  </NButton>
+                </div>
                 <div class="flex flex-col gap-1.5 p-4">
                   <div v-for="pkg in packagesStore.installed" :key="pkg.name"
                     class="flex items-center gap-3 p-3 rounded-xl bg-gray-50/80 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors micro-card"
@@ -281,7 +303,10 @@ async function removeBucket(name: string) {
                         >🌐 Global</NTag>
                       </div>
                     </div>
-                    <div class="flex items-center gap-1 flex-shrink-0">
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                      <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
+                        class="!bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300 font-mono"
+                      >→ {{ getNewVersion(pkg.name) }}</NTag>
                       <NButton v-if="updatableNames.has(pkg.name)" text size="small" type="warning" @click="handleUpdate(pkg)">
                         <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
                       </NButton>
@@ -293,44 +318,6 @@ async function removeBucket(name: string) {
                 </div>
               </NScrollbar>
             </template>
-          </NTabPane>
-
-          <NTabPane name="updatable" tab="有可更新" class="flex-1 overflow-hidden">
-            <div class="flex flex-col h-full">
-              <div v-if="packagesStore.updatable.length > 0" class="flex-shrink-0 px-4 pt-3 pb-2">
-                <NButton size="small" type="primary" :loading="updatingAll" @click="handleUpdateAll"
-                  class="w-full !rounded-lg" secondary
-                >
-                  <template #icon><NIcon :component="RefreshOutline" size="14" /></template>
-                  ✨ 一键更新全部软件
-                </NButton>
-              </div>
-              <div v-if="packagesStore.updatable.length === 0" class="flex-1 flex flex-col items-center justify-center py-20">
-                <NEmpty description="所有软件均为最新版本">
-                  <template #icon><NIcon :component="CheckmarkDoneOutline" size="48" class="text-gray-300 dark:text-gray-600" /></template>
-                </NEmpty>
-              </div>
-              <NScrollbar v-else class="flex-1 custom-scrollbar">
-                <div class="flex flex-col gap-1.5 p-4 pt-0">
-                  <div v-for="pkg in packagesStore.updatable" :key="pkg.name"
-                    class="flex items-center gap-3 p-3 rounded-xl bg-blue-50/40 dark:bg-blue-900/10 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors micro-card"
-                  >
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                      <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium text-sm text-gray-700 dark:text-gray-200">{{ pkg.name }}</span>
-                        <NTag size="small" :bordered="false" class="!bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300 font-mono">
-                          {{ pkg.oldVersion }} → {{ pkg.newVersion }}
-                        </NTag>
-                      </div>
-                    </div>
-                    <NButton size="small" type="primary" secondary @click="handleUpdate(pkg)" :loading="packagesStore.loading">更新</NButton>
-                  </div>
-                </div>
-              </NScrollbar>
-            </div>
           </NTabPane>
 
           <NTabPane name="discover" tab="软件发现" class="flex-1 overflow-hidden">

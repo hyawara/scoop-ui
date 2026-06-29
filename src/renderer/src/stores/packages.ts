@@ -21,13 +21,10 @@ export const usePackagesStore = defineStore('packages', () => {
   }
 
   async function loadUpdatable() {
-    loading.value = true
     try {
       updatable.value = await window.scoopAPI.listUpdatable()
     } catch {
       updatable.value = []
-    } finally {
-      loading.value = false
     }
   }
 
