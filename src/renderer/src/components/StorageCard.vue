@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { NCard, NButton, NModal, NInput, NSpace, NProgress, useMessage } from 'naive-ui'
 import { FolderOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
@@ -9,11 +9,10 @@ const message = useMessage()
 
 const showMigrate = ref(false)
 const newPath = ref('')
-const freeSpace = ref(0)
-const totalSpace = ref(0)
 
-onMounted(() => {
-  settingsStore.loadEnv()
+onMounted(async () => {
+  await settingsStore.loadEnv()
+  await settingsStore.loadDiskSpace()
 })
 
 function getDiskLabel(path: string): string {
@@ -21,6 +20,32 @@ function getDiskLabel(path: string): string {
   const match = path.match(/^([A-Z]):/i)
   return match ? `${match[1]}盘` : path
 }
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 GB'
+  const gb = bytes / (1024 * 1024 * 1024)
+  return gb >= 1 ? `${gb.toFixed(0)} GB` : `${(bytes / (1024 * 1024)).toFixed(0)} MB`
+}
+
+const diskPercent = computed(() => {
+  const ds = settingsStore.diskSpace
+  if (!ds || !ds.Used || !ds.Free) return 50
+  const total = ds.Used + ds.Free
+  return Math.round((ds.Used / total) * 100)
+})
+
+const diskInfo = computed(() => {
+  const ds = settingsStore.diskSpace
+  if (!ds) return ''
+  if (Array.isArray(ds)) {
+    const drive = ds.find((d: any) => d.Used != null)
+    if (drive) return `${formatBytes(drive.Free)} 可用`
+  }
+  if (ds.Used != null && ds.Free != null) {
+    return `${formatBytes(ds.Free)} / ${formatBytes(ds.Used + ds.Free)} 可用`
+  }
+  return '加载中...'
+})
 
 async function migrate() {
   if (!newPath.value) {
@@ -58,13 +83,13 @@ async function migrate() {
       <div class="mt-2">
         <NProgress
           type="line"
-          :percentage="70"
+          :percentage="diskPercent"
           :height="6"
           :border-radius="3"
           :show-indicator="false"
           color="#6B5BED"
         />
-        <p class="text-xs text-gray-400 mt-1">128 GB / 256 GB 可用</p>
+        <p class="text-xs text-gray-400 mt-1">{{ diskInfo }}</p>
       </div>
 
       <NButton size="small" @click="showMigrate = true" class="mt-1">

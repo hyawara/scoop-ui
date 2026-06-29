@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('scoopAPI', {
   checkScoop: () => ipcRenderer.invoke('scoop:check'),
-  installScoop: () => ipcRenderer.invoke('scoop:install'),
+  installScoop: () => ipcRenderer.invoke('scoop:installScoop'),
 
   search: (query: string) => ipcRenderer.invoke('scoop:search', query),
   install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) =>
@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   removeProxy: () => ipcRenderer.invoke('scoop:removeProxy'),
 
   getEnv: () => ipcRenderer.invoke('scoop:getEnv'),
+  getDiskSpace: () => ipcRenderer.invoke('scoop:diskSpace'),
   migrateScoop: (newPath: string) => ipcRenderer.invoke('scoop:migrate', newPath),
 
   onProgress: (callback: (data: any) => void) => {

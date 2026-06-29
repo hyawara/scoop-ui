@@ -15,8 +15,3 @@ nsis:
   allowToChangeInstallationDirectory: true
 files:
   - dist/**/*
-extraResources:
-  - from: node_modules/iconv-lite
-    to: node_modules/iconv-lite
-    filter:
-      - "**/*"

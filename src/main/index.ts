@@ -23,14 +23,11 @@ function createWindow(): void {
   })
 
   // Enable Mica effect on Windows 11
-  if (process.platform === 'win32') {
-    const { setBackgroundMaterial } = require('electron').BrowserWindow.prototype
+  if (process.platform === 'win32' && typeof mainWindow.setBackgroundMaterial === 'function') {
     try {
-      if (typeof mainWindow.setBackgroundMaterial === 'function') {
-        mainWindow.setBackgroundMaterial('mica')
-      }
+      mainWindow.setBackgroundMaterial('mica')
     } catch {
-      // Mica not supported, fallback to transparent
+      // Mica not supported, fallback to CSS acrylic
     }
   }
 

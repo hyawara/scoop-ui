@@ -10,13 +10,15 @@ export interface PSResult {
 export function execPowerShell(
   command: string,
   onProgress?: (data: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  ...extraArgs: string[]
 ): Promise<PSResult> {
   return new Promise((resolve, reject) => {
-    const child: ChildProcess = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', command],
-      {
+    const spawnArgs = ['-NoProfile', '-NonInteractive', '-Command', command]
+    if (extraArgs.length > 0) {
+      spawnArgs.push('-args', ...extraArgs)
+    }
+    const child: ChildProcess = spawn('powershell.exe', spawnArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       }
@@ -25,16 +27,18 @@ export function execPowerShell(
     let stdout = ''
     let stderr = ''
 
-    child.stdout?.on('data', (chunk: Buffer) => {
-      const text = iconv.decode(chunk, 'gbk')
+    const stdoutDecoder = iconv.decodeStream('gbk')
+    stdoutDecoder.on('data', (text: string) => {
       stdout += text
       onProgress?.(text)
     })
+    child.stdout?.pipe(stdoutDecoder)
 
-    child.stderr?.on('data', (chunk: Buffer) => {
-      const text = iconv.decode(chunk, 'gbk')
+    const stderrDecoder = iconv.decodeStream('gbk')
+    stderrDecoder.on('data', (text: string) => {
       stderr += text
     })
+    child.stderr?.pipe(stderrDecoder)
 
     child.on('error', (err) => {
       reject(err)

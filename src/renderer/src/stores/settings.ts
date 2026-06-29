@@ -6,6 +6,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const cacheInfo = ref<CacheInfo>({ size: 0, files: 0 })
   const scoopEnv = ref<ScoopEnv>({ scoop: '', global: '' })
   const proxy = ref<ProxyConfig>({ enabled: false, address: '', type: 'http' })
+  const diskSpace = ref<{ used: number; free: number; name?: string } | null>(null)
   const loading = ref(false)
 
   async function loadCacheInfo() {
@@ -31,6 +32,14 @@ export const useSettingsStore = defineStore('settings', () => {
       scoopEnv.value = await window.scoopAPI.getEnv()
     } catch {
       scoopEnv.value = { scoop: '', global: '' }
+    }
+  }
+
+  async function loadDiskSpace() {
+    try {
+      diskSpace.value = await window.scoopAPI.getDiskSpace()
+    } catch {
+      diskSpace.value = null
     }
   }
 
@@ -65,7 +74,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    cacheInfo, scoopEnv, proxy, loading,
-    loadCacheInfo, clearCache, loadEnv, migrateScoop, setProxy, removeProxy
+    cacheInfo, scoopEnv, proxy, diskSpace, loading,
+    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, migrateScoop, setProxy, removeProxy
   }
 })

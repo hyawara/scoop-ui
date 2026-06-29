@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { NScrollbar, NTag, NButton, NIcon } from 'naive-ui'
-import { CloudDownloadOutline, CheckmarkCircleOutline, SearchOutline } from '@vicons/ionicons5'
+import { CloudDownloadOutline, SearchOutline } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import AppDetail from '@/components/AppDetail.vue'
 
@@ -86,7 +86,7 @@ function selectPackage(pkg: any) {
     <div class="w-1/2">
       <AppDetail
         v-if="selectedPackage"
-        :package="selectedPackage"
+        :pkg="selectedPackage"
         :installed="installedNames.has(selectedPackage.name)"
       />
       <div v-else class="h-full flex flex-col items-center justify-center text-gray-400 bg-black/[0.01] dark:bg-white/[0.02] rounded-xl">

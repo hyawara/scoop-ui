@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, type Ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { NButton, NIcon, useMessage } from 'naive-ui'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
@@ -36,7 +36,8 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-window.addEventListener('keydown', handleKeydown)
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 function minimize() {
   window.scoopAPI.windowControl.minimize()

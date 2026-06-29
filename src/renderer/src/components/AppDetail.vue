@@ -21,7 +21,7 @@ import { usePackagesStore } from '@/stores/packages'
 import type { InstallOptions } from '@/types'
 
 const props = defineProps<{
-  package: any
+  pkg: any
   installed: boolean
 }>()
 
@@ -35,18 +35,18 @@ const installOptions = ref<InstallOptions>({
 })
 
 async function handleInstall() {
-  await packagesStore.install(props.package.name, installOptions.value)
-  message.success(`${props.package.name} 安装完成`)
+  await packagesStore.install(props.pkg.name, installOptions.value)
+  message.success(`${props.pkg.name} 安装完成`)
 }
 
 async function handleUninstall() {
-  await packagesStore.uninstall(props.package.name, installOptions.value.global)
-  message.success(`${props.package.name} 已卸载`)
+  await packagesStore.uninstall(props.pkg.name, installOptions.value.global)
+  message.success(`${props.pkg.name} 已卸载`)
 }
 
 async function handleUpdate() {
-  await packagesStore.update(props.package.name)
-  message.success(`${props.package.name} 更新完成`)
+  await packagesStore.update(props.pkg.name)
+  message.success(`${props.pkg.name} 更新完成`)
 }
 </script>
 
@@ -62,24 +62,24 @@ async function handleUpdate() {
               ? 'bg-gradient-to-br from-green-400 to-emerald-500'
               : 'bg-gradient-to-br from-blue-400 to-purple-500'"
           >
-            <span class="text-white text-2xl font-bold uppercase">{{ package.name[0] }}</span>
+            <span class="text-white text-2xl font-bold uppercase">{{ pkg.name[0] }}</span>
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-3 mb-1">
-              <h2 class="text-xl font-bold truncate">{{ package.name }}</h2>
+              <h2 class="text-xl font-bold truncate">{{ pkg.name }}</h2>
               <NTag v-if="installed" type="success" size="small" :bordered="false">已安装</NTag>
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-500">
-              <NTag size="small" :bordered="false">{{ package.version || 'unknown' }}</NTag>
-              <span v-if="package.bucket">/ {{ package.bucket }}</span>
+              <NTag size="small" :bordered="false">{{ pkg.version || 'unknown' }}</NTag>
+              <span v-if="pkg.bucket">/ {{ pkg.bucket }}</span>
             </div>
             <div class="flex items-center gap-2 mt-2">
               <NButton
-                v-if="package.website"
+                v-if="pkg.website"
                 text
                 size="tiny"
                 tag="a"
-                :href="package.website"
+                :href="pkg.website"
                 target="_blank"
               >
                 <template #icon>
@@ -93,14 +93,14 @@ async function handleUpdate() {
 
         <!-- Description -->
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-5 leading-relaxed">
-          {{ package.description || '暂无描述信息' }}
+          {{ pkg.description || '暂无描述信息' }}
         </p>
 
         <!-- Install Progress -->
         <div v-if="packagesStore.loading && packagesStore.progress" class="mb-4">
           <NProgress
             type="line"
-            :percentage="packagesStore.progress.percent || 50"
+            :percentage="packagesStore.progress.percent ?? 50"
             :indicator-placement="'inside'"
             processing
             :height="8"
@@ -131,7 +131,7 @@ async function handleUpdate() {
         <!-- Manifest preview (placeholder) -->
         <div class="bg-black/[0.02] dark:bg-white/[0.04] rounded-lg p-4 mb-4">
           <h4 class="text-sm font-medium mb-2">Manifest 信息</h4>
-          <pre class="text-xs text-gray-500 font-mono overflow-x-auto whitespace-pre-wrap">{{ JSON.stringify(package, null, 2) }}</pre>
+          <pre class="text-xs text-gray-500 font-mono overflow-x-auto whitespace-pre-wrap">{{ JSON.stringify(pkg, null, 2) }}</pre>
         </div>
       </div>
     </NScrollbar>
@@ -150,12 +150,12 @@ async function handleUpdate() {
         <template #icon>
           <NIcon :component="DownloadOutline" size="18" />
         </template>
-        安装 {{ package.name }}
+        安装 {{ pkg.name }}
       </NButton>
 
       <template v-else>
         <NButton
-          v-if="package.updatable"
+          v-if="pkg.updatable"
           type="warning"
           size="large"
           @click="handleUpdate"
@@ -177,7 +177,7 @@ async function handleUpdate() {
               卸载
             </NButton>
           </template>
-          确认卸载 {{ package.name }}？
+          确认卸载 {{ pkg.name }}？
         </NPopconfirm>
       </template>
     </div>

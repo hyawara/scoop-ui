@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
 import {
   NCard,
   NTabs,
@@ -24,11 +23,6 @@ import ProxyCard from '@/components/ProxyCard.vue'
 
 const packagesStore = usePackagesStore()
 const message = useMessage()
-
-onMounted(() => {
-  packagesStore.loadInstalled()
-  packagesStore.loadUpdatable()
-})
 
 function handleInstall(pkg: any) {
   packagesStore.install(pkg.name)

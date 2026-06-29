@@ -6,6 +6,19 @@ declare module '*.vue' {
   export default component
 }
 
+interface InstallOptions {
+  global?: boolean
+  skipCheck?: boolean
+  independent?: boolean
+}
+
+interface ProgressData {
+  type: 'download' | 'install' | 'uninstall' | 'update' | 'message'
+  package: string
+  percent?: number
+  message: string
+}
+
 interface Window {
   scoopAPI: {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
@@ -22,6 +35,7 @@ interface Window {
     setProxy: (proxy: string) => Promise<void>
     removeProxy: () => Promise<void>
     getEnv: () => Promise<{ scoop: string; global: string }>
+    getDiskSpace: () => Promise<any>
     migrateScoop: (newPath: string) => Promise<void>
     onProgress: (callback: (data: ProgressData) => void) => void
     removeProgressListener: () => void

@@ -11,7 +11,8 @@ const proxyEnabled = ref(false)
 const proxyAddress = ref('')
 const proxyType = ref<'http' | 'socks5'>('http')
 
-async function toggleProxy(val: boolean) {
+async function handleToggle(val: boolean) {
+  proxyEnabled.value = val
   if (val && proxyAddress.value) {
     const addr = proxyType.value === 'socks5'
       ? `socks5://${proxyAddress.value}`
@@ -37,7 +38,7 @@ async function toggleProxy(val: boolean) {
         <span class="text-xs text-gray-500">代理状态</span>
         <NSwitch
           v-model:value="proxyEnabled"
-          @update:value="toggleProxy"
+          @update:value="handleToggle"
           size="small"
         />
       </div>
@@ -65,7 +66,7 @@ async function toggleProxy(val: boolean) {
         type="primary"
         :disabled="!proxyAddress"
         :loading="settingsStore.loading"
-        @click="toggleProxy(!proxyEnabled); proxyEnabled = !proxyEnabled"
+        @click="handleToggle(!proxyEnabled)"
         block
       >
         {{ proxyEnabled ? '关闭代理' : '启用代理' }}
