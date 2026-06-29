@@ -11,6 +11,7 @@ function sendProgress(win: BrowserWindow | null, data: any) {
 const SCOOP_INSTALL_SCRIPT = `
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 irm get.scoop.sh | iex
+scoop install git
 `
 
 export function registerScoopIPC(): void {
