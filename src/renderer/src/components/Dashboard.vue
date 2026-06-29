@@ -54,7 +54,8 @@ function handleUninstall(pkg: any) {
 </script>
 
 <template>
-  <div class="flex gap-5 h-full">
+  <!-- 两列绝对等高，items-stretch h-full 锁定齐平 -->
+  <div class="flex gap-5 items-stretch h-full">
     <!-- === 左侧大卡片 (7/12) === -->
     <div class="w-7/12 min-w-0 h-full">
       <NCard
@@ -81,8 +82,9 @@ function handleUninstall(pkg: any) {
               </div>
             </div>
 
-            <div v-else-if="packagesStore.installed.length === 0" class="overflow-y-auto h-full pb-4">
-              <div class="flex flex-col items-center justify-center pt-12 pb-6 px-8">
+            <div v-else-if="packagesStore.installed.length === 0" class="flex flex-col h-full overflow-y-auto">
+              <!-- 空状态文案 -->
+              <div class="flex flex-col items-center justify-center pt-12 pb-6 px-8 flex-shrink-0">
                 <NEmpty description="暂无已安装的软件包">
                   <template #icon>
                     <NIcon :component="CubeOutline" size="48" class="text-gray-300 dark:text-gray-600" />
@@ -93,36 +95,38 @@ function handleUninstall(pkg: any) {
                 </NEmpty>
               </div>
 
-              <!-- 热门推荐（独立背景板块） -->
-              <div class="mx-5 mb-4 bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
-                <div class="flex items-center gap-2 mb-4">
-                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门推荐</span>
-                  <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
-                </div>
-                <div class="grid grid-cols-4 gap-3">
-                  <div
-                    v-for="pkg in recommendedPackages"
-                    :key="pkg.name"
-                    class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-all duration-200 group border border-slate-100 dark:border-gray-700/40"
-                  >
+              <!-- 热门推荐：flex-1 推到底部 -->
+              <div class="flex-1 flex flex-col justify-end mt-6 mx-5 mb-4">
+                <div class="bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
+                  <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门推荐</span>
+                    <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
+                  </div>
+                  <div class="grid grid-cols-4 gap-3">
                     <div
-                      class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
-                      :class="pkg.color"
+                      v-for="pkg in recommendedPackages"
+                      :key="pkg.name"
+                      class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-all duration-200 group border border-slate-100 dark:border-gray-700/40 shadow-sm hover:shadow-md"
                     >
-                      <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                      <div
+                        class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
+                        :class="pkg.color"
+                      >
+                        <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                      </div>
+                      <span class="text-xs font-medium text-slate-700 dark:text-gray-300">{{ pkg.name }}</span>
+                      <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
+                      <NButton
+                        size="tiny"
+                        secondary
+                        :disabled="installedNames.has(pkg.name)"
+                        :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
+                        @click.stop="handleInstall(pkg.name)"
+                        class="!mt-1 btn-hover-scale w-full !rounded-lg"
+                      >
+                        {{ installedNames.has(pkg.name) ? '已安装' : '安装' }}
+                      </NButton>
                     </div>
-                    <span class="text-xs font-medium text-slate-700 dark:text-gray-300">{{ pkg.name }}</span>
-                    <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
-                    <NButton
-                      size="tiny"
-                      secondary
-                      :disabled="installedNames.has(pkg.name)"
-                      :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
-                      @click.stop="handleInstall(pkg.name)"
-                      class="!mt-1 btn-hover-scale w-full !rounded-lg"
-                    >
-                      {{ installedNames.has(pkg.name) ? '已安装' : '安装' }}
-                    </NButton>
                   </div>
                 </div>
               </div>
@@ -191,45 +195,49 @@ function handleUninstall(pkg: any) {
           </NTabPane>
 
           <NTabPane name="discover" tab="软件发现" class="flex-1 overflow-hidden">
-            <div class="flex flex-col items-center justify-center pt-12 pb-6 px-8">
-              <NEmpty description="在搜索框中探索新软件">
-                <template #icon>
-                  <NIcon :component="CompassOutline" size="48" class="text-gray-300 dark:text-gray-600" />
-                </template>
-                <template #extra>
-                  <p class="text-xs text-gray-400 mt-1">支持数千款开源软件的一键安装</p>
-                </template>
-              </NEmpty>
-            </div>
-
-            <div class="mx-5 mb-4 bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
-              <div class="flex items-center gap-2 mb-4">
-                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门发现</span>
-                <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
+            <div class="flex flex-col h-full overflow-y-auto">
+              <div class="flex flex-col items-center justify-center pt-12 pb-6 px-8 flex-shrink-0">
+                <NEmpty description="在搜索框中探索新软件">
+                  <template #icon>
+                    <NIcon :component="CompassOutline" size="48" class="text-gray-300 dark:text-gray-600" />
+                  </template>
+                  <template #extra>
+                    <p class="text-xs text-gray-400 mt-1">支持数千款开源软件的一键安装</p>
+                  </template>
+                </NEmpty>
               </div>
-              <div class="grid grid-cols-4 gap-3">
-                <div
-                  v-for="pkg in recommendedPackages"
-                  :key="pkg.name"
-                  class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-all duration-200 group border border-slate-100 dark:border-gray-700/40"
-                >
-                  <div
-                    class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
-                    :class="pkg.color"
-                  >
-                    <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+
+              <div class="flex-1 flex flex-col justify-end mt-6 mx-5 mb-4">
+                <div class="bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
+                  <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门发现</span>
+                    <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
                   </div>
-                  <span class="text-xs font-medium text-slate-700 dark:text-gray-300">{{ pkg.name }}</span>
-                  <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
-                  <NButton
-                    size="tiny"
-                    secondary
-                    :disabled="installedNames.has(pkg.name)"
-                    @click.stop="handleInstall(pkg.name)"
-                    class="!mt-1 btn-hover-scale w-full !rounded-lg"
-                  >
-                    {{ installedNames.has(pkg.name) ? '已安装' : '安装' }}
-                  </NButton>
+                  <div class="grid grid-cols-4 gap-3">
+                    <div
+                      v-for="pkg in recommendedPackages"
+                      :key="pkg.name"
+                      class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-all duration-200 group border border-slate-100 dark:border-gray-700/40 shadow-sm hover:shadow-md"
+                    >
+                      <div
+                        class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
+                        :class="pkg.color"
+                      >
+                        <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                      </div>
+                      <span class="text-xs font-medium text-slate-700 dark:text-gray-300">{{ pkg.name }}</span>
+                      <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
+                      <NButton
+                        size="tiny"
+                        secondary
+                        :disabled="installedNames.has(pkg.name)"
+                        @click.stop="handleInstall(pkg.name)"
+                        class="!mt-1 btn-hover-scale w-full !rounded-lg"
+                      >
+                        {{ installedNames.has(pkg.name) ? '已安装' : '安装' }}
+                      </NButton>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -238,22 +246,11 @@ function handleUninstall(pkg: any) {
       </NCard>
     </div>
 
-    <!-- === 右侧列 (5/12) === -->
-    <div class="flex-1 flex flex-col gap-4 h-full min-w-0">
-      <!-- 缓存管理 -->
-      <div class="flex-shrink-0">
-        <CacheCard />
-      </div>
-
-      <!-- 存储路径 + 网络代理（等高填充） -->
-      <div class="flex-1 grid grid-cols-5 gap-4 min-h-0">
-        <div class="col-span-3 h-full">
-          <StorageCard />
-        </div>
-        <div class="col-span-2 h-full">
-          <ProxyCard />
-        </div>
-      </div>
+    <!-- === 右侧列：flex justify-between 撑满等高 === -->
+    <div class="flex-1 flex flex-col justify-between h-full space-y-4 min-w-0">
+      <CacheCard />
+      <StorageCard />
+      <ProxyCard />
     </div>
   </div>
 </template>

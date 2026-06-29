@@ -54,13 +54,13 @@ async function migrate() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl glass-card h-full" content-class="h-full flex flex-col p-0">
-    <div class="flex items-center justify-between pt-4 px-4 pb-3">
+  <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col gap-3 p-4 pt-4">
+    <div class="flex items-center justify-between">
       <span class="font-semibold text-base text-slate-800 dark:text-gray-200">存储路径</span>
       <ServerOutline class="w-4 h-4 text-gray-400" />
     </div>
 
-    <div class="flex flex-col gap-3 flex-1 px-4 pb-4">
+    <div class="flex flex-col gap-3">
       <!-- Scoop Root -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -103,23 +103,19 @@ async function migrate() {
         <p class="text-[11px] text-gray-400 mt-1.5">{{ diskInfo }}</p>
       </div>
 
-      <div class="flex-1 flex items-end">
-        <NButton size="small" dashed @click="showMigrate = true" class="w-full btn-hover-scale !rounded-lg">
-          <template #icon>
-            <SwapHorizontalOutline class="w-3.5 h-3.5" />
-          </template>
-          迁移目录
-        </NButton>
-      </div>
+      <NButton size="small" dashed @click="showMigrate = true" class="w-full btn-hover-scale !rounded-lg">
+        <template #icon>
+          <SwapHorizontalOutline class="w-3.5 h-3.5" />
+        </template>
+        迁移目录
+      </NButton>
     </div>
 
     <NModal v-model:show="showMigrate" preset="card" title="迁移 Scoop 目录" style="width: 500px">
       <NSpace vertical>
         <p class="text-sm text-gray-500">将当前 Scoop 安装目录迁移到新的位置。此操作会复制所有现有数据，并更新系统环境变量。</p>
         <NInput v-model:value="newPath" placeholder="例如: D:\Scoop" />
-        <NButton type="primary" :loading="settingsStore.loading" @click="migrate" block>
-          开始迁移
-        </NButton>
+        <NButton type="primary" :loading="settingsStore.loading" @click="migrate" block>开始迁移</NButton>
       </NSpace>
     </NModal>
   </NCard>

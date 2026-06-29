@@ -45,13 +45,13 @@ async function clearAll() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl glass-card h-full" content-class="h-full flex flex-col p-0">
-    <div class="flex items-center justify-between pt-4 px-4 pb-3">
+  <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col gap-3 p-4 pt-4">
+    <div class="flex items-center justify-between">
       <span class="font-semibold text-base text-slate-800 dark:text-gray-200">网络代理</span>
       <GlobeOutline class="w-4 h-4 text-gray-400" />
     </div>
 
-    <div class="flex flex-col gap-3 flex-1 px-4 pb-4">
+    <div class="flex flex-col gap-3">
       <!-- Status switch -->
       <div class="flex items-center justify-between">
         <span class="text-xs text-gray-500">代理状态</span>
@@ -90,47 +90,19 @@ async function clearAll() {
         </template>
       </NInput>
 
-      <!-- Quick preset buttons -->
-      <div>
-        <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-1.5 block">快捷设置</span>
-        <div class="grid grid-cols-2 gap-1.5">
-          <NButton
-            size="tiny"
-            secondary
-            @click="applyPreset('127.0.0.1:7890', 'http')"
-            class="btn-hover-scale !rounded-lg"
-          >
-            <template #icon>
-              <Flash class="w-3 h-3 text-amber-500" />
-            </template>
-            ⚡ 7890
-          </NButton>
-          <NButton
-            size="tiny"
-            secondary
-            @click="applyPreset('127.0.0.1:1080', 'socks5')"
-            class="btn-hover-scale !rounded-lg"
-          >
-            <template #icon>
-              <FlashOffOutline class="w-3 h-3 text-blue-500" />
-            </template>
-            🔒 SOCKS5
-          </NButton>
-        </div>
-      </div>
-
-      <!-- Enable/Disable action -->
-      <div class="flex-1 flex items-end">
-        <NButton
-          size="small"
-          secondary
-          :disabled="!proxyAddress"
-          :loading="settingsStore.loading"
-          @click="handleToggle(!proxyEnabled)"
-          block
-          class="btn-hover-scale !rounded-lg"
-        >
-          {{ proxyEnabled ? '关闭代理' : '启用代理' }}
+      <!-- 快捷设置：2x2 栅格，3 个按钮，第 4 格空 -->
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <NButton size="small" secondary @click="applyPreset('127.0.0.1:7890', 'http')" class="btn-hover-scale !rounded-lg">
+          <template #icon><Flash class="w-3.5 h-3.5 text-amber-500" /></template>
+          ⚡ 7890
+        </NButton>
+        <NButton size="small" secondary @click="applyPreset('127.0.0.1:1080', 'socks5')" class="btn-hover-scale !rounded-lg">
+          <template #icon><FlashOffOutline class="w-3.5 h-3.5 text-blue-500" /></template>
+          🔒 SOCKS5
+        </NButton>
+        <NButton size="small" secondary @click="clearAll" class="btn-hover-scale !rounded-lg">
+          <template #icon><CloseCircleOutline class="w-3.5 h-3.5 text-red-400" /></template>
+          ❌ 清除代理
         </NButton>
       </div>
     </div>
