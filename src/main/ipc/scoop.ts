@@ -9,14 +9,44 @@ irm get.scoop.sh | iex
 export function registerScoopIPC(): void {
   // Check if Scoop is installed
   ipcMain.handle('scoop:check', async () => {
-    try {
-      const { stdout } = await execPowerShell('where scoop 2>$null; if ($?) { scoop config SCOOP }')
-      const lines = stdout.trim().split('\n').filter(Boolean)
-      if (lines.length > 0) {
-        return { installed: true, path: lines[lines.length - 1]?.trim() }
+    const { stdout } = await execPowerShell(`
+      $scoopPath = $null
+      # 1. Check SCOOP environment variable
+      if ($env:SCOOP) {
+        $scoopPath = $env:SCOOP
       }
-    } catch {
-      // Scoop not found
+      # 2. Check if scoop command is in PATH
+      if (-not $scoopPath) {
+        $cmd = Get-Command scoop -ErrorAction SilentlyContinue
+        if ($cmd) {
+          $scoopPath = Split-Path -Parent (Split-Path -Parent $cmd.Source)
+        }
+      }
+      # 3. Check default install location
+      if (-not $scoopPath) {
+        $defaultPath = Join-Path $env:USERPROFILE 'scoop'
+        if (Test-Path (Join-Path $defaultPath 'shims' 'scoop.ps1')) {
+          $scoopPath = $defaultPath
+        }
+      }
+      # 4. Check USERPROFILE subdirectories for scoop shims
+      if (-not $scoopPath) {
+        $possible = Get-ChildItem -Path $env:USERPROFILE -Directory -ErrorAction SilentlyContinue | Where-Object {
+          Test-Path (Join-Path $_.FullName 'scoop' 'shims' 'scoop.ps1')
+        } | Select-Object -First 1
+        if ($possible) {
+          $scoopPath = Join-Path $possible.FullName 'scoop'
+        }
+      }
+      if ($scoopPath) {
+        Write-Output "INSTALLED:$scoopPath"
+      } else {
+        Write-Output "NOT_INSTALLED"
+      }
+    `)
+    const match = stdout.match(/INSTALLED:(.+)/)
+    if (match) {
+      return { installed: true, path: match[1].trim() }
     }
     return { installed: false }
   })
