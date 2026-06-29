@@ -98,9 +98,15 @@ export function execPowerShell(
   })
 }
 
+// Strip ANSI escape codes and carriage returns from terminal output
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '')
+}
+
 /**
  * Execute a command via git-bash (--login loads user's .bashrc).
  * Uses UTF-8 decoding (git-bash defaults to UTF-8).
+ * Strips ANSI color codes and \r from output for clean parsing.
  */
 export function execGitBash(
   command: string,
@@ -118,13 +124,13 @@ export function execGitBash(
     let stderr = ''
 
     child.stdout?.on('data', (chunk: Buffer) => {
-      const text = chunk.toString('utf-8')
+      const text = stripAnsi(chunk.toString('utf-8'))
       stdout += text
       onProgress?.(text)
     })
 
     child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf-8')
+      stderr += stripAnsi(chunk.toString('utf-8'))
     })
 
     child.on('error', (err) => {
