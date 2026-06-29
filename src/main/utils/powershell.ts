@@ -1,4 +1,6 @@
 import { spawn, ChildProcess } from 'child_process'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import iconv from 'iconv-lite'
 
 export interface PSResult {
@@ -7,6 +9,25 @@ export interface PSResult {
   code: number | null
 }
 
+// Locate git-bash executable
+function findBashExe(): string {
+  const candidates = [
+    join(process.env['PROGRAMFILES'] || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
+    join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
+    join(process.env['LOCALAPPDATA'] || '', 'Programs', 'Git', 'bin', 'bash.exe'),
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  return 'bash.exe' // fallback to PATH
+}
+
+const BASH_EXE = findBashExe()
+
+/**
+ * Execute a command via PowerShell (for Windows-specific ops: check, install, env, migrate).
+ * Uses iconv-lite GBK→UTF-8 decoding for Chinese output.
+ */
 export function execPowerShell(
   command: string,
   onProgress?: (data: string) => void,
@@ -56,12 +77,60 @@ export function execPowerShell(
   })
 }
 
+/**
+ * Execute a command via git-bash (--login loads user's .bashrc).
+ * Uses UTF-8 decoding (git-bash defaults to UTF-8).
+ */
+export function execGitBash(
+  command: string,
+  onProgress?: (data: string) => void,
+  signal?: AbortSignal
+): Promise<PSResult> {
+  return new Promise((resolve, reject) => {
+    const child: ChildProcess = spawn(BASH_EXE, ['--login', '-c', command], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+      }
+    )
+
+    let stdout = ''
+    let stderr = ''
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('utf-8')
+      stdout += text
+      onProgress?.(text)
+    })
+
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf-8')
+    })
+
+    child.on('error', (err) => {
+      reject(err)
+    })
+
+    child.on('close', (code) => {
+      resolve({ stdout, stderr, code })
+    })
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        child.kill()
+      })
+    }
+  })
+}
+
+/**
+ * Execute a scoop subcommand via git-bash (search, install, update, list, etc.).
+ */
 export function execScoop(
   args: string,
   onProgress?: (data: string) => void,
   signal?: AbortSignal
 ): Promise<PSResult> {
-  return execPowerShell(`scoop ${args}`, onProgress, signal)
+  return execGitBash(`scoop ${args}`, onProgress, signal)
 }
 
 export function execScoopJSON<T>(

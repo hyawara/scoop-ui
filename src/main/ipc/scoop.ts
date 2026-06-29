@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { execPowerShell, execScoop, execScoopJSON } from '../utils/powershell.js'
+import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
