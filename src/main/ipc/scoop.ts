@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { execPowerShell, execScoop, execScoopJSON } from '../utils/powershell'
+import { execPowerShell, execScoop, execScoopJSON } from '@main/utils/powershell'
 
 const SCOOP_INSTALL_SCRIPT = `
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
