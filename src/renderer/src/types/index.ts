@@ -5,8 +5,10 @@ export interface PackageInfo {
   website?: string
   license?: string
   bucket?: string
+  global?: boolean
   installed: boolean
   updatable?: boolean
+  newVersion?: string
 }
 
 export interface InstallOptions {

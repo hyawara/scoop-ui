@@ -307,6 +307,9 @@ async function removeBucket(name: string) {
                       <div class="flex items-center gap-2">
                         <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
                         <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
+                        <NTag v-if="pkg.bucket" size="small" :bordered="false"
+                          class="!bg-violet-900/40 !text-violet-300"
+                        >{{ pkg.bucket }}</NTag>
                         <NTag v-if="pkg.global" size="small" :bordered="false"
                           class="!bg-blue-900/40 !text-blue-300"
                         >🌐 Global</NTag>
