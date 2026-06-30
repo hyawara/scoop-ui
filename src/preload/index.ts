@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   installScoop: () => ipcRenderer.invoke('scoop:installScoop'),
 
   search: (query: string) => ipcRenderer.invoke('scoop:search', query),
+  fetchPackageInfo: (name: string) => ipcRenderer.invoke('scoop:info', name),
   install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) =>
     ipcRenderer.invoke('scoop:install', name, options),
   uninstall: (name: string, global?: boolean) =>

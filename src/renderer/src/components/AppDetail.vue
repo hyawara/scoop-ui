@@ -53,20 +53,11 @@ async function handleUpdate() {
   message.success(`${props.pkg.name} 更新完成`)
 }
 
-function highlightJson(json: string): string {
-  if (!json) return ''
-  return json
-    .replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g, '<span class="text-blue-400">"$1"</span>:')
-    .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, '<span class="text-emerald-400">"$1"</span>')
-    .replace(/\b(\d+)\b/g, '<span class="text-amber-400">$1</span>')
-    .replace(/\b(true|false|null)\b/g, '<span class="text-violet-400">$1</span>')
-}
-
 const manifestJson = computed(() => {
   try {
-    return highlightJson(JSON.stringify(props.pkg, null, 2))
-  } catch {
     return JSON.stringify(props.pkg, null, 2)
+  } catch {
+    return ''
   }
 })
 </script>
@@ -171,7 +162,7 @@ const manifestJson = computed(() => {
           <!-- Manifest preview -->
           <div class="bg-[#090a0d] border border-white/[0.06] rounded-xl p-4 mb-4">
             <h4 class="text-sm font-semibold text-white mb-2">Manifest 信息</h4>
-            <pre class="text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed" v-html="manifestJson"></pre>
+            <pre class="text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed text-slate-300">{{ manifestJson }}</pre>
           </div>
         </div>
       </Transition>

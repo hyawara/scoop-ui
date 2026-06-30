@@ -8,6 +8,7 @@ export const usePackagesStore = defineStore('packages', () => {
   const searchResults = ref<PackageInfo[]>([])
   const loading = ref(false)
   const progress = ref<ProgressData | null>(null)
+  const descriptionsLoading = ref(false)
 
   async function loadInstalled() {
     loading.value = true
@@ -36,11 +37,36 @@ export const usePackagesStore = defineStore('packages', () => {
     loading.value = true
     try {
       searchResults.value = await window.scoopAPI.search(query)
+      // 异步批量获取软件描述（限制前 30 个包，并发 3 个）
+      fetchDescriptions(searchResults.value.slice(0, 30))
     } catch {
       searchResults.value = []
     } finally {
       loading.value = false
     }
+  }
+
+  async function fetchDescriptions(pkgs: PackageInfo[]) {
+    descriptionsLoading.value = true
+    const concurrency = 3
+    for (let i = 0; i < pkgs.length; i += concurrency) {
+      const batch = pkgs.slice(i, i + concurrency)
+      await Promise.all(
+        batch.map(async (pkg) => {
+          if (!pkg.description) {
+            try {
+              const info = await window.scoopAPI.fetchPackageInfo(pkg.name)
+              if (info?.description) {
+                // 在 searchResults 中找到对应项更新描述
+                const found = searchResults.value.find((r) => r.name === pkg.name)
+                if (found) found.description = info.description
+              }
+            } catch { /* 静默忽略 */ }
+          }
+        })
+      )
+    }
+    descriptionsLoading.value = false
   }
 
   async function install(name: string, options?: InstallOptions) {
@@ -83,7 +109,7 @@ export const usePackagesStore = defineStore('packages', () => {
   }
 
   return {
-    installed, updatable, searchResults, loading, progress,
+    installed, updatable, searchResults, loading, progress, descriptionsLoading,
     loadInstalled, loadUpdatable, search, install, uninstall, update
   }
 })

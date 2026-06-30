@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, provide } from 'vue'
+import { ref, watch, onMounted, provide } from 'vue'
 import {
   NConfigProvider,
   NMessageProvider,
@@ -24,6 +24,22 @@ const settingsStore = useSettingsStore()
 
 const isDark = ref(true)
 const searchQuery = ref('')
+const committedSearch = ref('')
+
+function handleSearch(query: string) {
+  if (query.trim()) {
+    committedSearch.value = query.trim()
+  } else {
+    committedSearch.value = ''
+  }
+}
+
+watch(searchQuery, (val) => {
+  if (!val.trim()) {
+    committedSearch.value = ''
+    packagesStore.searchResults = []
+  }
+})
 
 const themeOverrides = {
   common: {
@@ -90,12 +106,13 @@ function toggleTheme() {
                 v-model:search-query="searchQuery"
                 :is-dark="isDark"
                 @toggle-theme="toggleTheme"
+                @search="handleSearch"
               />
 
               <div class="h-[calc(100vh-70px)] overflow-hidden mx-auto max-w-[1280px] w-full px-6 py-4 relative">
                 <Transition name="fade" mode="out-in">
-                  <Dashboard v-if="!searchQuery.trim()" />
-                  <SearchPanel v-else :query="searchQuery" />
+                  <Dashboard v-if="!committedSearch.trim()" />
+                  <SearchPanel v-else :query="committedSearch" />
                 </Transition>
               </div>
             </template>

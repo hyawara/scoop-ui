@@ -24,6 +24,7 @@ interface Window {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
     installScoop: () => Promise<void>
     search: (query: string) => Promise<any[]>
+    fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>
     update: (name?: string) => Promise<void>

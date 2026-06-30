@@ -23,6 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:searchQuery': [value: string]
   toggleTheme: []
+  search: [query: string]
 }>()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -91,12 +92,23 @@ async function refreshAll() {
             ref="searchInputRef"
             :value="searchQuery"
             @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+            @keydown.enter="emit('search', searchQuery)"
             placeholder="搜索 Scoop 软件包..."
             class="bg-transparent border-none outline-none text-sm w-full text-gray-700 dark:text-gray-200 placeholder-gray-400"
           />
-          <kbd class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border bg-white/[0.04] shadow-sm border-white/[0.08] text-slate-500 flex-shrink-0">
-            Ctrl+K
-          </kbd>
+          <button
+            v-if="searchQuery"
+            @click="emit('update:searchQuery', ''); emit('search', '')"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/[0.08] text-slate-500 hover:text-slate-300 transition-all flex-shrink-0"
+          >
+            <CloseOutline class="w-3.5 h-3.5" />
+          </button>
+          <button
+            @click="emit('search', searchQuery)"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 hover:text-purple-300 transition-all flex-shrink-0"
+          >
+            <SearchOutline class="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>

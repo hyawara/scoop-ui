@@ -98,6 +98,18 @@ export function registerScoopIPC(): void {
     return result
   })
 
+  // Fetch package info (manifest) via scoop cat
+  ipcMain.handle('scoop:info', async (_event, name: string) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(name)) {
+      throw new Error('Invalid package name')
+    }
+    try {
+      return await execScoopJSON<{ description?: string; homepage?: string; license?: string; version?: string }>(`cat ${name}`)
+    } catch {
+      return { description: '' }
+    }
+  })
+
   // Install a package
   ipcMain.handle('scoop:install', async (event, name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) => {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(name)) {
