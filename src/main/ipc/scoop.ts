@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
+import { homedir } from 'os'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
@@ -156,33 +157,35 @@ export function registerScoopIPC(): void {
 
   // Get cache info
   ipcMain.handle('scoop:cache', async () => {
-    const { stdout } = await execScoop('cache show')
-    const lines = stdout.trim().split('\n').filter(Boolean)
-    let totalSize = 0
-    for (const line of lines) {
-      const m = line.match(/(\d+[\d.]*)\s*(KB|MB|GB|B)/i)
-      if (m) {
-        let size = parseFloat(m[1])
-        const unit = m[2].toUpperCase()
-        if (unit === 'KB') size *= 1024
-        else if (unit === 'MB') size *= 1024 * 1024
-        else if (unit === 'GB') size *= 1024 * 1024 * 1024
-        totalSize += size
-      }
+    const { stdout } = await execScoop('cache show', undefined, undefined, homedir())
+    // 直接解析 "Total: X file(s), Y MB" 汇总行
+    const totalMatch = stdout.match(/Total:\s*(\d+)\s*files?,\s*([\d.]+)\s*(KB|MB|GB|B)/i)
+    if (totalMatch) {
+      const files = parseInt(totalMatch[1])
+      let size = parseFloat(totalMatch[2])
+      const unit = totalMatch[3].toUpperCase()
+      if (unit === 'KB') size *= 1024
+      else if (unit === 'MB') size *= 1024 * 1024
+      else if (unit === 'GB') size *= 1024 * 1024 * 1024
+      return { size: Math.round(size / (1024 * 1024) * 100) / 100, files }
     }
-    return { size: Math.round(totalSize / (1024 * 1024) * 100) / 100, files: lines.length }
+    return { size: 0, files: 0 }
   })
 
   // Clear cache
   ipcMain.handle('scoop:clearCache', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    return execScoop('cache rm *', (data) => {
+    const { stdout, stderr, code } = await execScoop('cache rm --all', (data) => {
         sendProgress(win, {
           type: 'message',
           package: 'scoop',
           message: data.trim(),
         })
-    })
+    }, undefined, homedir())
+    if (code !== 0) {
+      throw new Error(stderr || '清除缓存失败')
+    }
+    return { success: true, message: stdout.trim() }
   })
 
   // List installed packages (scoop list outputs fixed-width table: Name, Version, Source, Updated, Info)

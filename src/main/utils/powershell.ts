@@ -111,12 +111,14 @@ function stripAnsi(text: string): string {
 export function execGitBash(
   command: string,
   onProgress?: (data: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  cwd?: string
 ): Promise<PSResult> {
   return new Promise((resolve, reject) => {
     const child: ChildProcess = spawn(BASH_EXE, ['--login', '-c', command], {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
+        cwd: cwd || undefined,
       }
     )
 
@@ -155,9 +157,10 @@ export function execGitBash(
 export function execScoop(
   args: string,
   onProgress?: (data: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  cwd?: string
 ): Promise<PSResult> {
-  return execGitBash(`scoop ${args}`, onProgress, signal)
+  return execGitBash(`scoop ${args}`, onProgress, signal, cwd)
 }
 
 export function execScoopJSON<T>(

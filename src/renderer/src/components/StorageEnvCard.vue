@@ -63,8 +63,12 @@ async function openFolder(path: string) {
 }
 
 async function clearCache() {
-  await settingsStore.clearCache()
-  message.success('缓存已清除')
+  try {
+    await settingsStore.clearCache()
+    message.success('缓存已清除')
+  } catch (e: any) {
+    message.error(e.message || '清除缓存失败')
+  }
 }
 
 async function migrate() {

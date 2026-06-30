@@ -26,6 +26,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loading.value = true
     try {
       await window.scoopAPI.clearCache()
+      // 等待一小段时间让文件系统完成删除
+      await new Promise(resolve => setTimeout(resolve, 300))
       await loadCacheInfo()
     } finally {
       loading.value = false
