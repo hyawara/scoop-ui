@@ -1,11 +1,22 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join, dirname } from 'path'
+import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { registerScoopIPC } from './ipc/scoop.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
+
+function getIconPath(): string | undefined {
+  // In dev mode, use the icon from dist/icons/
+  // In production, the exe icon is embedded by electron-builder
+  const iconPath = join(__dirname, '../icons/icon.ico')
+  if (existsSync(iconPath)) {
+    return iconPath
+  }
+  return undefined
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -16,6 +27,7 @@ function createWindow(): void {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
+    icon: getIconPath(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
