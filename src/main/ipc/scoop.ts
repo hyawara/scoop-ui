@@ -83,10 +83,14 @@ export function registerScoopIPC(): void {
     let inTable = false
     for (const line of lines) {
       if (!inTable) {
-        if (/^----/.test(line.trim())) { inTable = true }
+        if (/^-{3,}/.test(line.trim())) { inTable = true }
         continue
       }
-      const m = line.match(/^(\S[\w.\-+]+)\s+(\S+)(?:\s+([^\s]+))?\s*(.*)$/)
+      // 跳过空行和汇总行（如 "Results from local buckets..."）
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('Results') || trimmed.startsWith('No results')) continue
+      // scoop search 输出格式: name  version  [bucket]  description
+      const m = trimmed.match(/^([\w.\-+]+)\s+(\S+)\s+(\S+)\s*(.*)$/)
       if (m && m[1].length > 0) {
         result.push({ name: m[1], version: m[2] || '', bucket: m[3] || '', description: (m[4] || '').trim() })
       }

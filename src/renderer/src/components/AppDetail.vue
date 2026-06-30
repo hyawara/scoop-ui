@@ -1,20 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   NCard,
   NButton,
   NTag,
   NSwitch,
-  NSpace,
-  NProgress,
   NIcon,
   NPopconfirm,
+  NSkeleton,
   useMessage,
 } from 'naive-ui'
 import {
   DownloadOutline,
   TrashOutline,
-  OpenOutline,
   GlobeOutline,
 } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
@@ -27,12 +25,18 @@ const props = defineProps<{
 
 const packagesStore = usePackagesStore()
 const message = useMessage()
+const detailReady = ref(false)
 
 const installOptions = ref<InstallOptions>({
   global: false,
   skipCheck: false,
   independent: false,
 })
+
+watch(() => props.pkg, () => {
+  detailReady.value = false
+  setTimeout(() => { detailReady.value = true }, 120)
+}, { immediate: true })
 
 async function handleInstall() {
   await packagesStore.install(props.pkg.name, installOptions.value)
@@ -48,96 +52,133 @@ async function handleUpdate() {
   await packagesStore.update(props.pkg.name)
   message.success(`${props.pkg.name} 更新完成`)
 }
+
+function highlightJson(json: string): string {
+  if (!json) return ''
+  return json
+    .replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g, '<span class="text-blue-400">"$1"</span>:')
+    .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, '<span class="text-emerald-400">"$1"</span>')
+    .replace(/\b(\d+)\b/g, '<span class="text-amber-400">$1</span>')
+    .replace(/\b(true|false|null)\b/g, '<span class="text-violet-400">$1</span>')
+}
+
+const manifestJson = computed(() => {
+  try {
+    return highlightJson(JSON.stringify(props.pkg, null, 2))
+  } catch {
+    return JSON.stringify(props.pkg, null, 2)
+  }
+})
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl h-full" content-class="flex flex-col h-full !p-0">
-    <NScrollbar class="flex-1">
-      <div class="p-5">
-        <!-- Header -->
-        <div class="flex items-start gap-4 mb-5">
-          <div
-            class="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0"
-            :class="installed
-              ? 'bg-gradient-to-br from-green-400 to-emerald-500'
-              : 'bg-gradient-to-br from-blue-400 to-purple-500'"
-          >
-            <span class="text-white text-2xl font-bold uppercase">{{ pkg.name[0] }}</span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-3 mb-1">
-              <h2 class="text-xl font-bold truncate">{{ pkg.name }}</h2>
-              <NTag v-if="installed" type="success" size="small" :bordered="false">已安装</NTag>
+  <NCard :bordered="false" class="!rounded-xl h-full glass-card" content-class="flex flex-col h-full !p-0">
+    <div class="flex-1 overflow-y-auto custom-scrollbar">
+      <!-- 骨架屏 -->
+      <div v-if="!detailReady" class="p-5 space-y-5">
+        <div class="flex items-start gap-4">
+          <NSkeleton :width="64" :height="64" :border-radius="12" />
+          <div class="flex-1 space-y-3">
+            <NSkeleton :width="160" :height="20" :border-radius="4" />
+            <div class="flex gap-2">
+              <NSkeleton :width="64" :height="20" :border-radius="8" />
+              <NSkeleton :width="40" :height="20" :border-radius="8" />
             </div>
-            <div class="flex items-center gap-2 text-sm text-gray-500">
-              <NTag size="small" :bordered="false">{{ pkg.version || 'unknown' }}</NTag>
-              <span v-if="pkg.bucket">/ {{ pkg.bucket }}</span>
-            </div>
-            <div class="flex items-center gap-2 mt-2">
-              <NButton
-                v-if="pkg.website"
-                text
-                size="tiny"
-                tag="a"
-                :href="pkg.website"
-                target="_blank"
-              >
-                <template #icon>
-                  <NIcon :component="GlobeOutline" size="14" />
-                </template>
-                官方网站
-              </NButton>
-            </div>
+            <NSkeleton :width="100" :height="14" :border-radius="4" />
           </div>
         </div>
-
-        <!-- Description -->
-        <p class="text-sm text-gray-600 dark:text-gray-300 mb-5 leading-relaxed">
-          {{ pkg.description || '暂无描述信息' }}
-        </p>
-
-        <!-- Install Progress -->
-        <div v-if="packagesStore.loading && packagesStore.progress" class="mb-4">
-          <NProgress
-            type="line"
-            :percentage="packagesStore.progress.percent ?? 50"
-            :indicator-placement="'inside'"
-            processing
-            :height="8"
-            :border-radius="4"
-          />
-          <p class="text-xs text-gray-400 mt-1 truncate">
-            {{ packagesStore.progress.message }}
-          </p>
-        </div>
-
-        <!-- Advanced Options -->
-        <div class="bg-black/[0.02] dark:bg-white/[0.04] rounded-lg p-4 mb-4 space-y-3">
-          <h4 class="text-sm font-medium mb-3">高级安装选项</h4>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-500">全局安装 (--global)</span>
-            <NSwitch v-model:value="installOptions.global" size="small" />
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-500">跳过哈希检查 (--skip)</span>
-            <NSwitch v-model:value="installOptions.skipCheck" size="small" />
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-500">独立安装 (--independent)</span>
-            <NSwitch v-model:value="installOptions.independent" size="small" />
-          </div>
-        </div>
-
-        <!-- Manifest preview (placeholder) -->
-        <div class="bg-black/[0.02] dark:bg-white/[0.04] rounded-lg p-4 mb-4">
-          <h4 class="text-sm font-medium mb-2">Manifest 信息</h4>
-          <pre class="text-xs text-gray-500 font-mono overflow-x-auto whitespace-pre-wrap">{{ JSON.stringify(pkg, null, 2) }}</pre>
-        </div>
+        <NSkeleton :width="'100%'" :height="48" :border-radius="8" />
+        <NSkeleton :width="'100%'" :height="120" :border-radius="12" />
+        <NSkeleton :width="'100%'" :height="100" :border-radius="12" />
       </div>
-    </NScrollbar>
+
+      <!-- 实际内容 -->
+      <Transition name="fade-in" mode="out-in">
+        <div v-if="detailReady" class="p-5">
+          <!-- Header -->
+          <div class="flex items-start gap-4 mb-5">
+            <div
+              class="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
+              :class="installed
+                ? 'bg-gradient-to-br from-green-400 to-emerald-500'
+                : 'bg-gradient-to-br from-blue-400 to-purple-500'"
+            >
+              <span class="text-white text-2xl font-bold uppercase">{{ pkg.name[0] }}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-3 mb-1">
+                <h2 class="text-xl font-bold text-white truncate">{{ pkg.name }}</h2>
+                <NTag v-if="installed" size="small" :bordered="false"
+                  class="!bg-emerald-500/15 !text-emerald-400">已安装</NTag>
+              </div>
+              <div class="flex items-center gap-2 text-sm">
+                <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-300">{{ pkg.version || 'unknown' }}</NTag>
+                <NTag v-if="pkg.bucket" size="small" :bordered="false"
+                  class="!bg-violet-900/40 !text-violet-300">{{ pkg.bucket }}</NTag>
+              </div>
+              <div class="flex items-center gap-2 mt-2">
+                <NButton
+                  v-if="pkg.website"
+                  text
+                  size="tiny"
+                  tag="a"
+                  :href="pkg.website"
+                  target="_blank"
+                  class="!text-slate-400 hover:!text-cyan-400"
+                >
+                  <template #icon>
+                    <NIcon :component="GlobeOutline" size="14" />
+                  </template>
+                  官方网站
+                </NButton>
+              </div>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <p class="text-sm text-slate-300 mb-5 leading-relaxed">
+            {{ pkg.description || '暂无描述信息' }}
+          </p>
+
+          <!-- Install Progress -->
+          <div v-if="packagesStore.loading && packagesStore.progress" class="mb-4">
+            <div class="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500"
+                :style="{ width: (packagesStore.progress.percent ?? 50) + '%' }" />
+            </div>
+            <p class="text-xs text-slate-400 mt-1.5 truncate">
+              {{ packagesStore.progress.message }}
+            </p>
+          </div>
+
+          <!-- Advanced Options -->
+          <div class="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 mb-4 space-y-3">
+            <h4 class="text-sm font-semibold text-white mb-3">高级安装选项</h4>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-slate-300">全局安装 (--global)</span>
+              <NSwitch v-model:value="installOptions.global" size="small" />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-slate-300">跳过哈希检查 (--skip)</span>
+              <NSwitch v-model:value="installOptions.skipCheck" size="small" />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-slate-300">独立安装 (--independent)</span>
+              <NSwitch v-model:value="installOptions.independent" size="small" />
+            </div>
+          </div>
+
+          <!-- Manifest preview -->
+          <div class="bg-[#090a0d] border border-white/[0.06] rounded-xl p-4 mb-4">
+            <h4 class="text-sm font-semibold text-white mb-2">Manifest 信息</h4>
+            <pre class="text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed" v-html="manifestJson"></pre>
+          </div>
+        </div>
+      </Transition>
+    </div>
 
     <!-- Action Buttons -->
-    <div class="p-4 border-t border-black/5 dark:border-white/10 flex gap-3">
+    <div class="p-4 border-t border-white/[0.06] flex gap-3">
       <NButton
         v-if="!installed"
         type="primary"
@@ -166,11 +207,7 @@ async function handleUpdate() {
 
         <NPopconfirm @positive-click="handleUninstall">
           <template #trigger>
-            <NButton
-              type="error"
-              size="large"
-              class="flex-1"
-            >
+            <NButton type="error" size="large" class="flex-1">
               <template #icon>
                 <NIcon :component="TrashOutline" size="18" />
               </template>
@@ -183,3 +220,19 @@ async function handleUpdate() {
     </div>
   </NCard>
 </template>
+
+<style scoped>
+.fade-in-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.fade-in-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-in-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.fade-in-leave-to {
+  opacity: 0;
+}
+</style>

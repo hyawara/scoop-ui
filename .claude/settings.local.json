@@ -8,7 +8,9 @@
       "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultrawork-state.json)",
       "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ralph-state.json)",
       "Bash(rm -f /c/Users/huangy/workspace/scoop-ui/.omc/state/ultraqa-state.json)",
-      "Bash(rtk ls *)"
+      "Bash(rtk ls *)",
+      "Bash(npm install *)",
+      "Bash(ELECTRON_MIRROR=\"https://npmmirror.com/mirrors/electron/\" npm install electron)"
     ]
   }
 }
