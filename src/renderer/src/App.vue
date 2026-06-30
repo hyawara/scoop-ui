@@ -31,7 +31,7 @@ const themeOverrides = {
     primaryColor: '#7B6FF0',
     primaryColorHover: '#9F94F5',
     bodyColor: 'transparent',
-    cardColor: '#18191e',
+    cardColor: '#13151a',
     modalColor: '#1e222b',
     actionColor: '#1e222b',
     scrollbarColor: 'rgba(255,255,255,0.12)',
@@ -92,7 +92,7 @@ function toggleTheme() {
                 @toggle-theme="toggleTheme"
               />
 
-              <div class="h-[calc(100vh-70px)] overflow-hidden mx-auto max-w-[1400px] w-full px-6 py-4">
+              <div class="h-[calc(100vh-70px)] overflow-hidden mx-auto max-w-[1280px] w-full px-6 py-4 relative">
                 <Transition name="fade" mode="out-in">
                   <Dashboard v-if="!searchQuery.trim()" />
                   <SearchPanel v-else :query="searchQuery" />

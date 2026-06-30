@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --app-bg: #0f1013;
+  --app-bg: #0b0c0e;
 }
 
 .dark {
-  --app-bg: #0f1013;
+  --app-bg: #0b0c0e;
 }
 
 * {
@@ -27,13 +27,13 @@ body {
   width: 100vw;
   border-radius: 8px;
   overflow: hidden;
-  background: var(--app-bg);
+  background: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%), var(--app-bg);
 }
 
 /* Layer 2: Card backdrops */
 .glass-card {
-  background: #18191e;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #13151a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }

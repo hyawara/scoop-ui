@@ -86,17 +86,15 @@ async function handleInstallAria2() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl glass-card h-full" content-class="flex flex-col !p-5">
+  <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col !p-5">
     <!-- 卡片标题 -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-2">
-        <ServerOutline class="w-4.5 h-4.5 text-slate-300" />
-        <span class="font-semibold text-base text-white">存储与环境管理</span>
-      </div>
+    <div class="flex items-center gap-2.5 mb-4 w-full min-w-0">
+      <ServerOutline class="w-5 h-5 text-slate-300 flex-shrink-0" />
+      <span class="font-semibold text-base text-white whitespace-nowrap flex-shrink-0">存储与环境管理</span>
     </div>
 
-    <!-- 主体：弹性垂直布局，撑满卡片 -->
-    <div class="flex flex-col flex-1 justify-between gap-4">
+    <!-- 主体：紧凑垂直布局 -->
+    <div class="flex flex-col gap-4">
       <!-- 上半区：缓存仪表盘 + 环境信息 并排 -->
       <div class="grid grid-cols-12 gap-5 items-start">
         <!-- 左侧: 缓存仪表盘 -->

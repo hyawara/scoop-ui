@@ -176,9 +176,9 @@ async function removeBucket(name: string) {
 </script>
 
 <template>
-  <div class="flex gap-5 items-stretch h-full">
-    <!-- === 左侧大卡片 (7/12) === -->
-    <div class="w-7/12 min-w-0 h-full">
+  <div class="flex gap-5 h-full">
+    <!-- === 左侧大卡片 (约 60%) === -->
+    <div class="flex-[3] min-w-0 h-full">
       <NCard
         :bordered="false"
         class="!rounded-xl overflow-hidden glass-card h-full"
@@ -365,8 +365,8 @@ async function removeBucket(name: string) {
       </NCard>
     </div>
 
-    <!-- === 右侧列：两张卡片，无滚动 === -->
-    <div class="flex-1 flex flex-col gap-4 h-full min-w-0">
+    <!-- === 右侧列：两张卡片，自适应高度 === -->
+    <div class="flex-[2] flex flex-col gap-4 h-full min-w-0">
       <StorageEnvCard />
       <ProxyCard />
     </div>
