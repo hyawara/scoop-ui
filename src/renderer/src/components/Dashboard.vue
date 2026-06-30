@@ -192,7 +192,7 @@ async function removeBucket(name: string) {
           :pane-style="{ padding: '0', height: '100%' }"
         >
           <template #prefix>
-            <span class="font-semibold text-base text-slate-800 text-slate-100 ml-5">应用管理</span>
+            <span class="font-semibold text-base text-white ml-5">应用管理</span>
           </template>
           <template #suffix>
             <div class="flex items-center gap-1 mr-3">

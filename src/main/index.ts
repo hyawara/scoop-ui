@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { registerScoopIPC } from './ipc/scoop.js'
@@ -66,6 +66,15 @@ function registerWindowIPC(): void {
 
   ipcMain.handle('window:isMaximized', () => {
     return mainWindow?.isMaximized() ?? false
+  })
+
+  ipcMain.handle('window:openPath', async (_event, path: string) => {
+    try {
+      await shell.openPath(path)
+      return { success: true }
+    } catch (e: any) {
+      return { success: false, error: e.message }
+    }
   })
 }
 

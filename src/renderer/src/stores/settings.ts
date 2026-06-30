@@ -6,9 +6,13 @@ export const useSettingsStore = defineStore('settings', () => {
   const cacheInfo = ref<CacheInfo>({ size: 0, files: 0 })
   const scoopEnv = ref<ScoopEnv>({ scoop: '', global: '' })
   const proxy = ref<ProxyConfig>({ enabled: false, address: '', type: 'http' })
-  const diskSpace = ref<{ used: number; free: number; name?: string } | null>(null)
+  const diskSpace = ref<{ Used: number; Free: number; Name?: string } | null>(null)
   const aria2Enabled = ref(false)
   const loading = ref(false)
+
+  const bucketCount = ref(0)
+  const installedCount = ref(0)
+  const globalCount = ref(0)
 
   async function loadCacheInfo() {
     try {
@@ -64,12 +68,50 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setProxyConfig(protocol: 'http' | 'socks5', host: string, port: string) {
+    const addr = protocol === 'socks5' ? `socks5://${host}:${port}` : `${host}:${port}`
+    loading.value = true
+    try {
+      await window.scoopAPI.setProxy(addr)
+      proxy.value = { enabled: true, address: addr, type: protocol }
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function checkAria2() {
     try {
       const res = await window.scoopAPI.checkAria2()
       aria2Enabled.value = res.enabled
     } catch {
       aria2Enabled.value = false
+    }
+  }
+
+  async function installAria2() {
+    loading.value = true
+    try {
+      await window.scoopAPI.install('aria2')
+      await checkAria2()
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function loadEcoStats() {
+    try {
+      const buckets = await window.scoopAPI.listBuckets()
+      bucketCount.value = buckets.length
+    } catch {
+      bucketCount.value = 0
+    }
+    try {
+      const installed = await window.scoopAPI.listInstalled()
+      installedCount.value = installed.length
+      globalCount.value = installed.filter((p: any) => p.global).length
+    } catch {
+      installedCount.value = 0
+      globalCount.value = 0
     }
   }
 
@@ -85,6 +127,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     cacheInfo, scoopEnv, proxy, diskSpace, aria2Enabled, loading,
-    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, migrateScoop, setProxy, removeProxy
+    bucketCount, installedCount, globalCount,
+    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, installAria2, migrateScoop, setProxy, setProxyConfig, removeProxy, loadEcoStats
   }
 })

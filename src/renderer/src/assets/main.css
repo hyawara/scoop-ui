@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --app-bg: #0c0e12;
+  --app-bg: #0f1013;
 }
 
 .dark {
-  --app-bg: #0c0e12;
+  --app-bg: #0f1013;
 }
 
 * {
@@ -32,16 +32,16 @@ body {
 
 /* Layer 2: Card backdrops */
 .glass-card {
-  background: #161920;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
+  background: #18191e;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
+  transform: translateY(-2px);
 }
 
 .drag-region {

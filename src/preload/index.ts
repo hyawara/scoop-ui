@@ -47,4 +47,6 @@ contextBridge.exposeInMainWorld('scoopAPI', {
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
   },
+
+  openPath: (path: string) => ipcRenderer.invoke('window:openPath', path),
 })
