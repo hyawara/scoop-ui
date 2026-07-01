@@ -40,6 +40,7 @@ import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import ProxyCard from '@/components/ProxyCard.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
 import TaskProgressCard from '@/components/TaskProgressCard.vue'
+import AppListItem from '@/components/AppListItem.vue'
 
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
@@ -479,116 +480,83 @@ async function removeBucket(name: string) {
               <!-- 自我更新通知条 -->
               <UpdateManager class="mx-4 mt-3" />
 
-              <!-- 批量操作工具栏（虚拟卡片骨架，与下方卡片天然对齐） -->
+              <!-- 批量操作工具栏（Raycast 风格，与列表行全等对齐） -->
               <div
-                class="sticky top-0 z-20 py-1 backdrop-blur-md"
-                style="background: rgba(18,19,26,0.92);"
+                class="sticky top-0 z-20 py-2 backdrop-blur-md border-b border-white/[0.03]"
+                style="background: rgba(18,19,26,0.95);"
               >
-                <div class="flex items-center gap-3 p-3 mx-4 rounded-xl border border-white/[0.04]">
+                <div class="flex items-center gap-3 px-4 h-14">
                   <!-- 左侧：全选 + 计数 -->
-                  <div class="flex-shrink-0 w-5">
+                  <div class="flex-shrink-0 w-6">
                     <NCheckbox
                       :checked="isAllSelected()"
                       :indeterminate="isIndeterminate()"
                       @update:checked="toggleSelectAll"
                     />
                   </div>
-                  <div class="w-px h-3.5 bg-white/[0.08]" />
-                  <span class="text-xs text-slate-400 select-none">全选</span>
-                  <div class="w-px h-3.5 bg-white/[0.08]" />
-                  <span class="text-xs text-slate-400 select-none">
-                    已选 <strong class="text-slate-200 font-medium">{{ selectedPackageNames.length }}</strong> 项
+                  <span class="text-[14px] text-gray-500 select-none">
+                    已选 <strong class="text-gray-300 font-medium">{{ selectedPackageNames.length }}</strong> 项
                   </span>
 
                   <!-- 右侧：操作按钮 -->
                   <div class="flex items-center gap-2 ml-auto">
                     <template v-if="checkingUpdates">
-                      <div class="w-3 h-3 border-[1.5px] border-t-transparent border-slate-500 rounded-full animate-spin" />
-                      <span class="text-xs text-slate-500">检查中...</span>
+                      <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-gray-500 rounded-full animate-spin" />
+                      <span class="text-[14px] text-gray-500">检查中...</span>
                     </template>
                     <template v-else>
                       <button
                         :disabled="selectedPackageNames.length === 0 || batchUpdating"
                         @click="handleBatchUpdate"
-                        class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-[14px] font-medium rounded-md border transition-all select-none"
                         :class="selectedPackageNames.length === 0
-                          ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
-                          : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/40 cursor-pointer'"
+                          ? 'border-white/[0.04] bg-transparent text-gray-600 cursor-not-allowed'
+                          : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 cursor-pointer'"
                       >
-                        <NIcon :component="DownloadOutline" :size="12" />
-                        更新选中项 ({{ selectedPackageNames.length }})
+                        <NIcon :component="DownloadOutline" :size="15" />
+                        更新 ({{ selectedPackageNames.length }})
                       </button>
                       <button
                         :disabled="selectedPackageNames.length === 0"
                         @click="handleBatchUninstall"
-                        class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-[14px] font-medium rounded-md border transition-all select-none"
                         :class="selectedPackageNames.length === 0
-                          ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
-                          : 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 cursor-pointer'"
+                          ? 'border-white/[0.04] bg-transparent text-gray-600 cursor-not-allowed'
+                          : 'border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 cursor-pointer'"
                       >
-                        <NIcon :component="TrashOutline" :size="12" />
-                        卸载选中项 ({{ selectedPackageNames.length }})
+                        <NIcon :component="TrashOutline" :size="15" />
+                        卸载 ({{ selectedPackageNames.length }})
                       </button>
                       <button
                         :disabled="packagesStore.updatable.length === 0 || updatingAll"
                         @click="handleUpdateAllConfirm"
-                        class="flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors select-none"
+                        class="flex items-center gap-1 px-2.5 py-1.5 text-[14px] rounded-md transition-colors select-none"
                         :class="packagesStore.updatable.length === 0
-                          ? 'text-slate-600 cursor-not-allowed'
-                          : 'text-slate-400/80 hover:text-slate-200 hover:bg-white/[0.04] cursor-pointer'"
+                          ? 'text-gray-600 cursor-not-allowed'
+                          : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] cursor-pointer'"
                       >
-                        一键全部更新
+                        全部更新
                       </button>
                     </template>
                   </div>
                 </div>
               </div>
 
-              <!-- 已安装列表（始终渲染，永不消失） -->
-              <div class="flex flex-col gap-1.5 pt-3 pb-4 px-4">
-                <TransitionGroup name="list" tag="div" class="flex flex-col gap-1.5">
-                  <div v-for="pkg in packagesStore.installed" :key="pkg.name"
-                    class="flex items-center gap-3 p-3 rounded-xl bg-[#1e222b] hover:bg-[#262b36] border border-white/[0.06] hover:border-white/[0.1] transition-all duration-300 micro-card"
-                    :class="{
-                      'opacity-40 pointer-events-none': uninstallingSet.has(pkg.name),
-                    }"
-                  >
-                    <div class="flex-shrink-0 w-5">
-                      <NCheckbox
-                        :checked="selectedPackages.has(pkg.name)"
-                        @update:checked="toggleSelect(pkg.name)"
-                        :disabled="uninstallingSet.has(pkg.name)"
-                      />
-                    </div>
-
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                      <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
-                        <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
-                        <NTag v-if="pkg.bucket" size="small" :bordered="false"
-                          class="!bg-violet-900/40 !text-violet-300"
-                        >{{ pkg.bucket }}</NTag>
-                        <NTag v-if="pkg.global" size="small" :bordered="false"
-                          class="!bg-blue-900/40 !text-blue-300"
-                        >🌐 Global</NTag>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-1.5 flex-shrink-0">
-                      <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
-                        class="!bg-amber-500/10 !text-amber-400 font-mono" style="border: 1px solid rgba(251,191,36,0.3)"
-                      >→ {{ getNewVersion(pkg.name) }}</NTag>
-                      <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
-                        <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
-                      </NButton>
-                      <NSpin v-if="uninstallingSet.has(pkg.name)" size="small" />
-                      <NButton v-else text size="small" class="!text-rose-400 hover:!text-rose-500" @click="handleUninstall(pkg)">
-                        <template #icon><NIcon :component="TrashOutline" size="14" /></template>
-                      </NButton>
-                    </div>
-                  </div>
+              <!-- 已安装列表（纯净单色流风格） -->
+              <div class="flex flex-col pt-2 pb-4">
+                <TransitionGroup name="list" tag="div" class="flex flex-col">
+                  <AppListItem
+                    v-for="pkg in packagesStore.installed"
+                    :key="pkg.name"
+                    :pkg="pkg"
+                    :mode="updatableNames.has(pkg.name) ? 'updatable' : 'installed'"
+                    :checked="selectedPackages.has(pkg.name)"
+                    :disabled="uninstallingSet.has(pkg.name)"
+                    :new-version="getNewVersion(pkg.name)"
+                    @toggle-check="toggleSelect"
+                    @update="handleUpdate"
+                    @uninstall="handleUninstall"
+                  />
                 </TransitionGroup>
               </div>
             </NScrollbar>

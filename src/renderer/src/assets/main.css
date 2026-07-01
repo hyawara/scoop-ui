@@ -2,6 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* LXGW WenKai Mono - 中文等宽字体 */
+@font-face {
+  font-family: 'LXGW WenKai Mono';
+  src: url('/fonts/LXGWWenKaiMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'LXGW WenKai Mono';
+  src: url('/fonts/LXGWWenKaiMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* IosevkaAnony - 英文等宽字体 */
+@font-face {
+  font-family: 'IosevkaAnony';
+  src: url('/fonts/IosevkaAnony-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IosevkaAnony';
+  src: url('/fonts/IosevkaAnony-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --app-bg: #0b0c0e;
 }
@@ -17,7 +51,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-family: 'IosevkaAnony', 'LXGW WenKai Mono', 'Segoe UI', 'Microsoft YaHei', sans-serif;
   background: transparent;
   overflow: hidden;
 }
@@ -28,6 +62,11 @@ body {
   border-radius: 8px;
   overflow: hidden;
   background: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%), var(--app-bg);
+}
+
+/* 等宽字体类 */
+.font-mono {
+  font-family: 'IosevkaAnony', 'LXGW WenKai Mono', ui-monospace, monospace;
 }
 
 /* Layer 2: Card backdrops */
