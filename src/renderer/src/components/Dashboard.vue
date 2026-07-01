@@ -8,12 +8,7 @@ import {
   NIcon,
   NEmpty,
   NScrollbar,
-  NDrawer,
-  NDrawerContent,
-  NSpace,
   NModal,
-  NInput,
-  NPopconfirm,
   NCheckbox,
   NSpin,
   useMessage,
@@ -24,8 +19,6 @@ import {
   TrashOutline,
   CubeOutline,
   Cube,
-  AddOutline,
-  CloseOutline,
   TerminalOutline,
   CodeSlashOutline,
   CreateOutline,
@@ -39,6 +32,7 @@ import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import ProxyCard from '@/components/ProxyCard.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
 import AppListItem from '@/components/AppListItem.vue'
+import BucketDrawer from '@/components/BucketDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 
 const packagesStore = usePackagesStore()
@@ -217,13 +211,7 @@ function preloadIcons() {
   }
 }
 
-// Bucket drawer state
 const showBucketDrawer = ref(false)
-const buckets = ref<{ name: string; source: string }[]>([])
-const loadingBuckets = ref(false)
-const addBucketModal = ref(false)
-const newBucketName = ref('')
-const newBucketRepo = ref('')
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
 
@@ -585,41 +573,8 @@ async function executeBatchUninstall(names: string[]) {
   removingSet.value = new Set()
 }
 
-async function openBucketDrawer() {
+function openBucketDrawer() {
   showBucketDrawer.value = true
-  loadingBuckets.value = true
-  try {
-    buckets.value = await window.scoopAPI.listBuckets()
-  } catch {
-    buckets.value = []
-    message.error('获取 Bucket 列表失败')
-  } finally {
-    loadingBuckets.value = false
-  }
-}
-
-async function addBucket() {
-  if (!newBucketName.value) return
-  try {
-    await window.scoopAPI.addBucket(newBucketName.value, newBucketRepo.value || undefined)
-    message.success(`Bucket ${newBucketName.value} 已添加`)
-    addBucketModal.value = false
-    newBucketName.value = ''
-    newBucketRepo.value = ''
-    buckets.value = await window.scoopAPI.listBuckets()
-  } catch (e: any) {
-    message.error(e.message || '添加失败')
-  }
-}
-
-async function removeBucket(name: string) {
-  try {
-    await window.scoopAPI.removeBucket(name)
-    message.info(`Bucket ${name} 已移除`)
-    buckets.value = await window.scoopAPI.listBuckets()
-  } catch (e: any) {
-    message.error(e.message || '移除失败')
-  }
 }
 </script>
 
@@ -907,55 +862,7 @@ async function removeBucket(name: string) {
       <ProxyCard />
     </div>
 
-    <!-- Bucket Drawer -->
-    <NDrawer v-model:show="showBucketDrawer" width="400" placement="right">
-      <NDrawerContent title="📦 软件源管理 (Bucket)" closable>
-        <div class="flex flex-col gap-4">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-500">已添加 {{ buckets.length }} 个 Bucket</span>
-            <NButton size="small" secondary @click="addBucketModal = true" class="!rounded-lg">
-              <template #icon><NIcon :component="AddOutline" size="14" /></template>添加 Bucket
-            </NButton>
-          </div>
-          <div v-if="loadingBuckets" class="flex justify-center py-12">
-            <div class="flex flex-col items-center gap-3">
-              <div class="w-5 h-5 border-2 border-t-transparent border-purple-500 rounded-full animate-spin" />
-              <span class="text-xs text-gray-400">加载中...</span>
-            </div>
-          </div>
-          <div v-else-if="buckets.length === 0" class="flex flex-col items-center py-12 text-gray-400">
-            <CubeOutline class="w-12 h-12 mb-2 opacity-30" />
-            <p class="text-sm">暂无 Bucket</p>
-          </div>
-          <div v-else class="flex flex-col gap-2">
-            <div v-for="b in buckets" :key="b.name"
-              class="flex items-center gap-3 p-3 rounded-xl bg-gray-50/80 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
-            >
-              <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <span class="text-white text-xs font-bold uppercase">{{ b.name[0] }}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <span class="font-medium text-sm text-gray-700 text-slate-100">{{ b.name }}</span>
-                <p class="text-[10px] text-gray-400 truncate">{{ b.source }}</p>
-              </div>
-              <NPopconfirm @positive-click="removeBucket(b.name)">
-                <template #trigger><NButton text size="small" type="error"><template #icon><NIcon :component="CloseOutline" size="14" /></template></NButton></template>
-                确认移除 {{ b.name }}？
-              </NPopconfirm>
-            </div>
-          </div>
-        </div>
-      </NDrawerContent>
-    </NDrawer>
-
-    <!-- Add Bucket Modal -->
-    <NModal v-model:show="addBucketModal" preset="card" title="添加 Bucket" style="width: 450px">
-      <NSpace vertical>
-        <NInput v-model:value="newBucketName" placeholder="Bucket 名称 (如 extras)" />
-        <NInput v-model:value="newBucketRepo" placeholder="Git 仓库链接 (可选)" />
-        <NButton type="primary" :disabled="!newBucketName" @click="addBucket" block>添加</NButton>
-      </NSpace>
-    </NModal>
+    <BucketDrawer v-model:show="showBucketDrawer" />
 
     <!-- 单包终端日志弹窗 -->
     <NModal
