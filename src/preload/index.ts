@@ -22,12 +22,14 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   addBucket: (name: string, repo?: string) => ipcRenderer.invoke('scoop:addBucket', name, repo),
   removeBucket: (name: string) => ipcRenderer.invoke('scoop:removeBucket', name),
 
+  getProxy: () => ipcRenderer.invoke('scoop:getProxy'),
   setProxy: (proxy: string) => ipcRenderer.invoke('scoop:setProxy', proxy),
   removeProxy: () => ipcRenderer.invoke('scoop:removeProxy'),
 
   getEnv: () => ipcRenderer.invoke('scoop:getEnv'),
   getDiskSpace: () => ipcRenderer.invoke('scoop:diskSpace'),
   migrateScoop: (newPath: string) => ipcRenderer.invoke('scoop:migrate', newPath),
+  getScoopVersion: () => ipcRenderer.invoke('scoop:version'),
 
   onProgress: (callback: (data: any) => void) => {
     ipcRenderer.on('scoop:progress', (_event, data) => callback(data))
@@ -50,4 +52,15 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   },
 
   openPath: (path: string) => ipcRenderer.invoke('window:openPath', path),
+
+  // Self-Update APIs
+  checkForUpdate: (url: string) => ipcRenderer.invoke('app:checkForUpdate', url),
+  downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),
+  exitAndInstall: () => ipcRenderer.invoke('app:exitAndInstall'),
+  onUpdateProgress: (callback: (data: { percent: number }) => void) => {
+    ipcRenderer.on('app:updateProgress', (_event, data) => callback(data))
+  },
+  removeUpdateProgressListener: () => {
+    ipcRenderer.removeAllListeners('app:updateProgress')
+  },
 })

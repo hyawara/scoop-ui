@@ -16,7 +16,10 @@ export default defineConfig({
     outDir: '../../dist/renderer',
     emptyOutDir: true,
     chunkSizeWarningLimit: 1500,
-    rollupOptions: {
+    rolldownOptions: {
+      checks: {
+        pluginTimings: false,
+      },
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {

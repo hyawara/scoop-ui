@@ -1,6 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, shell, app } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
-import { homedir } from 'os'
+import { homedir, tmpdir } from 'os'
+import { join } from 'path'
+import { createWriteStream, existsSync } from 'fs'
+import { pipeline } from 'stream/promises'
+import { execSync, spawn } from 'child_process'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
@@ -270,11 +274,36 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // Check Aria2 status
+  // Get Scoop version
+  ipcMain.handle('scoop:version', async () => {
+    const { stdout } = await execScoop('--version')
+    // Output format: "Current Scoop version:\n* YYYY-MM-DD xxxxxxx" or similar
+    const versionMatch = stdout.match(/(?:Current Scoop version|Scoop version)[:\s]*\*?\s*([a-f0-9]+)/i)
+    const rawVersion = versionMatch ? versionMatch[1] : stdout.trim().split('\n')[0]?.trim() || ''
+    return { version: rawVersion }
+  })
+
+  // Check Aria2 status (check both config flag and actual binary presence)
   ipcMain.handle('scoop:checkAria2', async () => {
-    const { stdout } = await execScoop('config aria2-enabled')
-    const enabled = stdout.trim().toLowerCase() === 'true'
-    return { enabled }
+    // Check if aria2 is actually installed on the system via scoop list
+    let installed = false
+    try {
+      const { stdout } = await execScoop('list aria2')
+      // scoop list aria2 outputs lines if installed; if not installed, output says "Couldn't find manifest for 'aria2'"
+      installed = stdout.trim().length > 0
+        && !stdout.toLowerCase().includes("couldn't find")
+        && !stdout.toLowerCase().includes('is not installed')
+        && !stdout.toLowerCase().includes('no results')
+    } catch { /* not installed */ }
+
+    // Also check the scoop config flag
+    let enabled = false
+    try {
+      const { stdout } = await execScoop('config aria2-enabled')
+      enabled = stdout.trim().toLowerCase() === 'true'
+    } catch { /* config not set */ }
+
+    return { enabled: installed || enabled }
   })
 
   // List buckets
@@ -305,6 +334,28 @@ export function registerScoopIPC(): void {
   // Remove bucket
   ipcMain.handle('scoop:removeBucket', async (_event, name: string) => {
     return execScoop(`bucket rm ${name}`)
+  })
+
+  // Get current proxy config
+  ipcMain.handle('scoop:getProxy', async () => {
+    try {
+      const { stdout } = await execScoop('config proxy')
+      const output = stdout.trim()
+      if (!output || output.includes('is not set') || output.includes('isn\'t set')) {
+        return { enabled: false, address: '', type: 'http' as const }
+      }
+      // scoop config proxy returns something like: proxy = 127.0.0.1:7890
+      const match = output.match(/(?:proxy\s*=\s*)(.+)/i)
+      const addr = match ? match[1].trim() : output
+      if (!addr) {
+        return { enabled: false, address: '', type: 'http' as const }
+      }
+      const isSocks5 = addr.startsWith('socks5://')
+      const type = isSocks5 ? 'socks5' as const : 'http' as const
+      return { enabled: true, address: addr, type }
+    } catch {
+      return { enabled: false, address: '', type: 'http' as const }
+    }
   })
 
   // Set proxy
@@ -361,5 +412,90 @@ export function registerScoopIPC(): void {
         }
       )
     }
+  })
+
+  // ============================================
+  // Self-Update: Check for app updates
+  // ============================================
+  ipcMain.handle('app:checkForUpdate', async (_event, url: string) => {
+    try {
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!response.ok) return { hasUpdate: false }
+      const data = await response.json() as {
+        version?: string
+        notes?: string
+        pub_date?: string
+        platforms?: {
+          'windows-x86_64'?: { url?: string; signature?: string }
+        }
+      }
+      const remoteVersion = data.version || ''
+      const localVersion = app.getVersion()
+      if (remoteVersion && remoteVersion !== localVersion) {
+        const downloadUrl = data.platforms?.['windows-x86_64']?.url || ''
+        return {
+          hasUpdate: true,
+          version: remoteVersion,
+          notes: data.notes || '',
+          pubDate: data.pub_date || '',
+          downloadUrl,
+        }
+      }
+      return { hasUpdate: false }
+    } catch {
+      return { hasUpdate: false }
+    }
+  })
+
+  // ============================================
+  // Self-Update: Download update installer
+  // ============================================
+  ipcMain.handle('app:downloadUpdate', async (event, url: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const filePath = join(tmpdir(), 'scoop-ui-update.exe')
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(300000) })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const total = Number(response.headers.get('content-length')) || 0
+      let downloaded = 0
+      const fileStream = createWriteStream(filePath)
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No response body')
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        fileStream.write(value)
+        downloaded += value.byteLength
+        const percent = total > 0 ? Math.round((downloaded / total) * 100) : 0
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('app:updateProgress', { percent })
+        }
+      }
+      fileStream.end()
+      return { success: true, path: filePath }
+    } catch (e: any) {
+      throw new Error(e.message || 'Download failed')
+    }
+  })
+
+  // ============================================
+  // Self-Update: Exit app and launch installer
+  // ============================================
+  ipcMain.handle('app:exitAndInstall', async () => {
+    const installerPath = join(tmpdir(), 'scoop-ui-update.exe')
+    if (!existsSync(installerPath)) {
+      throw new Error('Installer not found')
+    }
+    // Launch installer with silent flags (NSIS: /SILENT, Inno Setup: /SILENT)
+    spawn(installerPath, ['/SILENT'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    }).unref()
+    app.quit()
   })
 }

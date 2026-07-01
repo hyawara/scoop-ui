@@ -24,6 +24,7 @@ const emit = defineEmits<{
   'update:searchQuery': [value: string]
   toggleTheme: []
   search: [query: string]
+  'openSettings': []
 }>()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -114,7 +115,7 @@ async function refreshAll() {
     </div>
 
     <!-- Right: Actions & Window Controls -->
-    <div class="flex items-center gap-0.5 no-drag flex-shrink-0">
+    <div class="flex items-center gap-0.5 no-drag flex-shrink-0" style="position: relative; z-index: 10; pointer-events: auto;">
       <NButton text @click="refreshAll" size="small">
         <template #icon>
           <NIcon :component="RefreshOutline" size="16" />
@@ -125,7 +126,7 @@ async function refreshAll() {
           <NIcon :component="isDark ? SunnyOutline : MoonOutline" size="16" />
         </template>
       </NButton>
-      <NButton text size="small">
+      <NButton text size="small" @click="emit('openSettings')">
         <template #icon>
           <NIcon :component="SettingsOutline" size="16" />
         </template>

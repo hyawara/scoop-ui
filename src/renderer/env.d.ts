@@ -38,9 +38,11 @@ interface Window {
     listBuckets: () => Promise<{ name: string; source: string }[]>
     addBucket: (name: string, repo?: string) => Promise<void>
     removeBucket: (name: string) => Promise<void>
+    getProxy: () => Promise<{ enabled: boolean; address: string; type: 'http' | 'socks5' }>
     setProxy: (proxy: string) => Promise<void>
     removeProxy: () => Promise<void>
     getEnv: () => Promise<{ scoop: string; global: string }>
+    getScoopVersion: () => Promise<{ version: string }>
     getDiskSpace: () => Promise<any>
     migrateScoop: (newPath: string) => Promise<void>
     onProgress: (callback: (data: ProgressData) => void) => void
@@ -53,5 +55,18 @@ interface Window {
       close: () => void
     }
     openPath: (path: string) => Promise<{ success: boolean; error?: string }>
+
+    // Self-Update APIs
+    checkForUpdate: (url: string) => Promise<{
+      hasUpdate: boolean
+      version?: string
+      notes?: string
+      pubDate?: string
+      downloadUrl?: string
+    }>
+    downloadUpdate: (url: string) => Promise<{ success: boolean; path: string }>
+    exitAndInstall: () => void
+    onUpdateProgress: (callback: (data: { percent: number }) => void) => void
+    removeUpdateProgressListener: () => void
   }
 }

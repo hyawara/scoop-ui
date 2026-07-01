@@ -17,6 +17,7 @@ import Header from '@/components/Header.vue'
 import Dashboard from '@/components/Dashboard.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import Onboarding from '@/components/Onboarding.vue'
+import SettingsPanel from '@/components/SettingsPanel.vue'
 
 const appStore = useAppStore()
 const packagesStore = usePackagesStore()
@@ -25,6 +26,48 @@ const settingsStore = useSettingsStore()
 const isDark = ref(true)
 const searchQuery = ref('')
 const committedSearch = ref('')
+const showSettings = ref(false)
+
+// Shared update check state for UpdateManager + SettingsPanel
+const updateInfo = ref<{
+  hasUpdate: boolean
+  version: string
+  notes: string
+  pubDate: string
+  downloadUrl: string
+  checking: boolean
+}>({
+  hasUpdate: false,
+  version: '',
+  notes: '',
+  pubDate: '',
+  downloadUrl: '',
+  checking: false,
+})
+
+const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
+
+async function checkForUpdate() {
+  if (updateInfo.value.checking) return
+  updateInfo.value.checking = true
+  try {
+    const result = await window.scoopAPI.checkForUpdate(UPDATE_CHECK_URL)
+    if (result.hasUpdate) {
+      updateInfo.value = {
+        hasUpdate: true,
+        version: result.version || '',
+        notes: result.notes || '',
+        pubDate: result.pubDate || '',
+        downloadUrl: result.downloadUrl || '',
+        checking: false,
+      }
+    } else {
+      updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false }
+    }
+  } catch {
+    updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false }
+  }
+}
 
 function handleSearch(query: string) {
   if (query.trim()) {
@@ -68,6 +111,8 @@ const themeOverrides = {
 }
 
 provide('searchQuery', searchQuery)
+provide('updateInfo', updateInfo)
+provide('checkForUpdate', checkForUpdate)
 
 onMounted(async () => {
   await appStore.checkScoop()
@@ -77,12 +122,20 @@ onMounted(async () => {
       packagesStore.loadUpdatable(),
       settingsStore.loadEnv(),
       settingsStore.loadCacheInfo(),
+      settingsStore.checkAria2(),
+      settingsStore.loadProxy(),
     ])
+    // Silently check for app updates
+    checkForUpdate()
   }
 })
 
 function toggleTheme() {
   isDark.value = !isDark.value
+}
+
+function openSettings() {
+  showSettings.value = true
 }
 </script>
 
@@ -107,6 +160,7 @@ function toggleTheme() {
                 :is-dark="isDark"
                 @toggle-theme="toggleTheme"
                 @search="handleSearch"
+                @open-settings="openSettings"
               />
 
               <div class="h-[calc(100vh-70px)] overflow-hidden mx-auto max-w-[1280px] w-full px-6 py-4 relative">
@@ -128,6 +182,9 @@ function toggleTheme() {
         </NLoadingBarProvider>
       </NDialogProvider>
     </NMessageProvider>
+
+    <!-- Settings Panel (inside providers for NModal context) -->
+    <SettingsPanel v-model:show="showSettings" />
   </NConfigProvider>
 </template>
 

@@ -13,8 +13,10 @@ import {
   SparklesOutline,
 } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
+import { usePackagesStore } from '@/stores/packages'
 
 const settingsStore = useSettingsStore()
+const packagesStore = usePackagesStore()
 const message = useMessage()
 
 const showMigrate = ref(false)
@@ -86,6 +88,9 @@ async function handleInstallAria2() {
   message.info('正在安装 Aria2...')
   await settingsStore.installAria2()
   message.success('Aria2 安装完成')
+  // Refresh the installed list so aria2 appears in Dashboard
+  await packagesStore.loadInstalled()
+  await packagesStore.loadUpdatable()
 }
 </script>
 

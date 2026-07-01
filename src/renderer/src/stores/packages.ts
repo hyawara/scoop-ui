@@ -108,8 +108,26 @@ export const usePackagesStore = defineStore('packages', () => {
     }
   }
 
+  async function updateBatch(names: string[]) {
+    if (names.length === 0) return
+    loading.value = true
+    try {
+      window.scoopAPI.onProgress((data: ProgressData) => {
+        progress.value = data
+      })
+      for (const name of names) {
+        await window.scoopAPI.update(name)
+      }
+      await loadInstalled()
+      await loadUpdatable()
+    } finally {
+      loading.value = false
+      window.scoopAPI.removeProgressListener()
+    }
+  }
+
   return {
     installed, updatable, searchResults, loading, progress, descriptionsLoading,
-    loadInstalled, loadUpdatable, search, install, uninstall, update
+    loadInstalled, loadUpdatable, search, install, uninstall, update, updateBatch
   }
 })

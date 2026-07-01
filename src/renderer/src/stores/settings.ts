@@ -9,6 +9,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const diskSpace = ref<{ Used: number; Free: number; Name?: string } | null>(null)
   const aria2Enabled = ref(false)
   const loading = ref(false)
+  const proxyLoading = ref(false)
 
   const bucketCount = ref(0)
   const installedCount = ref(0)
@@ -61,23 +62,23 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function setProxy(address: string) {
-    loading.value = true
+    proxyLoading.value = true
     try {
       await window.scoopAPI.setProxy(address)
       proxy.value = { enabled: true, address, type: address.includes('socks5') ? 'socks5' : 'http' }
     } finally {
-      loading.value = false
+      proxyLoading.value = false
     }
   }
 
   async function setProxyConfig(protocol: 'http' | 'socks5', host: string, port: string) {
     const addr = protocol === 'socks5' ? `socks5://${host}:${port}` : `${host}:${port}`
-    loading.value = true
+    proxyLoading.value = true
     try {
       await window.scoopAPI.setProxy(addr)
       proxy.value = { enabled: true, address: addr, type: protocol }
     } finally {
-      loading.value = false
+      proxyLoading.value = false
     }
   }
 
@@ -118,18 +119,26 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function removeProxy() {
-    loading.value = true
+    proxyLoading.value = true
     try {
       await window.scoopAPI.removeProxy()
       proxy.value = { enabled: false, address: '', type: 'http' }
     } finally {
-      loading.value = false
+      proxyLoading.value = false
+    }
+  }
+
+  async function loadProxy() {
+    try {
+      proxy.value = await window.scoopAPI.getProxy()
+    } catch {
+      proxy.value = { enabled: false, address: '', type: 'http' }
     }
   }
 
   return {
-    cacheInfo, scoopEnv, proxy, diskSpace, aria2Enabled, loading,
+    cacheInfo, scoopEnv, proxy, diskSpace, aria2Enabled, loading, proxyLoading,
     bucketCount, installedCount, globalCount,
-    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, installAria2, migrateScoop, setProxy, setProxyConfig, removeProxy, loadEcoStats
+    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, installAria2, migrateScoop, setProxy, setProxyConfig, removeProxy, loadProxy, loadEcoStats
   }
 })

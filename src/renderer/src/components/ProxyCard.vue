@@ -59,7 +59,7 @@ async function applyProxy() {
         :value="proxyEnabled"
         @update:value="toggleProxy"
         size="medium"
-        :loading="settingsStore.loading"
+        :loading="settingsStore.proxyLoading"
       >
         <template #checked>
           <span class="text-xs font-medium">ON</span>

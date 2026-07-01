@@ -15,26 +15,35 @@ import {
   NModal,
   NInput,
   NPopconfirm,
+  NDropdown,
+  NCheckbox,
+  NProgress,
   useMessage,
+  useDialog,
 } from 'naive-ui'
 import {
   DownloadOutline,
   TrashOutline,
   CubeOutline,
-  CheckmarkDoneOutline,
   CompassOutline,
   Cube,
   RefreshOutline,
   AddOutline,
   CloseOutline,
-  StopCircleOutline,
+  TerminalOutline,
+  EllipsisVerticalOutline,
 } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
+import { useSettingsStore } from '@/stores/settings'
 import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import ProxyCard from '@/components/ProxyCard.vue'
+import UpdateManager from '@/components/UpdateManager.vue'
+import TaskProgressCard from '@/components/TaskProgressCard.vue'
 
 const packagesStore = usePackagesStore()
+const settingsStore = useSettingsStore()
 const message = useMessage()
+const dialog = useDialog()
 
 const recommendedPackages = [
   { name: 'git', icon: 'G', desc: '版本控制', bucket: 'main', color: 'from-orange-500 to-red-500' },
@@ -66,10 +75,74 @@ const newBucketRepo = ref('')
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
 
-// Terminal log state
-const logs = ref<string[]>([])
-const logVisible = ref(false)
+// Batch selection state
+const selectedPackages = ref<Set<string>>(new Set())
+const batchUpdating = ref(false)
+
+const SELECTED_STORAGE_KEY = 'scoop-ui-selected-packages'
+
+function loadSelectedFromStorage() {
+  try {
+    const raw = localStorage.getItem(SELECTED_STORAGE_KEY)
+    if (raw) {
+      const arr: string[] = JSON.parse(raw)
+      selectedPackages.value = new Set(arr)
+    }
+  } catch { /* ignore */ }
+}
+
+function saveSelectedToStorage() {
+  try {
+    localStorage.setItem(SELECTED_STORAGE_KEY, JSON.stringify([...selectedPackages.value]))
+  } catch { /* ignore */ }
+}
+
+function toggleSelect(name: string) {
+  const s = new Set(selectedPackages.value)
+  if (s.has(name)) {
+    s.delete(name)
+  } else {
+    s.add(name)
+  }
+  selectedPackages.value = s
+  saveSelectedToStorage()
+}
+
+function toggleSelectAll() {
+  const allNames = packagesStore.installed.map((p: any) => p.name)
+  if (selectedPackages.value.size === allNames.length && allNames.every(n => selectedPackages.value.has(n))) {
+    selectedPackages.value = new Set()
+  } else {
+    selectedPackages.value = new Set(allNames)
+  }
+  saveSelectedToStorage()
+}
+
+function isAllSelected(): boolean {
+  const allNames = packagesStore.installed.map((p: any) => p.name)
+  return allNames.length > 0 && allNames.every(n => selectedPackages.value.has(n))
+}
+
+function isIndeterminate(): boolean {
+  const allNames = packagesStore.installed.map((p: any) => p.name)
+  const count = allNames.filter(n => selectedPackages.value.has(n)).length
+  return count > 0 && count < allNames.length
+}
+
+const selectedPackageNames = computed(() =>
+  packagesStore.installed.filter((p: any) => selectedPackages.value.has(p.name)).map((p: any) => p.name)
+)
+
+// Terminal log state — logs always collected, shown only in modal
+const terminalLogs = ref<string[]>([])
+const showTerminalModal = ref(false)
 const logContainerRef = ref<HTMLDivElement | null>(null)
+const currentLogLine = ref('')
+
+// Progress bar state
+const batchProgress = ref(0)
+const currentBatchTotal = ref(0)
+const currentBatchDone = ref(0)
 
 function scrollLogToBottom() {
   nextTick(() => {
@@ -82,18 +155,23 @@ function scrollLogToBottom() {
 function addLogLine(msg: string) {
   const trimmed = msg.trim()
   if (!trimmed) return
-  logs.value.push(trimmed)
-  logVisible.value = true
+  terminalLogs.value.push(trimmed)
+  currentLogLine.value = trimmed
+  // Parse percentage from log line
+  const match = trimmed.match(/\((\d+)%\)/) || trimmed.match(/(\d+)%/)
+  if (match) {
+    batchProgress.value = parseInt(match[1], 10)
+  }
   scrollLogToBottom()
 }
 
 onMounted(() => {
+  loadSelectedFromStorage()
   window.scoopAPI.onLog((data) => {
     if (data?.message) {
       addLogLine(data.message)
     }
   })
-  // 异步加载可更新列表，显示加载状态避免突然出现更新提示
   checkingUpdates.value = true
   packagesStore.loadUpdatable().finally(() => {
     checkingUpdates.value = false
@@ -104,11 +182,27 @@ onUnmounted(() => {
   window.scoopAPI.removeLogListener()
 })
 
-watch(logs, scrollLogToBottom)
+watch(terminalLogs, scrollLogToBottom)
+
+// Sync selected state: remove entries for packages that are no longer installed
+watch(() => packagesStore.installed, (list) => {
+  const names = new Set(list.map((p: any) => p.name))
+  let changed = false
+  const s = new Set(selectedPackages.value)
+  for (const name of s) {
+    if (!names.has(name)) {
+      s.delete(name)
+      changed = true
+    }
+  }
+  if (changed) {
+    selectedPackages.value = s
+    saveSelectedToStorage()
+  }
+}, { deep: true })
 
 function clearLogs() {
-  logs.value = []
-  logVisible.value = false
+  terminalLogs.value = []
 }
 
 function handleInstall(pkgName: string) {
@@ -126,15 +220,53 @@ function handleUninstall(pkg: any) {
   message.info(`已卸载 ${pkg.name}`)
 }
 
-async function handleUpdateAll() {
-  updatingAll.value = true
+async function handleBatchUpdate() {
+  const names = selectedPackageNames.value
+  if (names.length === 0) {
+    message.warning('请先勾选需要更新的软件')
+    return
+  }
+  batchUpdating.value = true
+  batchProgress.value = 0
+  currentBatchTotal.value = names.length
+  currentBatchDone.value = 0
   try {
-    await packagesStore.update()
-    message.success('全部更新完成')
+    await packagesStore.updateBatch(names)
+    message.success(`已更新 ${names.length} 个软件`)
+    selectedPackages.value = new Set()
+    saveSelectedToStorage()
     await packagesStore.loadUpdatable()
   } finally {
-    updatingAll.value = false
+    batchUpdating.value = false
+    batchProgress.value = 0
   }
+}
+
+function handleUpdateAllConfirm() {
+  const count = packagesStore.updatable.length
+  if (count === 0) return
+  dialog.warning({
+    title: '确认全部更新',
+    content: `是否确定更新全部 ${count} 个软件？这可能会消耗较多网络资源和时间。`,
+    positiveText: '立即更新',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      updatingAll.value = true
+      batchProgress.value = 0
+      currentBatchTotal.value = count
+      currentBatchDone.value = 0
+      try {
+        await packagesStore.update()
+        message.success('全部更新完成')
+        selectedPackages.value = new Set()
+        saveSelectedToStorage()
+        await packagesStore.loadUpdatable()
+      } finally {
+        updatingAll.value = false
+        batchProgress.value = 0
+      }
+    },
+  })
 }
 
 async function openBucketDrawer() {
@@ -210,126 +342,150 @@ async function removeBucket(name: string) {
                 class="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
               >{{ updatableNames.size }}</span>
             </template>
-            <!-- 全屏终端日志模式: loading 且有日志时铺满整个左侧卡片 -->
-            <div v-if="packagesStore.loading && logVisible" class="flex flex-col h-full">
-              <div class="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800/50">
-                <div class="flex items-center gap-2">
-                  <span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  <span class="text-xs text-slate-300 font-medium">命令执行中...</span>
-                </div>
-                <NButton size="tiny" @click="clearLogs" class="!rounded-lg">
-                  <template #icon><StopCircleOutline class="w-3.5 h-3.5" /></template>
-                  结束日志
-                </NButton>
+
+            <!-- 初始加载状态 -->
+            <div v-if="packagesStore.loading && packagesStore.installed.length === 0" class="flex justify-center py-8">
+              <div class="flex flex-col items-center gap-2">
+                <div class="w-5 h-5 border-2 border-t-transparent border-purple-500 rounded-full animate-spin" />
+                <span class="text-xs text-gray-400">加载中...</span>
               </div>
-              <div
-                ref="logContainerRef"
-                class="flex-1 overflow-y-auto bg-[#0b0c10] p-4"
-              >
-                <div class="font-mono text-xs text-green-400/90 leading-relaxed space-y-0.5">
-                  <div v-for="(line, i) in logs" :key="i" class="whitespace-pre-wrap break-all">
-                    <span class="text-slate-500 mr-2 select-none">[{{ String(i + 1).padStart(3, '0') }}]</span>{{ line }}
+            </div>
+
+            <!-- 空状态 -->
+            <div v-else-if="packagesStore.installed.length === 0" class="flex flex-col h-full overflow-y-auto">
+              <div class="flex flex-col items-center justify-center pt-10 pb-5 px-8 flex-shrink-0">
+                <NEmpty description="暂无已安装的软件包">
+                  <template #icon>
+                    <NIcon :component="CubeOutline" size="48" class="text-gray-300 text-slate-600" />
+                  </template>
+                  <template #extra>
+                    <p class="text-xs text-gray-400 mt-1">使用顶部搜索框查找并安装软件</p>
+                  </template>
+                </NEmpty>
+              </div>
+              <div class="flex-1 flex flex-col justify-end mt-4 mx-5 mb-4">
+                <div class="bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
+                  <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门推荐</span>
+                    <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
                   </div>
-                  <span v-if="packagesStore.loading" class="inline-block w-2 h-4 bg-green-400/70 animate-pulse ml-1" />
+                  <div class="grid grid-cols-4 gap-3">
+                    <div v-for="pkg in recommendedPackages" :key="pkg.name"
+                      class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 border border-slate-100 dark:border-gray-700/40 shadow-sm hover:shadow-md transition-all duration-200 group"
+                    >
+                      <div class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform" :class="pkg.color">
+                        <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                      </div>
+                      <span class="text-xs font-medium text-slate-700 text-slate-300">{{ pkg.name }}</span>
+                      <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
+                      <NButton size="tiny" secondary :disabled="installedNames.has(pkg.name)"
+                        :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
+                        @click.stop="handleInstall(pkg.name)" class="!mt-1 btn-hover-scale w-full !rounded-lg"
+                      >{{ installedNames.has(pkg.name) ? '已安装' : '安装' }}</NButton>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 正常列表模式 -->
-            <template v-else>
-              <div v-if="packagesStore.loading" class="flex justify-center py-8">
-                <div class="flex flex-col items-center gap-2">
-                  <div class="w-5 h-5 border-2 border-t-transparent border-purple-500 rounded-full animate-spin" />
-                  <span class="text-xs text-gray-400">加载中...</span>
-                </div>
-              </div>
+            <!-- 已安装列表（常驻显示，永不消失） -->
+            <NScrollbar v-else class="h-full custom-scrollbar">
+              <!-- 自我更新通知条 -->
+              <UpdateManager class="mx-4 mt-3" />
 
-              <div v-else-if="packagesStore.installed.length === 0" class="flex flex-col h-full overflow-y-auto">
-                <div class="flex flex-col items-center justify-center pt-10 pb-5 px-8 flex-shrink-0">
-                  <NEmpty description="暂无已安装的软件包">
-                    <template #icon>
-                      <NIcon :component="CubeOutline" size="48" class="text-gray-300 text-slate-600" />
-                    </template>
-                    <template #extra>
-                      <p class="text-xs text-gray-400 mt-1">使用顶部搜索框查找并安装软件</p>
-                    </template>
-                  </NEmpty>
-                </div>
-                <div class="flex-1 flex flex-col justify-end mt-4 mx-5 mb-4">
-                  <div class="bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
-                    <div class="flex items-center gap-2 mb-4">
-                      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门推荐</span>
-                      <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
-                    </div>
-                    <div class="grid grid-cols-4 gap-3">
-                      <div v-for="pkg in recommendedPackages" :key="pkg.name"
-                        class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 border border-slate-100 dark:border-gray-700/40 shadow-sm hover:shadow-md transition-all duration-200 group"
-                      >
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform" :class="pkg.color">
-                          <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
-                        </div>
-                        <span class="text-xs font-medium text-slate-700 text-slate-300">{{ pkg.name }}</span>
-                        <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
-                        <NButton size="tiny" secondary :disabled="installedNames.has(pkg.name)"
-                          :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
-                          @click.stop="handleInstall(pkg.name)" class="!mt-1 btn-hover-scale w-full !rounded-lg"
-                        >{{ installedNames.has(pkg.name) ? '已安装' : '安装' }}</NButton>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <NScrollbar v-else class="h-full custom-scrollbar">
-                <!-- 正在检查更新... -->
-                <div v-if="checkingUpdates" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-                  <div class="w-3.5 h-3.5 border-2 border-t-transparent border-slate-500 rounded-full animate-spin" />
-                  <span class="text-xs text-slate-400">正在检查可更新列表...</span>
-                </div>
-                <!-- 有可更新软件时显示更新横幅 -->
-                <div v-else-if="updatableNames.size > 0" class="mx-4 mt-3 mb-1 flex items-center gap-2 p-2.5 rounded-lg bg-blue-950/30 border border-blue-500/20">
-                  <NIcon :component="RefreshOutline" size="16" class="text-blue-400 flex-shrink-0" />
-                  <span class="text-xs text-blue-300 flex-1">
-                    有 <strong>{{ updatableNames.size }}</strong> 个软件可更新
-                  </span>
-                  <NButton size="tiny" type="primary" secondary :loading="updatingAll" @click="handleUpdateAll" class="!rounded-lg">
-                    一键全部更新
-                  </NButton>
-                </div>
-                <div class="flex flex-col gap-1.5 p-4">
-                  <div v-for="pkg in packagesStore.installed" :key="pkg.name"
-                    class="flex items-center gap-3 p-3 rounded-xl bg-[#1e222b] hover:bg-[#262b36] border border-white/[0.06] hover:border-white/[0.1] transition-all micro-card"
+              <!-- 批量操作工具栏（毛玻璃吸顶，与卡片像素级对齐） -->
+              <div
+                class="sticky top-0 z-20 -mx-4 pl-7 pr-5 py-2.5 flex items-center justify-between backdrop-blur-md border-b border-white/[0.04]"
+                style="background: rgba(18,19,26,0.85);"
+              >
+                <!-- 左侧：全选 + 计数 -->
+                <div class="flex items-center gap-4">
+                  <NCheckbox
+                    :checked="isAllSelected()"
+                    :indeterminate="isIndeterminate()"
+                    @update:checked="toggleSelectAll"
                   >
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                      <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
-                        <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
-                        <NTag v-if="pkg.bucket" size="small" :bordered="false"
-                          class="!bg-violet-900/40 !text-violet-300"
-                        >{{ pkg.bucket }}</NTag>
-                        <NTag v-if="pkg.global" size="small" :bordered="false"
-                          class="!bg-blue-900/40 !text-blue-300"
-                        >🌐 Global</NTag>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-1.5 flex-shrink-0">
-                      <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
-                        class="!bg-amber-500/10 !text-amber-400 font-mono" style="border: 1px solid rgba(251,191,36,0.3)"
-                      >→ {{ getNewVersion(pkg.name) }}</NTag>
-                      <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
-                        <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
-                      </NButton>
-                      <NButton text size="small" class="!text-rose-400 hover:!text-rose-500" @click="handleUninstall(pkg)">
-                        <template #icon><NIcon :component="TrashOutline" size="14" /></template>
-                      </NButton>
+                    <span class="text-xs text-slate-400 select-none">全选</span>
+                  </NCheckbox>
+                  <div class="w-px h-3.5 bg-white/[0.08]" />
+                  <span class="text-xs text-slate-400 select-none">
+                    已选 <strong class="text-slate-200 font-medium">{{ selectedPackageNames.length }}</strong> 项
+                  </span>
+                </div>
+
+                <!-- 右侧：操作按钮 -->
+                <div class="flex items-center gap-2">
+                  <template v-if="checkingUpdates">
+                    <div class="w-3 h-3 border-[1.5px] border-t-transparent border-slate-500 rounded-full animate-spin" />
+                    <span class="text-xs text-slate-500">检查中...</span>
+                  </template>
+                  <template v-else>
+                    <button
+                      :disabled="selectedPackageNames.length === 0 || batchUpdating"
+                      @click="handleBatchUpdate"
+                      class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
+                      :class="selectedPackageNames.length === 0
+                        ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
+                        : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/40 cursor-pointer'"
+                    >
+                      <NIcon :component="DownloadOutline" :size="12" />
+                      更新选中项 ({{ selectedPackageNames.length }})
+                    </button>
+                    <button
+                      :disabled="packagesStore.updatable.length === 0 || updatingAll"
+                      @click="handleUpdateAllConfirm"
+                      class="flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors select-none"
+                      :class="packagesStore.updatable.length === 0
+                        ? 'text-slate-600 cursor-not-allowed'
+                        : 'text-slate-400/80 hover:text-slate-200 hover:bg-white/[0.04] cursor-pointer'"
+                    >
+                      一键全部更新
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <!-- 已安装列表（始终渲染，永不消失） -->
+              <div class="flex flex-col gap-1.5 pt-3 pb-4 px-4">
+                <div v-for="pkg in packagesStore.installed" :key="pkg.name"
+                  class="flex items-center gap-3 p-3 rounded-xl bg-[#1e222b] hover:bg-[#262b36] border border-white/[0.06] hover:border-white/[0.1] transition-all micro-card"
+                >
+                  <div class="flex-shrink-0 w-5">
+                    <NCheckbox
+                      :checked="selectedPackages.has(pkg.name)"
+                      @update:checked="toggleSelect(pkg.name)"
+                    />
+                  </div>
+
+                  <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
+                      <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
+                      <NTag v-if="pkg.bucket" size="small" :bordered="false"
+                        class="!bg-violet-900/40 !text-violet-300"
+                      >{{ pkg.bucket }}</NTag>
+                      <NTag v-if="pkg.global" size="small" :bordered="false"
+                        class="!bg-blue-900/40 !text-blue-300"
+                      >🌐 Global</NTag>
                     </div>
                   </div>
+                  <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
+                      class="!bg-amber-500/10 !text-amber-400 font-mono" style="border: 1px solid rgba(251,191,36,0.3)"
+                    >→ {{ getNewVersion(pkg.name) }}</NTag>
+                    <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
+                      <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
+                    </NButton>
+                    <NButton text size="small" class="!text-rose-400 hover:!text-rose-500" @click="handleUninstall(pkg)">
+                      <template #icon><NIcon :component="TrashOutline" size="14" /></template>
+                    </NButton>
+                  </div>
                 </div>
-              </NScrollbar>
-            </template>
+              </div>
+            </NScrollbar>
           </NTabPane>
 
           <NTabPane name="discover" tab="软件发现" class="flex-1 overflow-hidden">
@@ -368,10 +524,17 @@ async function removeBucket(name: string) {
       </NCard>
     </div>
 
-    <!-- === 右侧列：两张卡片，自适应高度 === -->
-    <div class="flex-[2] flex flex-col gap-4 h-full min-w-0">
+    <!-- === 右侧列 === -->
+    <div class="flex-[2] flex flex-col gap-5 h-full min-w-0 overflow-y-auto">
       <StorageEnvCard />
       <ProxyCard />
+      <TaskProgressCard
+        :is-updating="batchUpdating || updatingAll"
+        :progress="batchProgress"
+        :current-line="currentLogLine"
+        :terminal-logs="terminalLogs"
+        @show-logs="showTerminalModal = true"
+      />
     </div>
 
     <!-- Bucket Drawer -->
@@ -415,12 +578,46 @@ async function removeBucket(name: string) {
       </NDrawerContent>
     </NDrawer>
 
+    <!-- Add Bucket Modal -->
     <NModal v-model:show="addBucketModal" preset="card" title="添加 Bucket" style="width: 450px">
       <NSpace vertical>
         <NInput v-model:value="newBucketName" placeholder="Bucket 名称 (如 extras)" />
         <NInput v-model:value="newBucketRepo" placeholder="Git 仓库链接 (可选)" />
         <NButton type="primary" :disabled="!newBucketName" @click="addBucket" block>添加</NButton>
       </NSpace>
+    </NModal>
+
+    <!-- 终端日志弹窗（独立 Modal，关闭不中断后台） -->
+    <NModal
+      v-model:show="showTerminalModal"
+      preset="card"
+      title="Scoop 后台执行日志"
+      style="width: 640px"
+      :closable="true"
+      :mask-closable="true"
+      :close-on-esc="true"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs text-slate-500">共 {{ terminalLogs.length }} 行输出</span>
+        <NButton size="tiny" quaternary @click="clearLogs" class="!rounded-lg">清空</NButton>
+      </div>
+      <div
+        ref="logContainerRef"
+        class="bg-[#090a0d] p-4 rounded-xl text-emerald-400 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border border-white/[0.06]"
+      >
+        <div v-if="terminalLogs.length === 0" class="text-slate-600 text-center py-8">
+          暂无日志输出
+        </div>
+        <div v-for="(line, i) in terminalLogs" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
+          <span class="text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
+        </div>
+        <span v-if="batchUpdating || updatingAll" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
+      </div>
+      <template #footer>
+        <div class="flex justify-end">
+          <NButton size="small" quaternary @click="showTerminalModal = false" class="!rounded-lg">关闭</NButton>
+        </div>
+      </template>
     </NModal>
   </div>
 </template>
