@@ -479,66 +479,68 @@ async function removeBucket(name: string) {
               <!-- 自我更新通知条 -->
               <UpdateManager class="mx-4 mt-3" />
 
-              <!-- 批量操作工具栏（毛玻璃吸顶，与卡片像素级对齐） -->
+              <!-- 批量操作工具栏（虚拟卡片骨架，与下方卡片天然对齐） -->
               <div
-                class="sticky top-0 z-20 -mx-4 pl-7 pr-5 py-2.5 flex items-center justify-between backdrop-blur-md border-b border-white/[0.04]"
-                style="background: rgba(18,19,26,0.85);"
+                class="sticky top-0 z-20 py-1 backdrop-blur-md"
+                style="background: rgba(18,19,26,0.92);"
               >
-                <!-- 左侧：全选 + 计数 -->
-                <div class="flex items-center gap-4">
-                  <NCheckbox
-                    :checked="isAllSelected()"
-                    :indeterminate="isIndeterminate()"
-                    @update:checked="toggleSelectAll"
-                  >
-                    <span class="text-xs text-slate-400 select-none">全选</span>
-                  </NCheckbox>
+                <div class="flex items-center gap-3 p-3 mx-4 rounded-xl border border-white/[0.04]">
+                  <!-- 左侧：全选 + 计数 -->
+                  <div class="flex-shrink-0 w-5">
+                    <NCheckbox
+                      :checked="isAllSelected()"
+                      :indeterminate="isIndeterminate()"
+                      @update:checked="toggleSelectAll"
+                    />
+                  </div>
+                  <div class="w-px h-3.5 bg-white/[0.08]" />
+                  <span class="text-xs text-slate-400 select-none">全选</span>
                   <div class="w-px h-3.5 bg-white/[0.08]" />
                   <span class="text-xs text-slate-400 select-none">
                     已选 <strong class="text-slate-200 font-medium">{{ selectedPackageNames.length }}</strong> 项
                   </span>
-                </div>
 
-                <!-- 右侧：操作按钮 -->
-                <div class="flex items-center gap-2">
-                  <template v-if="checkingUpdates">
-                    <div class="w-3 h-3 border-[1.5px] border-t-transparent border-slate-500 rounded-full animate-spin" />
-                    <span class="text-xs text-slate-500">检查中...</span>
-                  </template>
-                  <template v-else>
-                    <button
-                      :disabled="selectedPackageNames.length === 0 || batchUpdating"
-                      @click="handleBatchUpdate"
-                      class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
-                      :class="selectedPackageNames.length === 0
-                        ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
-                        : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/40 cursor-pointer'"
-                    >
-                      <NIcon :component="DownloadOutline" :size="12" />
-                      更新选中项 ({{ selectedPackageNames.length }})
-                    </button>
-                    <button
-                      :disabled="selectedPackageNames.length === 0"
-                      @click="handleBatchUninstall"
-                      class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
-                      :class="selectedPackageNames.length === 0
-                        ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
-                        : 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 cursor-pointer'"
-                    >
-                      <NIcon :component="TrashOutline" :size="12" />
-                      卸载选中项 ({{ selectedPackageNames.length }})
-                    </button>
-                    <button
-                      :disabled="packagesStore.updatable.length === 0 || updatingAll"
-                      @click="handleUpdateAllConfirm"
-                      class="flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors select-none"
-                      :class="packagesStore.updatable.length === 0
-                        ? 'text-slate-600 cursor-not-allowed'
-                        : 'text-slate-400/80 hover:text-slate-200 hover:bg-white/[0.04] cursor-pointer'"
-                    >
-                      一键全部更新
-                    </button>
-                  </template>
+                  <!-- 右侧：操作按钮 -->
+                  <div class="flex items-center gap-2 ml-auto">
+                    <template v-if="checkingUpdates">
+                      <div class="w-3 h-3 border-[1.5px] border-t-transparent border-slate-500 rounded-full animate-spin" />
+                      <span class="text-xs text-slate-500">检查中...</span>
+                    </template>
+                    <template v-else>
+                      <button
+                        :disabled="selectedPackageNames.length === 0 || batchUpdating"
+                        @click="handleBatchUpdate"
+                        class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
+                        :class="selectedPackageNames.length === 0
+                          ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
+                          : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/40 cursor-pointer'"
+                      >
+                        <NIcon :component="DownloadOutline" :size="12" />
+                        更新选中项 ({{ selectedPackageNames.length }})
+                      </button>
+                      <button
+                        :disabled="selectedPackageNames.length === 0"
+                        @click="handleBatchUninstall"
+                        class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
+                        :class="selectedPackageNames.length === 0
+                          ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
+                          : 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 cursor-pointer'"
+                      >
+                        <NIcon :component="TrashOutline" :size="12" />
+                        卸载选中项 ({{ selectedPackageNames.length }})
+                      </button>
+                      <button
+                        :disabled="packagesStore.updatable.length === 0 || updatingAll"
+                        @click="handleUpdateAllConfirm"
+                        class="flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors select-none"
+                        :class="packagesStore.updatable.length === 0
+                          ? 'text-slate-600 cursor-not-allowed'
+                          : 'text-slate-400/80 hover:text-slate-200 hover:bg-white/[0.04] cursor-pointer'"
+                      >
+                        一键全部更新
+                      </button>
+                    </template>
+                  </div>
                 </div>
               </div>
 
