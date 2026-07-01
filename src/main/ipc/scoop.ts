@@ -1,8 +1,8 @@
 import { ipcMain, BrowserWindow, shell, app } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
-import { join } from 'path'
-import { createWriteStream, existsSync } from 'fs'
+import { join, basename } from 'path'
+import { createWriteStream, existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { pipeline } from 'stream/promises'
 import { execSync, spawn } from 'child_process'
 
@@ -277,10 +277,145 @@ export function registerScoopIPC(): void {
   // Get Scoop version
   ipcMain.handle('scoop:version', async () => {
     const { stdout } = await execScoop('--version')
-    // Output format: "Current Scoop version:\n* YYYY-MM-DD xxxxxxx" or similar
     const versionMatch = stdout.match(/(?:Current Scoop version|Scoop version)[:\s]*\*?\s*([a-f0-9]+)/i)
     const rawVersion = versionMatch ? versionMatch[1] : stdout.trim().split('\n')[0]?.trim() || ''
     return { version: rawVersion }
+  })
+
+  // ============================================
+  // App Icon: Extract + disk cache via git-bash
+  // ============================================
+  const ICON_CACHE_DIR = join(homedir(), '.scoop-ui', 'icons')
+  const iconMemoryCache = new Map<string, string | null>() // packageName -> base64 or null
+
+  // 确保缓存目录存在
+  try { mkdirSync(ICON_CACHE_DIR, { recursive: true }) } catch { /* exists */ }
+
+  /**
+   * 通过 git-bash 调用 PowerShell 提取 EXE 图标，结果缓存到磁盘
+   * 缓存策略：首次提取后持久化，仅在 update 时清除对应缓存
+   */
+  ipcMain.handle('scoop:getAppIcon', async (_event, packageName: string) => {
+    // 1. 内存缓存
+    if (iconMemoryCache.has(packageName)) {
+      return { icon: iconMemoryCache.get(packageName) }
+    }
+
+    // 2. 磁盘缓存
+    const cacheFile = join(ICON_CACHE_DIR, `${packageName}.png`)
+    if (existsSync(cacheFile)) {
+      try {
+        const base64 = readFileSync(cacheFile).toString('base64')
+        const dataUrl = `data:image/png;base64,${base64}`
+        iconMemoryCache.set(packageName, dataUrl)
+        return { icon: dataUrl }
+      } catch { /* read error, re-extract */ }
+    }
+
+    try {
+      // 3. 查找 scoop 应用目录
+      const scoopPath = process.env['SCOOP'] || join(homedir(), 'scoop')
+      const appDir = join(scoopPath, 'apps', packageName, 'current')
+      if (!existsSync(appDir)) {
+        iconMemoryCache.set(packageName, null)
+        return { icon: null }
+      }
+
+      // 4. 读 manifest.json 定位主 EXE
+      const manifestPath = join(appDir, 'manifest.json')
+      let mainExe = ''
+
+      if (existsSync(manifestPath)) {
+        try {
+          const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+
+          // shortcuts 优先: [["Obsidian.exe", "Obsidian"]]
+          if (manifest.shortcuts?.length > 0) {
+            mainExe = manifest.shortcuts[0][0]
+          }
+
+          // bin 字段
+          if (!mainExe && manifest.bin) {
+            const bin = Array.isArray(manifest.bin) ? manifest.bin[0] : manifest.bin
+            mainExe = typeof bin === 'string' ? bin : bin?.exe || ''
+          }
+
+          // architecture -> bin
+          if (!mainExe && manifest.architecture) {
+            const arch = manifest.architecture['64bit'] || manifest.architecture['32bit'] || Object.values(manifest.architecture)[0]
+            if (arch?.bin) {
+              const bin = Array.isArray(arch.bin) ? arch.bin[0] : arch.bin
+              mainExe = typeof bin === 'string' ? bin : bin?.exe || ''
+            }
+          }
+        } catch { /* parse error */ }
+      }
+
+      // 5. 兜底：扫描 .exe
+      if (!mainExe) {
+        const { stdout } = await execGitBash(
+          `find "${appDir}" -maxdepth 2 -name "*.exe" -type f | head -1`
+        )
+        mainExe = stdout.trim()
+      }
+
+      if (!mainExe) {
+        iconMemoryCache.set(packageName, null)
+        return { icon: null }
+      }
+
+      // 解析完整路径
+      const fullPath = mainExe.includes(':') ? mainExe : join(appDir, mainExe)
+      if (!existsSync(fullPath)) {
+        iconMemoryCache.set(packageName, null)
+        return { icon: null }
+      }
+
+      // 6. 通过 git-bash 调用 PowerShell 提取图标
+      const psScript = [
+        'Add-Type -AssemblyName System.Drawing',
+        `$icon = [System.Drawing.Icon]::ExtractAssociatedIcon('${fullPath.replace(/'/g, "''")}')`,
+        'if ($icon) {',
+        '  $ms = New-Object System.IO.MemoryStream',
+        '  $icon.ToBmp().Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)',
+        '  $bytes = $ms.ToArray()',
+        '  [Convert]::ToBase64String($bytes)',
+        '  $ms.Dispose()',
+        '  $icon.Dispose()',
+        '}',
+      ].join('\r\n')
+
+      const { stdout } = await execGitBash(`powershell.exe -NoProfile -NonInteractive -Command "${psScript.replace(/"/g, '\\"').replace(/\r\n/g, '; ')}"`)
+      const base64 = stdout.trim()
+
+      if (base64 && base64.length > 100) {
+        // 写入磁盘缓存
+        try {
+          const buffer = Buffer.from(base64, 'base64')
+          writeFileSync(cacheFile, buffer)
+        } catch { /* write error, non-critical */ }
+
+        const dataUrl = `data:image/png;base64,${base64}`
+        iconMemoryCache.set(packageName, dataUrl)
+        return { icon: dataUrl }
+      }
+
+      iconMemoryCache.set(packageName, null)
+      return { icon: null }
+    } catch {
+      iconMemoryCache.set(packageName, null)
+      return { icon: null }
+    }
+  })
+
+  /**
+   * 清除指定包的图标缓存（更新时调用）
+   */
+  ipcMain.handle('scoop:clearAppIcon', async (_event, packageName: string) => {
+    iconMemoryCache.delete(packageName)
+    const cacheFile = join(ICON_CACHE_DIR, `${packageName}.png`)
+    try { unlinkSync(cacheFile) } catch { /* not exists */ }
+    return { success: true }
   })
 
   // Check Aria2 status (check both config flag and actual binary presence)

@@ -18,7 +18,7 @@ async function clearCache() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col gap-3 p-4 pt-4">
+  <NCard :bordered="false" class="glass-card" content-class="flex flex-col gap-3 p-4 pt-4">
     <div class="flex items-center justify-between">
       <span class="font-semibold text-base text-slate-800 dark:text-gray-200">缓存管理</span>
       <FolderOpenOutline class="w-4 h-4 text-gray-400" />

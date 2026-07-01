@@ -21,6 +21,7 @@ import type { InstallOptions } from '@/types'
 const props = defineProps<{
   pkg: any
   installed: boolean
+  isInstalling?: boolean
 }>()
 
 const packagesStore = usePackagesStore()
@@ -63,7 +64,7 @@ const manifestJson = computed(() => {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl h-full glass-card" content-class="flex flex-col h-full !p-0">
+  <NCard :bordered="false" class="h-full glass-card" content-class="flex flex-col h-full !p-0">
     <div class="flex-1 overflow-y-auto custom-scrollbar">
       <!-- 骨架屏 -->
       <div v-if="!detailReady" class="p-5 space-y-5">
@@ -131,17 +132,6 @@ const manifestJson = computed(() => {
             {{ pkg.description || '暂无描述信息' }}
           </p>
 
-          <!-- Install Progress -->
-          <div v-if="packagesStore.loading && packagesStore.progress" class="mb-4">
-            <div class="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500"
-                :style="{ width: (packagesStore.progress.percent ?? 50) + '%' }" />
-            </div>
-            <p class="text-xs text-slate-400 mt-1.5 truncate">
-              {{ packagesStore.progress.message }}
-            </p>
-          </div>
-
           <!-- Advanced Options -->
           <div class="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 mb-4 space-y-3">
             <h4 class="text-sm font-semibold text-white mb-3">高级安装选项</h4>
@@ -168,8 +158,8 @@ const manifestJson = computed(() => {
       </Transition>
     </div>
 
-    <!-- Action Buttons -->
-    <div class="p-4 border-t border-white/[0.06] flex gap-3">
+    <!-- Action Buttons: 行内安装时隐藏整个底部栏 -->
+    <div v-if="!isInstalling" class="p-4 border-t border-white/[0.06] flex gap-3">
       <NButton
         v-if="!installed"
         type="primary"
@@ -208,6 +198,12 @@ const manifestJson = computed(() => {
           确认卸载 {{ pkg.name }}？
         </NPopconfirm>
       </template>
+    </div>
+
+    <!-- 行内安装中：底部显示微型状态条 -->
+    <div v-else class="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+      <span class="text-xs text-slate-400 font-mono">正在行内安装 {{ pkg.name }}...</span>
     </div>
   </NCard>
 </template>

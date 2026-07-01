@@ -95,7 +95,7 @@ async function handleInstallAria2() {
 </script>
 
 <template>
-  <NCard :bordered="false" class="!rounded-xl glass-card" content-class="flex flex-col !p-5">
+  <NCard :bordered="false" class="glass-card" content-class="flex flex-col !p-5">
     <!-- 卡片标题 -->
     <div class="flex items-center gap-2.5 mb-4 w-full min-w-0">
       <ServerOutline class="w-5 h-5 text-slate-300 flex-shrink-0" />

@@ -46,7 +46,7 @@ async function applyProxy() {
 <template>
   <NCard
     :bordered="false"
-    class="!rounded-xl glass-card"
+    class="glass-card"
     content-class="flex flex-col gap-4 p-5"
   >
     <!-- 标题行 -->

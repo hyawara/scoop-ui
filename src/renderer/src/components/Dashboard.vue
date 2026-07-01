@@ -4,7 +4,6 @@ import {
   NCard,
   NTabs,
   NTabPane,
-  NTag,
   NButton,
   NIcon,
   NEmpty,
@@ -15,9 +14,7 @@ import {
   NModal,
   NInput,
   NPopconfirm,
-  NDropdown,
   NCheckbox,
-  NProgress,
   NSpin,
   useMessage,
   useDialog,
@@ -28,19 +25,16 @@ import {
   CubeOutline,
   CompassOutline,
   Cube,
-  RefreshOutline,
   AddOutline,
   CloseOutline,
-  TerminalOutline,
-  EllipsisVerticalOutline,
 } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
 import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import ProxyCard from '@/components/ProxyCard.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
-import TaskProgressCard from '@/components/TaskProgressCard.vue'
 import AppListItem from '@/components/AppListItem.vue'
+import { usePackageProgress } from '@/composables/usePackageProgress'
 
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
@@ -49,6 +43,20 @@ const dialog = useDialog()
 
 // 批量卸载弹窗引用，用于手动关闭
 const batchUninstallDialogReforge = ref<ReturnType<typeof dialog.warning> | null>(null)
+
+// 行内进度系统
+const pkgProgress = usePackageProgress()
+const updatingPackages = ref<Set<string>>(new Set())
+
+// 单包日志弹窗
+const showPkgLogModal = ref(false)
+const activePkgLogName = ref('')
+const activePkgLogs = ref<string[]>([])
+const pkgLogContainerRef = ref<HTMLDivElement | null>(null)
+
+// 图标缓存
+const iconMap = ref<Record<string, string | null>>({})
+const iconFetching = ref<Set<string>>(new Set())
 
 const recommendedPackages = [
   { name: 'git', icon: 'G', desc: '版本控制', bucket: 'main', color: 'from-orange-500 to-red-500' },
@@ -68,6 +76,42 @@ const updatableNames = computed(() =>
 function getNewVersion(name: string): string {
   const pkg = packagesStore.updatable.find((p: any) => p.name === name)
   return pkg?.newVersion || ''
+}
+
+// 图标获取
+async function fetchIcon(name: string) {
+  if (iconMap.value[name] !== undefined || iconFetching.value.has(name)) return
+  iconFetching.value = new Set(iconFetching.value).add(name)
+  try {
+    const result = await window.scoopAPI.getAppIcon(name)
+    iconMap.value = { ...iconMap.value, [name]: result.icon || null }
+  } catch {
+    iconMap.value = { ...iconMap.value, [name]: null }
+  } finally {
+    const next = new Set(iconFetching.value)
+    next.delete(name)
+    iconFetching.value = next
+  }
+}
+
+function getIcon(name: string): string | null {
+  return iconMap.value[name] ?? null
+}
+
+// 批量预加载已安装软件的图标（异步，不阻塞 UI）
+function preloadIcons() {
+  const names = packagesStore.installed.map((p: any) => p.name)
+  // 限制并发 5 个，避免过多 PowerShell 进程
+  const concurrency = 5
+  let idx = 0
+  function next() {
+    if (idx >= names.length) return
+    const name = names[idx++]
+    fetchIcon(name).then(() => next())
+  }
+  for (let i = 0; i < Math.min(concurrency, names.length); i++) {
+    next()
+  }
 }
 
 // Bucket drawer state
@@ -142,43 +186,29 @@ const selectedPackageNames = computed(() =>
   packagesStore.installed.filter((p: any) => selectedPackages.value.has(p.name)).map((p: any) => p.name)
 )
 
-// Terminal log state — logs always collected, shown only in modal
-const terminalLogs = ref<string[]>([])
-const showTerminalModal = ref(false)
-const logContainerRef = ref<HTMLDivElement | null>(null)
-const currentLogLine = ref('')
-
-// Progress bar state
-const batchProgress = ref(0)
-const currentBatchTotal = ref(0)
-const currentBatchDone = ref(0)
-
 function scrollLogToBottom() {
   nextTick(() => {
-    if (logContainerRef.value) {
-      logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight
+    if (pkgLogContainerRef.value) {
+      pkgLogContainerRef.value.scrollTop = pkgLogContainerRef.value.scrollHeight
     }
   })
 }
 
-function addLogLine(msg: string) {
-  const trimmed = msg.trim()
-  if (!trimmed) return
-  terminalLogs.value.push(trimmed)
-  currentLogLine.value = trimmed
-  // Parse percentage from log line
-  const match = trimmed.match(/\((\d+)%\)/) || trimmed.match(/(\d+)%/)
-  if (match) {
-    batchProgress.value = parseInt(match[1], 10)
-  }
-  scrollLogToBottom()
-}
-
 onMounted(() => {
   loadSelectedFromStorage()
+  // 行内进度日志监听
   window.scoopAPI.onLog((data) => {
-    if (data?.message) {
-      addLogLine(data.message)
+    if (data?.package && data?.message) {
+      const pkgName = data.package
+      // 分发到对应包的进度
+      if (updatingPackages.value.has(pkgName) || pkgProgress.hasProgress(pkgName)) {
+        pkgProgress.handleLog(pkgName, data.message)
+        // 更新日志弹窗（如果正在查看该包）
+        if (activePkgLogName.value === pkgName) {
+          activePkgLogs.value.push(data.message)
+          scrollLogToBottom()
+        }
+      }
     }
   })
   checkingUpdates.value = true
@@ -187,11 +217,16 @@ onMounted(() => {
   })
 })
 
+// 当已安装列表变化时，异步预加载图标
+watch(() => packagesStore.installed.length, () => {
+  if (packagesStore.installed.length > 0) {
+    nextTick(preloadIcons)
+  }
+}, { immediate: true })
+
 onUnmounted(() => {
   window.scoopAPI.removeLogListener()
 })
-
-watch(terminalLogs, scrollLogToBottom)
 
 // Sync selected state: remove entries for packages that are no longer installed
 watch(() => packagesStore.installed, (list) => {
@@ -211,7 +246,15 @@ watch(() => packagesStore.installed, (list) => {
 }, { deep: true })
 
 function clearLogs() {
-  terminalLogs.value = []
+  activePkgLogs.value = []
+}
+
+function showPkgLogs(name: string) {
+  activePkgLogName.value = name
+  const p = pkgProgress.getProgress(name)
+  activePkgLogs.value = p ? [...p.logs] : []
+  showPkgLogModal.value = true
+  scrollLogToBottom()
 }
 
 function handleInstall(pkgName: string) {
@@ -219,9 +262,37 @@ function handleInstall(pkgName: string) {
   message.info(`正在安装 ${pkgName}...`)
 }
 
-function handleUpdate(pkg: any) {
-  packagesStore.update(pkg.name)
-  message.info(`正在更新 ${pkg.name}...`)
+async function handleUpdate(pkg: any) {
+  if (updatingPackages.value.has(pkg.name)) return
+  const s = new Set(updatingPackages.value)
+  s.add(pkg.name)
+  updatingPackages.value = s
+  pkgProgress.startUpdate(pkg.name)
+  try {
+    await window.scoopAPI.update(pkg.name)
+    // 清除图标缓存，更新后重新提取
+    await window.scoopAPI.clearAppIcon(pkg.name)
+    iconMap.value = { ...iconMap.value, [pkg.name]: undefined }
+    // 零延迟闪变：立即原地改写版本号 + 抹除更新态
+    const newVer = getNewVersion(pkg.name)
+    const pkgInList = packagesStore.installed.find((p: any) => p.name === pkg.name)
+    if (pkgInList && newVer) pkgInList.version = newVer
+    // 本地移除更新态（不等 reload）
+    packagesStore.updatable = packagesStore.updatable.filter((p: any) => p.name !== pkg.name)
+    pkgProgress.finishUpdate(pkg.name)
+    // 后台静默刷新（不阻塞 UI 反馈）
+    packagesStore.loadInstalled()
+    packagesStore.loadUpdatable()
+    // 异步重新获取图标
+    fetchIcon(pkg.name)
+  } catch (e: any) {
+    pkgProgress.failUpdate(pkg.name)
+    message.error(e.message || `更新 ${pkg.name} 失败`)
+  } finally {
+    const s2 = new Set(updatingPackages.value)
+    s2.delete(pkg.name)
+    updatingPackages.value = s2
+  }
 }
 
 async function handleUninstall(pkg: any) {
@@ -259,18 +330,43 @@ async function handleBatchUpdate() {
     return
   }
   batchUpdating.value = true
-  batchProgress.value = 0
-  currentBatchTotal.value = names.length
-  currentBatchDone.value = 0
+  // 为每个选中包启动行内进度
+  const s = new Set(updatingPackages.value)
+  for (const n of names) {
+    s.add(n)
+    pkgProgress.startUpdate(n)
+  }
+  updatingPackages.value = s
   try {
-    await packagesStore.updateBatch(names)
-    message.success(`已更新 ${names.length} 个软件`)
+    // 逐个更新，让每个包的进度独立追踪
+    for (const name of names) {
+      try {
+        await window.scoopAPI.update(name)
+        // 清除图标缓存
+        await window.scoopAPI.clearAppIcon(name)
+        iconMap.value = { ...iconMap.value, [name]: undefined }
+        // 零延迟闪变
+        const newVer = getNewVersion(name)
+        const pkgInList = packagesStore.installed.find((p: any) => p.name === name)
+        if (pkgInList && newVer) pkgInList.version = newVer
+        packagesStore.updatable = packagesStore.updatable.filter((p: any) => p.name !== name)
+        pkgProgress.finishUpdate(name)
+      } catch {
+        pkgProgress.failUpdate(name)
+      }
+    }
     selectedPackages.value = new Set()
     saveSelectedToStorage()
-    await packagesStore.loadUpdatable()
+    // 后台静默刷新
+    packagesStore.loadInstalled()
+    packagesStore.loadUpdatable()
+    // 异步重新获取所有更新包的图标
+    for (const name of names) {
+      fetchIcon(name)
+    }
   } finally {
     batchUpdating.value = false
-    batchProgress.value = 0
+    updatingPackages.value = new Set()
   }
 }
 
@@ -284,18 +380,43 @@ function handleUpdateAllConfirm() {
     negativeText: '取消',
     onPositiveClick: async () => {
       updatingAll.value = true
-      batchProgress.value = 0
-      currentBatchTotal.value = count
-      currentBatchDone.value = 0
+      // 为所有可更新包启动行内进度
+      const names = packagesStore.updatable.map((p: any) => p.name)
+      const s = new Set(updatingPackages.value)
+      for (const n of names) {
+        s.add(n)
+        pkgProgress.startUpdate(n)
+      }
+      updatingPackages.value = s
       try {
-        await packagesStore.update()
-        message.success('全部更新完成')
+        for (const name of names) {
+          try {
+            await window.scoopAPI.update(name)
+            // 清除图标缓存
+            await window.scoopAPI.clearAppIcon(name)
+            iconMap.value = { ...iconMap.value, [name]: undefined }
+            // 零延迟闪变
+            const newVer = getNewVersion(name)
+            const pkgInList = packagesStore.installed.find((p: any) => p.name === name)
+            if (pkgInList && newVer) pkgInList.version = newVer
+            packagesStore.updatable = packagesStore.updatable.filter((p: any) => p.name !== name)
+            pkgProgress.finishUpdate(name)
+          } catch {
+            pkgProgress.failUpdate(name)
+          }
+        }
         selectedPackages.value = new Set()
         saveSelectedToStorage()
-        await packagesStore.loadUpdatable()
+        // 后台静默刷新
+        packagesStore.loadUpdatable()
+        packagesStore.loadInstalled()
+        // 异步重新获取所有更新包的图标
+        for (const name of names) {
+          fetchIcon(name)
+        }
       } finally {
         updatingAll.value = false
-        batchProgress.value = 0
+        updatingPackages.value = new Set()
       }
     },
   })
@@ -400,7 +521,7 @@ async function removeBucket(name: string) {
     <div class="flex-[3] min-w-0 h-full">
       <NCard
         :bordered="false"
-        class="!rounded-xl overflow-hidden glass-card h-full"
+        class="overflow-hidden glass-card h-full"
         content-class="!p-0 flex flex-col h-full"
       >
         <NTabs
@@ -415,7 +536,7 @@ async function removeBucket(name: string) {
           </template>
           <template #suffix>
             <div class="flex items-center gap-1 mr-3">
-              <NButton size="tiny" secondary @click="openBucketDrawer" class="!rounded-lg">
+              <NButton size="tiny" secondary @click="openBucketDrawer" class="!rounded-app">
                 <template #icon><NIcon :component="Cube" size="14" /></template>
                 软件源
               </NButton>
@@ -553,9 +674,12 @@ async function removeBucket(name: string) {
                     :checked="selectedPackages.has(pkg.name)"
                     :disabled="uninstallingSet.has(pkg.name)"
                     :new-version="getNewVersion(pkg.name)"
+                    :progress="pkgProgress.getProgress(pkg.name)"
+                    :icon="getIcon(pkg.name)"
                     @toggle-check="toggleSelect"
                     @update="handleUpdate"
                     @uninstall="handleUninstall"
+                    @show-logs="showPkgLogs"
                   />
                 </TransitionGroup>
               </div>
@@ -602,13 +726,6 @@ async function removeBucket(name: string) {
     <div class="flex-[2] flex flex-col gap-5 h-full min-w-0 overflow-y-auto">
       <StorageEnvCard />
       <ProxyCard />
-      <TaskProgressCard
-        :is-updating="batchUpdating || updatingAll"
-        :progress="batchProgress"
-        :current-line="currentLogLine"
-        :terminal-logs="terminalLogs"
-        @show-logs="showTerminalModal = true"
-      />
     </div>
 
     <!-- Bucket Drawer -->
@@ -661,35 +778,35 @@ async function removeBucket(name: string) {
       </NSpace>
     </NModal>
 
-    <!-- 终端日志弹窗（独立 Modal，关闭不中断后台） -->
+    <!-- 单包终端日志弹窗 -->
     <NModal
-      v-model:show="showTerminalModal"
+      v-model:show="showPkgLogModal"
       preset="card"
-      title="Scoop 后台执行日志"
+      :title="`${activePkgLogName} 执行日志`"
       style="width: 640px"
       :closable="true"
       :mask-closable="true"
       :close-on-esc="true"
     >
       <div class="flex items-center justify-between mb-3">
-        <span class="text-xs text-slate-500">共 {{ terminalLogs.length }} 行输出</span>
+        <span class="text-xs text-slate-500">共 {{ activePkgLogs.length }} 行输出</span>
         <NButton size="tiny" quaternary @click="clearLogs" class="!rounded-lg">清空</NButton>
       </div>
       <div
-        ref="logContainerRef"
+        ref="pkgLogContainerRef"
         class="bg-[#090a0d] p-4 rounded-xl text-emerald-400 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border border-white/[0.06]"
       >
-        <div v-if="terminalLogs.length === 0" class="text-slate-600 text-center py-8">
+        <div v-if="activePkgLogs.length === 0" class="text-slate-600 text-center py-8">
           暂无日志输出
         </div>
-        <div v-for="(line, i) in terminalLogs" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
+        <div v-for="(line, i) in activePkgLogs" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
           <span class="text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
         </div>
-        <span v-if="batchUpdating || updatingAll" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
+        <span v-if="updatingPackages.has(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
       </div>
       <template #footer>
         <div class="flex justify-end">
-          <NButton size="small" quaternary @click="showTerminalModal = false" class="!rounded-lg">关闭</NButton>
+          <NButton size="small" quaternary @click="showPkgLogModal = false" class="!rounded-lg">关闭</NButton>
         </div>
       </template>
     </NModal>

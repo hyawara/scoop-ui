@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   getDiskSpace: () => ipcRenderer.invoke('scoop:diskSpace'),
   migrateScoop: (newPath: string) => ipcRenderer.invoke('scoop:migrate', newPath),
   getScoopVersion: () => ipcRenderer.invoke('scoop:version'),
+  getAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:getAppIcon', packageName),
+  clearAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:clearAppIcon', packageName),
 
   onProgress: (callback: (data: any) => void) => {
     ipcRenderer.on('scoop:progress', (_event, data) => callback(data))

@@ -43,6 +43,8 @@ interface Window {
     removeProxy: () => Promise<void>
     getEnv: () => Promise<{ scoop: string; global: string }>
     getScoopVersion: () => Promise<{ version: string }>
+    getAppIcon: (packageName: string) => Promise<{ icon: string | null }>
+    clearAppIcon: (packageName: string) => Promise<{ success: boolean }>
     getDiskSpace: () => Promise<any>
     migrateScoop: (newPath: string) => Promise<void>
     onProgress: (callback: (data: ProgressData) => void) => void

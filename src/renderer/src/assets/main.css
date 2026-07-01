@@ -38,6 +38,10 @@
 
 :root {
   --app-bg: #0b0c0e;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 }
 
 .dark {
@@ -59,7 +63,6 @@ body {
 #app {
   height: 100vh;
   width: 100vw;
-  border-radius: 8px;
   overflow: hidden;
   background: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%), var(--app-bg);
 }
@@ -69,12 +72,19 @@ body {
   font-family: 'IosevkaAnony', 'LXGW WenKai Mono', ui-monospace, monospace;
 }
 
+/* 统一圆角类 */
+.rounded-app-sm { border-radius: var(--radius-sm); }
+.rounded-app { border-radius: var(--radius-md); }
+.rounded-app-lg { border-radius: var(--radius-lg); }
+.rounded-app-xl { border-radius: var(--radius-xl); }
+
 /* Layer 2: Card backdrops */
 .glass-card {
   background: #13151a;
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--radius-lg);
 }
 
 .glass-card:hover {

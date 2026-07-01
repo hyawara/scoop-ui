@@ -25,8 +25,8 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    transparent: false,
+    backgroundColor: '#0b0c0e',
     icon: getIconPath(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -35,6 +35,7 @@ function createWindow(): void {
       sandbox: false,
     },
     titleBarStyle: 'hidden',
+    roundedCorners: true,
   })
 
   // Enable Mica effect on Windows 11
