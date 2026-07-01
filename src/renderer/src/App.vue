@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, provide } from 'vue'
+import { ref, watch, onMounted, onUnmounted, provide } from 'vue'
 import {
   NConfigProvider,
   NMessageProvider,
@@ -18,10 +18,12 @@ import Dashboard from '@/components/Dashboard.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import Onboarding from '@/components/Onboarding.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import { usePackageProgress } from '@/composables/usePackageProgress'
 
 const appStore = useAppStore()
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
+const pkgProgress = usePackageProgress()
 
 const isDark = ref(true)
 const searchQuery = ref('')
@@ -115,6 +117,13 @@ provide('updateInfo', updateInfo)
 provide('checkForUpdate', checkForUpdate)
 
 onMounted(async () => {
+  // 全局持久化日志监听器：始终路由到共享 progressMap，跨 tab 不丢失
+  window.scoopAPI.onLog((data) => {
+    if (data?.package && data?.message) {
+      pkgProgress.handleLog(data.package, data.message)
+    }
+  })
+
   await appStore.checkScoop()
   if (appStore.scoopStatus.installed) {
     await Promise.all([

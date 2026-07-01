@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import {
   NCard,
   NTabs,
@@ -23,10 +23,15 @@ import {
   DownloadOutline,
   TrashOutline,
   CubeOutline,
-  CompassOutline,
   Cube,
   AddOutline,
   CloseOutline,
+  TerminalOutline,
+  CodeSlashOutline,
+  CreateOutline,
+  ColorPaletteOutline,
+  SpeedometerOutline,
+  FlashOutline,
 } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
@@ -51,19 +56,11 @@ const updatingPackages = ref<Set<string>>(new Set())
 // 单包日志弹窗
 const showPkgLogModal = ref(false)
 const activePkgLogName = ref('')
-const activePkgLogs = ref<string[]>([])
 const pkgLogContainerRef = ref<HTMLDivElement | null>(null)
 
 // 图标缓存
 const iconMap = ref<Record<string, string | null>>({})
 const iconFetching = ref<Set<string>>(new Set())
-
-const recommendedPackages = [
-  { name: 'git', icon: 'G', desc: '版本控制', bucket: 'main', color: 'from-orange-500 to-red-500' },
-  { name: 'curl', icon: 'C', desc: 'HTTP 请求', bucket: 'main', color: 'from-green-500 to-teal-500' },
-  { name: 'neovim', icon: 'N', desc: '终端编辑器', bucket: 'main', color: 'from-green-600 to-emerald-600' },
-  { name: 'fzf', icon: 'F', desc: '模糊搜索', bucket: 'main', color: 'from-purple-500 to-pink-500' },
-]
 
 const installedNames = computed(() =>
   new Set(packagesStore.installed.map((p: any) => p.name))
@@ -77,6 +74,112 @@ function getNewVersion(name: string): string {
   const pkg = packagesStore.updatable.find((p: any) => p.name === name)
   return pkg?.newVersion || ''
 }
+
+// ═══ 商店分类系统 ═══
+interface StoreApp {
+  name: string
+  icon: string
+  desc: string
+  gradient: string
+}
+
+interface Category {
+  id: string
+  name: string
+  icon: any
+  apps: StoreApp[]
+}
+
+const activeCategoryId = ref('featured')
+
+const categories: Category[] = [
+  {
+    id: 'featured',
+    name: '精选推荐',
+    icon: FlashOutline,
+    apps: [
+      { name: 'git', icon: 'G', desc: '分布式版本控制', gradient: 'from-orange-500 to-red-500' },
+      { name: 'curl', icon: 'C', desc: '命令行 HTTP 客户端', gradient: 'from-green-500 to-teal-500' },
+      { name: 'neovim', icon: 'N', desc: '终端文本编辑器', gradient: 'from-green-600 to-emerald-600' },
+      { name: 'fzf', icon: 'F', desc: '模糊搜索利器', gradient: 'from-purple-500 to-pink-500' },
+      { name: '7zip', icon: '7', desc: '高压缩率归档工具', gradient: 'from-yellow-500 to-amber-500' },
+      { name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', gradient: 'from-lime-500 to-green-500' },
+    ],
+  },
+  {
+    id: 'dev',
+    name: '程序开发',
+    icon: CodeSlashOutline,
+    apps: [
+      { name: 'git', icon: 'G', desc: '分布式版本控制', gradient: 'from-orange-500 to-red-500' },
+      { name: 'python', icon: 'P', desc: '通用编程语言', gradient: 'from-blue-500 to-yellow-400' },
+      { name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', gradient: 'from-lime-500 to-green-500' },
+      { name: 'openjdk', icon: 'J', desc: 'Java 开发工具包', gradient: 'from-red-500 to-orange-500' },
+      { name: 'go', icon: 'G', desc: 'Go 编程语言', gradient: 'from-cyan-500 to-blue-500' },
+      { name: 'rust', icon: 'R', desc: '系统编程语言', gradient: 'from-orange-600 to-amber-600' },
+      { name: 'docker-desktop', icon: 'D', desc: '容器化平台', gradient: 'from-blue-500 to-cyan-400' },
+      { name: 'visual-studio-code', icon: 'V', desc: '代码编辑器', gradient: 'from-blue-600 to-indigo-500' },
+    ],
+  },
+  {
+    id: 'terminal',
+    name: '终端工具',
+    icon: TerminalOutline,
+    apps: [
+      { name: 'fzf', icon: 'F', desc: '命令行模糊搜索', gradient: 'from-purple-500 to-pink-500' },
+      { name: 'oh-my-posh', icon: 'O', desc: '终端提示符主题', gradient: 'from-teal-500 to-cyan-500' },
+      { name: 'zoxide', icon: 'Z', desc: '智能 cd 命令', gradient: 'from-violet-500 to-purple-500' },
+      { name: 'bat', icon: 'B', desc: '带语法高亮的 cat', gradient: 'from-yellow-500 to-amber-500' },
+      { name: 'ripgrep', icon: 'R', desc: '极速文本搜索', gradient: 'from-red-500 to-rose-500' },
+      { name: 'eza', icon: 'E', desc: '现代化 ls 替代', gradient: 'from-green-500 to-emerald-500' },
+      { name: 'delta', icon: 'D', desc: '美化 git diff', gradient: 'from-blue-500 to-indigo-500' },
+      { name: 'windows-terminal', icon: 'W', desc: '现代终端模拟器', gradient: 'from-slate-500 to-gray-500' },
+    ],
+  },
+  {
+    id: 'editors',
+    name: '文本编辑',
+    icon: CreateOutline,
+    apps: [
+      { name: 'neovim', icon: 'N', desc: '终端文本编辑器', gradient: 'from-green-600 to-emerald-600' },
+      { name: 'visual-studio-code', icon: 'V', desc: '代码编辑器', gradient: 'from-blue-600 to-indigo-500' },
+      { name: 'obsidian', icon: 'O', desc: '知识管理笔记', gradient: 'from-purple-600 to-violet-500' },
+      { name: 'notepadnext', icon: 'N', desc: 'Notepad++ 跨平台替代', gradient: 'from-blue-500 to-cyan-500' },
+      { name: 'sublime-text', icon: 'S', desc: '极速文本编辑器', gradient: 'from-orange-500 to-yellow-500' },
+      { name: 'helix', icon: 'H', desc: '后现代终端编辑器', gradient: 'from-rose-500 to-pink-500' },
+    ],
+  },
+  {
+    id: 'design',
+    name: '图形设计',
+    icon: ColorPaletteOutline,
+    apps: [
+      { name: 'imageglass', icon: 'I', desc: '轻量图片查看器', gradient: 'from-cyan-500 to-blue-500' },
+      { name: 'blender', icon: 'B', desc: '3D 建模与渲染', gradient: 'from-orange-500 to-yellow-500' },
+      { name: 'gimp', icon: 'G', desc: '开源图像编辑器', gradient: 'from-red-500 to-pink-500' },
+      { name: 'inkscape', icon: 'I', desc: '矢量图形编辑器', gradient: 'from-blue-500 to-purple-500' },
+      { name: 'sharex', icon: 'S', desc: '截图与录屏工具', gradient: 'from-green-500 to-teal-500' },
+      { name: 'chafa', icon: 'C', desc: '终端图像渲染', gradient: 'from-violet-500 to-indigo-500' },
+    ],
+  },
+  {
+    id: 'utils',
+    name: '系统效率',
+    icon: SpeedometerOutline,
+    apps: [
+      { name: '7zip', icon: '7', desc: '高压缩率归档工具', gradient: 'from-yellow-500 to-amber-500' },
+      { name: 'powertoys', icon: 'P', desc: 'Windows 效率工具集', gradient: 'from-blue-500 to-indigo-500' },
+      { name: 'everything', icon: 'E', desc: '极速文件搜索', gradient: 'from-cyan-500 to-teal-500' },
+      { name: 'trafficmonitor', icon: 'T', desc: '网速与系统监控', gradient: 'from-green-500 to-emerald-500' },
+      { name: 'nilesoft-shell', icon: 'N', desc: '右键菜单增强', gradient: 'from-purple-500 to-violet-500' },
+      { name: 'scoop', icon: 'S', desc: '命令行包管理器', gradient: 'from-red-500 to-orange-500' },
+    ],
+  },
+]
+
+const activeCategory = computed(() =>
+  categories.find((c) => c.id === activeCategoryId.value) || categories[0]
+)
 
 // 图标获取
 async function fetchIcon(name: string) {
@@ -196,21 +299,6 @@ function scrollLogToBottom() {
 
 onMounted(() => {
   loadSelectedFromStorage()
-  // 行内进度日志监听
-  window.scoopAPI.onLog((data) => {
-    if (data?.package && data?.message) {
-      const pkgName = data.package
-      // 分发到对应包的进度
-      if (updatingPackages.value.has(pkgName) || pkgProgress.hasProgress(pkgName)) {
-        pkgProgress.handleLog(pkgName, data.message)
-        // 更新日志弹窗（如果正在查看该包）
-        if (activePkgLogName.value === pkgName) {
-          activePkgLogs.value.push(data.message)
-          scrollLogToBottom()
-        }
-      }
-    }
-  })
   checkingUpdates.value = true
   packagesStore.loadUpdatable().finally(() => {
     checkingUpdates.value = false
@@ -223,10 +311,6 @@ watch(() => packagesStore.installed.length, () => {
     nextTick(preloadIcons)
   }
 }, { immediate: true })
-
-onUnmounted(() => {
-  window.scoopAPI.removeLogListener()
-})
 
 // Sync selected state: remove entries for packages that are no longer installed
 watch(() => packagesStore.installed, (list) => {
@@ -245,21 +329,45 @@ watch(() => packagesStore.installed, (list) => {
   }
 }, { deep: true })
 
-function clearLogs() {
-  activePkgLogs.value = []
-}
-
 function showPkgLogs(name: string) {
   activePkgLogName.value = name
-  const p = pkgProgress.getProgress(name)
-  activePkgLogs.value = p ? [...p.logs] : []
   showPkgLogModal.value = true
   scrollLogToBottom()
 }
 
-function handleInstall(pkgName: string) {
-  packagesStore.install(pkgName)
-  message.info(`正在安装 ${pkgName}...`)
+const activePkgLogLines = computed(() => {
+  if (!activePkgLogName.value) return []
+  const p = pkgProgress.getProgress(activePkgLogName.value)
+  return p ? p.logs : []
+})
+
+// 日志弹窗打开时，新日志自动滚底
+watch(() => activePkgLogLines.value.length, () => {
+  if (showPkgLogModal.value) scrollLogToBottom()
+})
+
+// ═══ 商店行内安装 ═══
+const storeInstallingSet = ref<Set<string>>(new Set())
+
+async function storeQuickInstall(pkgName: string) {
+  if (storeInstallingSet.value.has(pkgName)) return
+  const s = new Set(storeInstallingSet.value)
+  s.add(pkgName)
+  storeInstallingSet.value = s
+  pkgProgress.startUpdate(pkgName)
+  try {
+    await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
+    pkgProgress.finishUpdate(pkgName)
+    message.success(`${pkgName} 安装完成`)
+    packagesStore.loadInstalled()
+  } catch {
+    pkgProgress.failUpdate(pkgName)
+    message.error(`${pkgName} 安装失败`)
+  } finally {
+    const next = new Set(storeInstallingSet.value)
+    next.delete(pkgName)
+    storeInstallingSet.value = next
+  }
 }
 
 async function handleUpdate(pkg: any) {
@@ -687,31 +795,102 @@ async function removeBucket(name: string) {
           </NTabPane>
 
           <NTabPane name="discover" tab="软件发现" class="flex-1 overflow-hidden">
-            <div class="flex flex-col h-full overflow-y-auto">
-              <div class="flex flex-col items-center justify-center pt-10 pb-5 px-8 flex-shrink-0">
-                <NEmpty description="在搜索框中探索新软件">
-                  <template #icon><NIcon :component="CompassOutline" size="48" class="text-gray-300 text-slate-600" /></template>
-                  <template #extra><p class="text-xs text-gray-400 mt-1">支持数千款开源软件的一键安装</p></template>
-                </NEmpty>
+            <div class="flex h-full overflow-hidden">
+              <!-- ═══ 左侧分类导航 ═══ -->
+              <div class="w-[140px] flex-shrink-0 border-r border-white/[0.04] py-2 overflow-y-auto custom-scrollbar">
+                <div
+                  v-for="cat in categories"
+                  :key="cat.id"
+                  class="flex items-center gap-2 px-3 py-2 mx-1 rounded-lg cursor-pointer transition-colors duration-150 text-[13px]"
+                  :class="activeCategoryId === cat.id
+                    ? 'bg-white/[0.06] text-white'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.02]'"
+                  @click="activeCategoryId = cat.id"
+                >
+                  <NIcon :component="cat.icon" :size="14" class="flex-shrink-0" />
+                  <span class="truncate">{{ cat.name }}</span>
+                </div>
               </div>
-              <div class="flex-1 flex flex-col justify-end mt-4 mx-5 mb-4">
-                <div class="bg-slate-50/70 dark:bg-gray-800/40 rounded-xl p-4 border border-slate-100/60 dark:border-gray-700/30">
-                  <div class="flex items-center gap-2 mb-4">
-                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">热门发现</span>
-                    <div class="flex-1 h-px bg-slate-200/60 dark:bg-gray-700/40" />
-                  </div>
-                  <div class="grid grid-cols-4 gap-3">
-                    <div v-for="pkg in recommendedPackages" :key="pkg.name"
-                      class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800/60 hover:bg-slate-50 dark:hover:bg-gray-700/50 border border-slate-100 dark:border-gray-700/40 shadow-sm hover:shadow-md transition-all duration-200 group"
+
+              <!-- ═══ 右侧内容大厅 ═══ -->
+              <div class="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-4 py-3">
+                <!-- 分类标题 -->
+                <div class="flex items-center gap-2 mb-3">
+                  <NIcon :component="activeCategory.icon" :size="15" class="text-gray-400" />
+                  <span class="text-sm font-medium text-gray-300">{{ activeCategory.name }}</span>
+                  <span class="px-1.5 py-0.5 text-[11px] bg-white/[0.04] text-gray-500 rounded font-mono">{{ activeCategory.apps.length }}</span>
+                </div>
+
+                <!-- 应用卡片网格 -->
+                <div class="grid grid-cols-2 gap-2.5">
+                  <div
+                    v-for="app in activeCategory.apps"
+                    :key="app.name"
+                    class="group relative flex items-center gap-3 p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-200"
+                  >
+                    <!-- 图标 -->
+                    <div
+                      class="w-9 h-9 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0 shadow-sm"
+                      :class="app.gradient"
                     >
-                      <div class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform" :class="pkg.color">
-                        <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
+                      <span class="text-white text-sm font-bold">{{ app.icon }}</span>
+                    </div>
+                    <!-- 信息 -->
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span class="font-mono text-sm font-semibold text-white/90 truncate">{{ app.name }}</span>
+                        <span v-if="installedNames.has(app.name)" class="text-[10px] text-gray-500 font-mono flex-shrink-0">已安装</span>
                       </div>
-                      <span class="text-xs font-medium text-slate-700 text-slate-300">{{ pkg.name }}</span>
-                      <span class="text-[10px] text-slate-400 -mt-1">{{ pkg.desc }}</span>
-                      <NButton size="tiny" secondary :disabled="installedNames.has(pkg.name)"
-                        @click.stop="handleInstall(pkg.name)" class="!mt-1 btn-hover-scale w-full !rounded-lg"
-                      >{{ installedNames.has(pkg.name) ? '已安装' : '安装' }}</NButton>
+                      <p class="text-[11px] text-gray-500 truncate mt-0.5">{{ app.desc }}</p>
+                    </div>
+                    <!-- 操作区：固定宽度，垂直居中 -->
+                    <div class="flex-shrink-0 flex items-center self-center">
+                      <!-- ═══ 静止态 ═══ -->
+                      <template v-if="!pkgProgress.hasProgress(app.name) && !storeInstallingSet.has(app.name)">
+                        <NButton
+                          v-if="!installedNames.has(app.name)"
+                          text size="small"
+                          class="!text-gray-500 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                          @click.stop="storeQuickInstall(app.name)"
+                        >
+                          <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
+                        </NButton>
+                      </template>
+                      <!-- ═══ 执行态：脉冲圆圈 ═══ -->
+                      <template v-else>
+                        <div class="flex items-center gap-2">
+                          <div class="relative flex items-center justify-center w-5 h-5 flex-shrink-0">
+                            <span
+                              class="absolute inset-0 rounded-full animate-ping bg-emerald-500/20"
+                              style="animation-duration: 1.5s;"
+                            />
+                            <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 20 20">
+                              <circle cx="10" cy="10" r="8" fill="none" stroke-width="2" class="stroke-white/[0.06]" />
+                              <circle
+                                cx="10" cy="10" r="8" fill="none" stroke-width="2" stroke-linecap="round"
+                                stroke-dasharray="50.265"
+                                :stroke-dashoffset="pkgProgress.getProgress(app.name)?.phase === 'installing' ? 0 : 50.265 * (1 - (pkgProgress.getProgress(app.name)?.percent ?? 0) / 100)"
+                                class="transition-all duration-300 stroke-emerald-500"
+                              />
+                            </svg>
+                            <span
+                              v-if="pkgProgress.getProgress(app.name)?.phase === 'downloading'"
+                              class="relative z-10 text-[8px] font-mono font-bold text-emerald-400 tabular-nums leading-none"
+                            >{{ pkgProgress.getProgress(app.name)?.percent }}</span>
+                            <span
+                              v-else
+                              class="relative z-10 w-2.5 h-2.5 border-[1.5px] border-t-transparent border-indigo-400 rounded-full animate-spin"
+                            />
+                          </div>
+                          <button
+                            class="flex items-center justify-center w-5 h-5 rounded text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0"
+                            title="查看终端日志"
+                            @click.stop="showPkgLogs(app.name)"
+                          >
+                            <NIcon :component="TerminalOutline" :size="11" />
+                          </button>
+                        </div>
+                      </template>
                     </div>
                   </div>
                 </div>
@@ -789,17 +968,16 @@ async function removeBucket(name: string) {
       :close-on-esc="true"
     >
       <div class="flex items-center justify-between mb-3">
-        <span class="text-xs text-slate-500">共 {{ activePkgLogs.length }} 行输出</span>
-        <NButton size="tiny" quaternary @click="clearLogs" class="!rounded-lg">清空</NButton>
+        <span class="text-xs text-slate-500">共 {{ activePkgLogLines.length }} 行输出</span>
       </div>
       <div
         ref="pkgLogContainerRef"
         class="bg-[#090a0d] p-4 rounded-xl text-emerald-400 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border border-white/[0.06]"
       >
-        <div v-if="activePkgLogs.length === 0" class="text-slate-600 text-center py-8">
+        <div v-if="activePkgLogLines.length === 0" class="text-slate-600 text-center py-8">
           暂无日志输出
         </div>
-        <div v-for="(line, i) in activePkgLogs" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
+        <div v-for="(line, i) in activePkgLogLines" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
           <span class="text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
         </div>
         <span v-if="updatingPackages.has(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />

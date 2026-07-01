@@ -51,7 +51,7 @@ const ringDashoffset = computed(() => {
   <div
     class="group flex items-center h-12 px-4 transition-colors duration-150 border-b border-white/[0.04] hover:bg-white/[0.02]"
     :class="{
-      'opacity-40 pointer-events-none': disabled,
+      'opacity-40': disabled,
       'bg-white/[0.04]': isSelected,
       'cursor-pointer': mode === 'search',
     }"

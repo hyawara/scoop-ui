@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { watch, computed, ref, nextTick } from 'vue'
 import { NScrollbar, NEmpty, NSkeleton, NModal, NButton, useMessage } from 'naive-ui'
 import { SearchOutline, CloudDownloadOutline } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
@@ -20,7 +20,6 @@ const installingSet = ref<Set<string>>(new Set())
 // 单包日志弹窗
 const showPkgLogModal = ref(false)
 const activePkgLogName = ref('')
-const activePkgLogs = ref<string[]>([])
 const pkgLogContainerRef = ref<HTMLDivElement | null>(null)
 
 const installedNames = computed(() =>
@@ -56,37 +55,22 @@ function scrollLogToBottom() {
   })
 }
 
-onMounted(() => {
-  // 行内进度日志监听
-  window.scoopAPI.onLog((data) => {
-    if (data?.package && data?.message) {
-      const pkgName = data.package
-      if (installingSet.value.has(pkgName) || pkgProgress.hasProgress(pkgName)) {
-        pkgProgress.handleLog(pkgName, data.message)
-        if (activePkgLogName.value === pkgName) {
-          activePkgLogs.value.push(data.message)
-          scrollLogToBottom()
-        }
-      }
-    }
-  })
-})
-
-onUnmounted(() => {
-  window.scoopAPI.removeLogListener()
-})
-
 function showPkgLogs(name: string) {
   activePkgLogName.value = name
-  const p = pkgProgress.getProgress(name)
-  activePkgLogs.value = p ? [...p.logs] : []
   showPkgLogModal.value = true
   scrollLogToBottom()
 }
 
-function clearLogs() {
-  activePkgLogs.value = []
-}
+const activePkgLogLines = computed(() => {
+  if (!activePkgLogName.value) return []
+  const p = pkgProgress.getProgress(activePkgLogName.value)
+  return p ? p.logs : []
+})
+
+// 日志弹窗打开时，新日志自动滚底
+watch(() => activePkgLogLines.value.length, () => {
+  if (showPkgLogModal.value) scrollLogToBottom()
+})
 
 async function quickInstall(pkgName: string) {
   if (installingSet.value.has(pkgName)) return
@@ -95,9 +79,13 @@ async function quickInstall(pkgName: string) {
   installingSet.value = s
   pkgProgress.startUpdate(pkgName)
   try {
-    await packagesStore.install(pkgName, { global: false, skipCheck: false, independent: false })
+    // 直接调用 API，绕过 store.install 的全局进度监听（避免冲突）
+    await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
+    // 安装成功：瞬间完成，不设 success 延迟
     pkgProgress.finishUpdate(pkgName)
     message.success(`${pkgName} 安装完成`)
+    // 刷新已安装列表（静默）
+    packagesStore.loadInstalled()
   } catch {
     pkgProgress.failUpdate(pkgName)
     message.error(`${pkgName} 安装失败`)
@@ -194,17 +182,16 @@ const skeletonItems = Array.from({ length: 5 })
       :close-on-esc="true"
     >
       <div class="flex items-center justify-between mb-3">
-        <span class="text-xs text-slate-500">共 {{ activePkgLogs.length }} 行输出</span>
-        <NButton size="tiny" quaternary @click="clearLogs" class="!rounded-lg">清空</NButton>
+        <span class="text-xs text-slate-500">共 {{ activePkgLogLines.length }} 行输出</span>
       </div>
       <div
         ref="pkgLogContainerRef"
         class="bg-[#090a0d] p-4 rounded-xl text-emerald-400 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border border-white/[0.06]"
       >
-        <div v-if="activePkgLogs.length === 0" class="text-slate-600 text-center py-8">
+        <div v-if="activePkgLogLines.length === 0" class="text-slate-600 text-center py-8">
           暂无日志输出
         </div>
-        <div v-for="(line, i) in activePkgLogs" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
+        <div v-for="(line, i) in activePkgLogLines" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
           <span class="text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
         </div>
         <span v-if="installingSet.has(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
