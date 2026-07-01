@@ -18,6 +18,7 @@ import {
   NDropdown,
   NCheckbox,
   NProgress,
+  NSpin,
   useMessage,
   useDialog,
 } from 'naive-ui'
@@ -44,6 +45,9 @@ const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
 const message = useMessage()
 const dialog = useDialog()
+
+// 批量卸载弹窗引用，用于手动关闭
+const batchUninstallDialogReforge = ref<ReturnType<typeof dialog.warning> | null>(null)
 
 const recommendedPackages = [
   { name: 'git', icon: 'G', desc: '版本控制', bucket: 'main', color: 'from-orange-500 to-red-500' },
@@ -78,6 +82,10 @@ const updatingAll = ref(false)
 // Batch selection state
 const selectedPackages = ref<Set<string>>(new Set())
 const batchUpdating = ref(false)
+
+// Uninstall state locks
+const uninstallingSet = ref<Set<string>>(new Set())
+const removingSet = ref<Set<string>>(new Set())
 
 const SELECTED_STORAGE_KEY = 'scoop-ui-selected-packages'
 
@@ -215,9 +223,32 @@ function handleUpdate(pkg: any) {
   message.info(`正在更新 ${pkg.name}...`)
 }
 
-function handleUninstall(pkg: any) {
-  packagesStore.uninstall(pkg.name)
-  message.info(`已卸载 ${pkg.name}`)
+async function handleUninstall(pkg: any) {
+  if (uninstallingSet.value.has(pkg.name)) return
+  const s = new Set(uninstallingSet.value)
+  s.add(pkg.name)
+  uninstallingSet.value = s
+  try {
+    await window.scoopAPI.uninstall(pkg.name, pkg.global)
+    // 成功时静默处理：卡片滑出动画本身就是最好的反馈
+    // Exit animation then remove from list
+    const r = new Set(removingSet.value)
+    r.add(pkg.name)
+    removingSet.value = r
+    await new Promise(resolve => setTimeout(resolve, 400))
+    await packagesStore.loadInstalled()
+    await packagesStore.loadUpdatable()
+  } catch (e: any) {
+    // 仅在失败时显示错误通知
+    message.error(e.message || `卸载 ${pkg.name} 失败`)
+  } finally {
+    const s2 = new Set(uninstallingSet.value)
+    s2.delete(pkg.name)
+    uninstallingSet.value = s2
+    const r2 = new Set(removingSet.value)
+    r2.delete(pkg.name)
+    removingSet.value = r2
+  }
 }
 
 async function handleBatchUpdate() {
@@ -267,6 +298,61 @@ function handleUpdateAllConfirm() {
       }
     },
   })
+}
+
+function handleBatchUninstall() {
+  const names = selectedPackageNames.value
+  if (names.length === 0) return
+  batchUninstallDialogReforge.value = dialog.warning({
+    title: '确认批量卸载',
+    content: `确定要彻底卸载已选中的 ${names.length} 款软件吗？此操作不可逆。`,
+    positiveText: '确认卸载',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      // 立即关闭弹窗，不等待异步操作
+      batchUninstallDialogReforge.value?.destroy()
+      batchUninstallDialogReforge.value = null
+      // 执行卸载（不返回 Promise，让弹窗立即关闭）
+      executeBatchUninstall(names)
+      return true // 返回 true 确保关闭
+    },
+  })
+}
+
+async function executeBatchUninstall(names: string[]) {
+  // 锁定所有选中卡片
+  const s = new Set(uninstallingSet.value)
+  for (const n of names) s.add(n)
+  uninstallingSet.value = s
+
+  let failed = 0
+  for (const name of names) {
+    try {
+      const pkg = packagesStore.installed.find((p: any) => p.name === name)
+      await window.scoopAPI.uninstall(name, pkg?.global || false)
+      // 退出动画：逐个标记移除
+      const r = new Set(removingSet.value)
+      r.add(name)
+      removingSet.value = r
+      await new Promise(resolve => setTimeout(resolve, 350))
+    } catch {
+      failed++
+    }
+  }
+
+  // 精简通知：仅在有失败时提示，成功则静默
+  if (failed > 0) {
+    message.warning(`${names.length - failed} 个卸载成功，${failed} 个卸载失败`)
+  }
+
+  selectedPackages.value = new Set()
+  saveSelectedToStorage()
+  await packagesStore.loadInstalled()
+  await packagesStore.loadUpdatable()
+
+  // 解锁
+  uninstallingSet.value = new Set()
+  removingSet.value = new Set()
 }
 
 async function openBucketDrawer() {
@@ -432,6 +518,17 @@ async function removeBucket(name: string) {
                       更新选中项 ({{ selectedPackageNames.length }})
                     </button>
                     <button
+                      :disabled="selectedPackageNames.length === 0"
+                      @click="handleBatchUninstall"
+                      class="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none"
+                      :class="selectedPackageNames.length === 0
+                        ? 'border-white/[0.06] bg-white/[0.03] text-slate-500 cursor-not-allowed'
+                        : 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 cursor-pointer'"
+                    >
+                      <NIcon :component="TrashOutline" :size="12" />
+                      卸载选中项 ({{ selectedPackageNames.length }})
+                    </button>
+                    <button
                       :disabled="packagesStore.updatable.length === 0 || updatingAll"
                       @click="handleUpdateAllConfirm"
                       class="flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors select-none"
@@ -447,43 +544,50 @@ async function removeBucket(name: string) {
 
               <!-- 已安装列表（始终渲染，永不消失） -->
               <div class="flex flex-col gap-1.5 pt-3 pb-4 px-4">
-                <div v-for="pkg in packagesStore.installed" :key="pkg.name"
-                  class="flex items-center gap-3 p-3 rounded-xl bg-[#1e222b] hover:bg-[#262b36] border border-white/[0.06] hover:border-white/[0.1] transition-all micro-card"
-                >
-                  <div class="flex-shrink-0 w-5">
-                    <NCheckbox
-                      :checked="selectedPackages.has(pkg.name)"
-                      @update:checked="toggleSelect(pkg.name)"
-                    />
-                  </div>
+                <TransitionGroup name="list" tag="div" class="flex flex-col gap-1.5">
+                  <div v-for="pkg in packagesStore.installed" :key="pkg.name"
+                    class="flex items-center gap-3 p-3 rounded-xl bg-[#1e222b] hover:bg-[#262b36] border border-white/[0.06] hover:border-white/[0.1] transition-all duration-300 micro-card"
+                    :class="{
+                      'opacity-40 pointer-events-none': uninstallingSet.has(pkg.name),
+                    }"
+                  >
+                    <div class="flex-shrink-0 w-5">
+                      <NCheckbox
+                        :checked="selectedPackages.has(pkg.name)"
+                        @update:checked="toggleSelect(pkg.name)"
+                        :disabled="uninstallingSet.has(pkg.name)"
+                      />
+                    </div>
 
-                  <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                      <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
-                      <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
-                      <NTag v-if="pkg.bucket" size="small" :bordered="false"
-                        class="!bg-violet-900/40 !text-violet-300"
-                      >{{ pkg.bucket }}</NTag>
-                      <NTag v-if="pkg.global" size="small" :bordered="false"
-                        class="!bg-blue-900/40 !text-blue-300"
-                      >🌐 Global</NTag>
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <span class="text-white text-xs font-bold uppercase">{{ pkg.name[0] }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span class="font-medium text-sm truncate text-slate-100">{{ pkg.name }}</span>
+                        <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-400">{{ pkg.version }}</NTag>
+                        <NTag v-if="pkg.bucket" size="small" :bordered="false"
+                          class="!bg-violet-900/40 !text-violet-300"
+                        >{{ pkg.bucket }}</NTag>
+                        <NTag v-if="pkg.global" size="small" :bordered="false"
+                          class="!bg-blue-900/40 !text-blue-300"
+                        >🌐 Global</NTag>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                      <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
+                        class="!bg-amber-500/10 !text-amber-400 font-mono" style="border: 1px solid rgba(251,191,36,0.3)"
+                      >→ {{ getNewVersion(pkg.name) }}</NTag>
+                      <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
+                        <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
+                      </NButton>
+                      <NSpin v-if="uninstallingSet.has(pkg.name)" size="small" />
+                      <NButton v-else text size="small" class="!text-rose-400 hover:!text-rose-500" @click="handleUninstall(pkg)">
+                        <template #icon><NIcon :component="TrashOutline" size="14" /></template>
+                      </NButton>
                     </div>
                   </div>
-                  <div class="flex items-center gap-1.5 flex-shrink-0">
-                    <NTag v-if="updatableNames.has(pkg.name)" size="tiny" :bordered="false"
-                      class="!bg-amber-500/10 !text-amber-400 font-mono" style="border: 1px solid rgba(251,191,36,0.3)"
-                    >→ {{ getNewVersion(pkg.name) }}</NTag>
-                    <NButton v-if="updatableNames.has(pkg.name)" text size="small" class="!text-amber-400 hover:!text-amber-300" @click="handleUpdate(pkg)">
-                      <template #icon><NIcon :component="DownloadOutline" size="14" /></template> 更新
-                    </NButton>
-                    <NButton text size="small" class="!text-rose-400 hover:!text-rose-500" @click="handleUninstall(pkg)">
-                      <template #icon><NIcon :component="TrashOutline" size="14" /></template>
-                    </NButton>
-                  </div>
-                </div>
+                </TransitionGroup>
               </div>
             </NScrollbar>
           </NTabPane>
@@ -621,3 +725,32 @@ async function removeBucket(name: string) {
     </NModal>
   </div>
 </template>
+
+<style scoped>
+/* 零延迟原地蒸发 + 列表精准补位 */
+.list-leave-active {
+  position: absolute;
+  width: 100%;
+  opacity: 0;
+  transition: none !important; /* 彻底杀死淡出延迟，瞬间蒸发 */
+}
+
+.list-leave-to {
+  opacity: 0;
+}
+
+/* 下方卡片补位：干脆利落的微秒级上推 */
+.list-move {
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 进入动画（备用） */
+.list-enter-active {
+  transition: all 0.15s ease-out;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+</style>
