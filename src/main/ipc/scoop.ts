@@ -441,11 +441,11 @@ export function registerScoopIPC(): void {
     return { enabled: installed || enabled }
   })
 
-  // List buckets — 直接从 scoop bucket list 文本输出解析
+  // List buckets — 直接用 execPowerShell 执行，避免 git-bash 管道破坏编码
   ipcMain.handle('scoop:listBuckets', async () => {
-    const { stdout } = await execScoop('bucket list')
+    const { stdout } = await execPowerShell('scoop bucket list')
 
-    // 获取 SCOOP 目录，用于拼 localPath
+    // 获取 SCOOP 目录
     let scoopRoot = ''
     try {
       const { stdout: envOut } = await execPowerShell('echo $env:SCOOP')
