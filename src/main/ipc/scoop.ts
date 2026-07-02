@@ -441,60 +441,44 @@ export function registerScoopIPC(): void {
     return { enabled: installed || enabled }
   })
 
-  // List buckets
+  // List buckets — 直接从 scoop bucket list 文本输出解析
   ipcMain.handle('scoop:listBuckets', async () => {
-    const ps = `
-      $scoopRoot = if ($env:SCOOP) { $env:SCOOP } else { Join-Path $env:USERPROFILE 'scoop' }
+    const { stdout } = await execScoop('bucket list')
 
-      $lines = scoop bucket list 2>$null | Select-Object -Skip 2
-      $result = @()
+    // 获取 SCOOP 目录，用于拼 localPath
+    let scoopRoot = ''
+    try {
+      const { stdout: envOut } = await execPowerShell('echo $env:SCOOP')
+      scoopRoot = envOut.trim()
+    } catch { /* ignore */ }
 
-      foreach ($line in $lines) {
-        $trimmed = $line.Trim()
-        if (-not $trimmed -or $trimmed -match '^Name\\s+Source') { continue }
+    const result: {
+      name: string; source: string; localPath: string
+      appCount: number; lastUpdated: string
+    }[] = []
 
-        $parts = [regex]::Split($trimmed, '\\s{2,}')
-        if ($parts.Length -lt 2) { continue }
-
-        $name = $parts[0].Trim()
-        $source = $parts[1].Trim()
-
-        $urlMatch = [regex]::Match($source, '^https?://\\S+')
-        if ($urlMatch.Success) { $source = $urlMatch.Value }
-
-        $localPath = Join-Path $scoopRoot 'buckets' $name
-        $appCount = 0
-        $lastUpdated = ''
-
-        if (Test-Path $localPath) {
-          $appCount = @(Get-ChildItem $localPath -Filter *.json -File -ErrorAction SilentlyContinue).Count
-          $gitDir = Join-Path $localPath '.git'
-          if (Test-Path $gitDir) {
-            $raw = git -C $localPath log -1 --format=%ci 2>$null
-            if ($raw) {
-              $dt = $raw.Trim()
-              if ($dt.Length -ge 16) { $lastUpdated = $dt.Substring(0, 16).Replace('T', ' ') }
-            }
-          }
-        }
-
-        $result += [PSCustomObject]@{
-          name       = $name
-          source     = $source
-          localPath  = $localPath
-          appCount   = $appCount
-          lastUpdated = $lastUpdated
-        }
+    let pastHeader = false
+    for (const raw of stdout.split('\n')) {
+      const line = raw.trim()
+      if (!line) continue
+      if (!pastHeader) {
+        if (/^-+\s+-+/.test(line)) { pastHeader = true }
+        continue
       }
 
-      ConvertTo-Json $result -Compress
-    `
-    const { stdout } = await execPowerShell(ps)
-    try {
-      return JSON.parse(stdout.trim().split('\n').pop() || '[]')
-    } catch {
-      return []
+      const parts = line.split(/\s{2,}/)
+      if (parts.length < 2) continue
+
+      const name = parts[0].trim()
+      const source = parts[1].trim()
+      const lastUpdated = parts.length >= 3 ? parts[2].trim() : ''
+      const appCount = (parts.length >= 4 ? parseInt(parts[3], 10) : 0) || 0
+      const localPath = scoopRoot ? join(scoopRoot, 'buckets', name) : join(homedir(), 'scoop', 'buckets', name)
+
+      result.push({ name, source, localPath, appCount, lastUpdated })
     }
+
+    return result
   })
 
   // Add bucket
