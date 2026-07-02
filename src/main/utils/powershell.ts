@@ -153,6 +153,8 @@ export function execGitBash(
 
 /**
  * Execute a scoop subcommand via git-bash (search, install, update, list, etc.).
+ * Uses iconv-lite GBK→UTF-8 decoding because scoop (PowerShell script) outputs GBK
+ * on Chinese Windows even when invoked through git-bash.
  */
 export function execScoop(
   args: string,
@@ -160,7 +162,45 @@ export function execScoop(
   signal?: AbortSignal,
   cwd?: string
 ): Promise<PSResult> {
-  return execGitBash(`scoop ${args}`, onProgress, signal, cwd)
+  return new Promise((resolve, reject) => {
+    const child: ChildProcess = spawn(BASH_EXE, ['--login', '-c', `scoop ${args}`], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        cwd: cwd || undefined,
+      }
+    )
+
+    let stdout = ''
+    let stderr = ''
+
+    const stdoutDecoder = iconv.decodeStream('gbk')
+    stdoutDecoder.on('data', (text: string) => {
+      const cleaned = stripAnsi(text)
+      stdout += cleaned
+      onProgress?.(cleaned)
+    })
+    child.stdout?.pipe(stdoutDecoder)
+
+    const stderrDecoder = iconv.decodeStream('gbk')
+    stderrDecoder.on('data', (text: string) => {
+      stderr += stripAnsi(text)
+    })
+    child.stderr?.pipe(stderrDecoder)
+
+    child.on('error', (err) => {
+      reject(err)
+    })
+
+    child.on('close', (code) => {
+      resolve({ stdout, stderr, code })
+    })
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        child.kill()
+      })
+    }
+  })
 }
 
 export function execScoopJSON<T>(
