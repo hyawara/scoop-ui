@@ -33,7 +33,9 @@ import ProxyCard from '@/components/ProxyCard.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
+import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
+import type { DiscoverApp, AppVersion } from '@/types'
 
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
@@ -75,6 +77,7 @@ interface StoreApp {
   icon: string
   desc: string
   gradient: string
+  multiVersion?: boolean
 }
 
 interface Category {
@@ -82,6 +85,10 @@ interface Category {
   name: string
   icon: any
   apps: StoreApp[]
+}
+
+function withMV(app: StoreApp, mv: boolean): StoreApp {
+  return { ...app, multiVersion: mv }
 }
 
 const activeCategoryId = ref('featured')
@@ -97,7 +104,7 @@ const categories: Category[] = [
       { name: 'neovim', icon: 'N', desc: '终端文本编辑器', gradient: 'from-green-600 to-emerald-600' },
       { name: 'fzf', icon: 'F', desc: '模糊搜索利器', gradient: 'from-purple-500 to-pink-500' },
       { name: '7zip', icon: '7', desc: '高压缩率归档工具', gradient: 'from-yellow-500 to-amber-500' },
-      { name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', gradient: 'from-lime-500 to-green-500' },
+      withMV({ name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', gradient: 'from-lime-500 to-green-500' }, true),
     ],
   },
   {
@@ -107,10 +114,10 @@ const categories: Category[] = [
     apps: [
       { name: 'git', icon: 'G', desc: '分布式版本控制', gradient: 'from-orange-500 to-red-500' },
       { name: 'python', icon: 'P', desc: '通用编程语言', gradient: 'from-blue-500 to-yellow-400' },
-      { name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', gradient: 'from-lime-500 to-green-500' },
-      { name: 'openjdk', icon: 'J', desc: 'Java 开发工具包', gradient: 'from-red-500 to-orange-500' },
-      { name: 'go', icon: 'G', desc: 'Go 编程语言', gradient: 'from-cyan-500 to-blue-500' },
-      { name: 'rust', icon: 'R', desc: '系统编程语言', gradient: 'from-orange-600 to-amber-600' },
+      withMV({ name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', gradient: 'from-lime-500 to-green-500' }, true),
+      withMV({ name: 'openjdk', icon: 'J', desc: 'Java 开发工具包', gradient: 'from-red-500 to-orange-500' }, true),
+      withMV({ name: 'go', icon: 'G', desc: 'Go 编程语言', gradient: 'from-cyan-500 to-blue-500' }, true),
+      withMV({ name: 'rust', icon: 'R', desc: '系统编程语言', gradient: 'from-orange-600 to-amber-600' }, true),
       { name: 'docker-desktop', icon: 'D', desc: '容器化平台', gradient: 'from-blue-500 to-cyan-400' },
       { name: 'visual-studio-code', icon: 'V', desc: '代码编辑器', gradient: 'from-blue-600 to-indigo-500' },
     ],
@@ -211,7 +218,84 @@ function preloadIcons() {
   }
 }
 
+// ═══ 多版本发现数据 ═══
+const discoverLoading = ref(false)
+
+const appWebsites: Record<string, string> = {
+  'git': 'https://git-scm.com/',
+  'curl': 'https://curl.se/',
+  'neovim': 'https://neovim.io/',
+  'fzf': 'https://github.com/junegunn/fzf',
+  '7zip': 'https://www.7-zip.org/',
+  'nodejs': 'https://nodejs.org/',
+  'python': 'https://www.python.org/',
+  'openjdk': 'https://openjdk.org/',
+  'go': 'https://go.dev/',
+  'rust': 'https://www.rust-lang.org/',
+  'docker-desktop': 'https://www.docker.com/',
+  'visual-studio-code': 'https://code.visualstudio.com/',
+  'oh-my-posh': 'https://ohmyposh.dev/',
+  'zoxide': 'https://github.com/ajeetdsouza/zoxide',
+  'bat': 'https://github.com/sharkdp/bat',
+  'ripgrep': 'https://github.com/BurntSushi/ripgrep',
+  'eza': 'https://eza.rocks/',
+  'delta': 'https://github.com/dandavison/delta',
+  'windows-terminal': 'https://github.com/microsoft/terminal',
+  'obsidian': 'https://obsidian.md/',
+  'notepadnext': 'https://github.com/dail8859/NotepadNext',
+  'sublime-text': 'https://www.sublimetext.com/',
+  'helix': 'https://helix-editor.com/',
+  'imageglass': 'https://imageglass.org/',
+  'blender': 'https://www.blender.org/',
+  'gimp': 'https://www.gimp.org/',
+  'inkscape': 'https://inkscape.org/',
+  'sharex': 'https://getsharex.com/',
+  'chafa': 'https://hpjansson.org/chafa/',
+  'powertoys': 'https://github.com/microsoft/PowerToys',
+  'everything': 'https://www.voidtools.com/',
+  'trafficmonitor': 'https://github.com/zhongyang219/TrafficMonitor',
+  'nilesoft-shell': 'https://nilesoft.org/',
+  'scoop': 'https://scoop.sh/',
+}
+
+// ═══ 多版本偏好开关（config.json 持久化，双向同步） ═══
+const multiVersionPref = ref<string[]>([])
+async function loadMVPrefs() {
+  try {
+    const prefs = await window.scoopAPI.getConfig('discover.multiVersionPrefs')
+    if (Array.isArray(prefs)) multiVersionPref.value = prefs
+  } catch { /* ignore */ }
+  // 补写分类标记 multiVersion 但 config 里没记录的项
+  const allApps = categories.flatMap(c => c.apps)
+  const set = new Set(multiVersionPref.value)
+  let changed = false
+  for (const app of allApps) {
+    if (app.multiVersion && !set.has(app.name)) {
+      set.add(app.name)
+      changed = true
+    }
+  }
+  if (changed) {
+    multiVersionPref.value = [...set]
+    window.scoopAPI.setConfig('discover.multiVersionPrefs', [...set])
+  }
+}
+function getMVEnabled(app: StoreApp): boolean {
+  return multiVersionPref.value.includes(app.name)
+}
+async function toggleMV(app: StoreApp) {
+  const set = new Set(multiVersionPref.value)
+  if (set.has(app.name)) set.delete(app.name)
+  else set.add(app.name)
+  multiVersionPref.value = [...set]
+  await window.scoopAPI.setConfig('discover.multiVersionPrefs', [...set])
+  if (set.has(app.name)) openDiscoverDrawer(app)
+}
+loadMVPrefs()
+
 const showBucketDrawer = ref(false)
+const showDiscoverDrawer = ref(false)
+const selectedDiscoverApp = ref<DiscoverApp | null>(null)
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
 
@@ -223,21 +307,16 @@ const batchUpdating = ref(false)
 const uninstallingSet = ref<Set<string>>(new Set())
 const removingSet = ref<Set<string>>(new Set())
 
-const SELECTED_STORAGE_KEY = 'scoop-ui-selected-packages'
-
-function loadSelectedFromStorage() {
+async function loadSelectedFromConfig() {
   try {
-    const raw = localStorage.getItem(SELECTED_STORAGE_KEY)
-    if (raw) {
-      const arr: string[] = JSON.parse(raw)
-      selectedPackages.value = new Set(arr)
-    }
+    const arr = await window.scoopAPI.getConfig('packages.selectedPackages')
+    if (Array.isArray(arr)) selectedPackages.value = new Set(arr)
   } catch { /* ignore */ }
 }
 
-function saveSelectedToStorage() {
+async function saveSelectedToConfig() {
   try {
-    localStorage.setItem(SELECTED_STORAGE_KEY, JSON.stringify([...selectedPackages.value]))
+    await window.scoopAPI.setConfig('packages.selectedPackages', [...selectedPackages.value])
   } catch { /* ignore */ }
 }
 
@@ -249,7 +328,7 @@ function toggleSelect(name: string) {
     s.add(name)
   }
   selectedPackages.value = s
-  saveSelectedToStorage()
+  saveSelectedToConfig()
 }
 
 function toggleSelectAll() {
@@ -259,7 +338,7 @@ function toggleSelectAll() {
   } else {
     selectedPackages.value = new Set(allNames)
   }
-  saveSelectedToStorage()
+  saveSelectedToConfig()
 }
 
 function isAllSelected(): boolean {
@@ -286,7 +365,7 @@ function scrollLogToBottom() {
 }
 
 onMounted(() => {
-  loadSelectedFromStorage()
+  loadSelectedFromConfig()
   checkingUpdates.value = true
   packagesStore.loadUpdatable().finally(() => {
     checkingUpdates.value = false
@@ -313,7 +392,7 @@ watch(() => packagesStore.installed, (list) => {
   }
   if (changed) {
     selectedPackages.value = s
-    saveSelectedToStorage()
+    saveSelectedToConfig()
   }
 }, { deep: true })
 
@@ -333,6 +412,19 @@ const activePkgLogLines = computed(() => {
 watch(() => activePkgLogLines.value.length, () => {
   if (showPkgLogModal.value) scrollLogToBottom()
 })
+
+// ═══ 热门推荐（空状态用） ═══
+const recommendedPackages = [
+  { name: 'git', icon: 'G', desc: '版本控制', color: 'from-orange-500 to-red-500' },
+  { name: 'nodejs', icon: 'N', desc: 'JavaScript 运行时', color: 'from-lime-500 to-green-500' },
+  { name: '7zip', icon: '7', desc: '压缩工具', color: 'from-yellow-500 to-amber-500' },
+  { name: 'neovim', icon: 'N', desc: '终端编辑器', color: 'from-green-600 to-emerald-600' },
+]
+
+async function handleInstall(name: string) {
+  await packagesStore.install(name, { global: false, skipCheck: false, independent: false })
+  message.success(`${name} 安装完成`)
+}
 
 // ═══ 商店行内安装 ═══
 const storeInstallingSet = ref<Set<string>>(new Set())
@@ -354,6 +446,128 @@ async function storeQuickInstall(pkgName: string) {
   } finally {
     const next = new Set(storeInstallingSet.value)
     next.delete(pkgName)
+    storeInstallingSet.value = next
+  }
+}
+
+// ═══ 多版本发现抽屉 ═══
+interface SearchVersionItem {
+  manifestName: string
+  version: string
+  bucket: string
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function parseAndCleanSearch(rawText: string, baseName: string): SearchVersionItem[] {
+  if (!rawText) return []
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  const results: SearchVersionItem[] = []
+  const escaped = escapeRegExp(baseName)
+  const cleanRegex = new RegExp(`^${escaped}$|^${escaped}\\d+$|^${escaped}-(lts|nightly|current|rc)$`, 'i')
+  const lineRegex = /^([\w.\-+]+)\s+(\S+)\s+(\S+)/
+  let startParsing = false
+  for (const line of lines) {
+    if (/^-{3,}/.test(line)) { startParsing = true; continue }
+    if (!startParsing) continue
+    const m = line.match(lineRegex)
+    if (!m) continue
+    const [, manifestName, version, bucket] = m
+    if (!cleanRegex.test(manifestName)) continue
+    results.push({ manifestName, version, bucket })
+  }
+  return results.sort((a, b) => {
+    if (a.manifestName.toLowerCase() === baseName.toLowerCase()) return -1
+    if (b.manifestName.toLowerCase() === baseName.toLowerCase()) return 1
+    return b.version.localeCompare(a.version, undefined, { numeric: true })
+  })
+}
+
+function buildFallbackDiscoverApp(app: StoreApp): DiscoverApp {
+  const baseName = app.name
+  return {
+    id: app.name,
+    name: app.name,
+    description: app.desc,
+    icon: app.icon,
+    gradient: app.gradient,
+    website: appWebsites[app.name] || '',
+    versions: [{
+      version: 'latest',
+      bucket: 'main',
+      manifestName: baseName,
+      isInstalled: installedNames.value.has(baseName),
+    }],
+  }
+}
+
+async function openDiscoverDrawer(app: StoreApp) {
+  showDiscoverDrawer.value = true
+  discoverLoading.value = true
+  selectedDiscoverApp.value = {
+    id: app.name,
+    name: app.name,
+    description: app.desc,
+    icon: app.icon,
+    gradient: app.gradient,
+    website: appWebsites[app.name] || '',
+    versions: [],
+  }
+  try {
+    const rawText = await window.scoopAPI.searchRaw(app.name)
+    const cleaned = parseAndCleanSearch(rawText, app.name)
+    selectedDiscoverApp.value = {
+      id: app.name,
+      name: app.name,
+      description: app.desc,
+      icon: app.icon,
+      gradient: app.gradient,
+      website: appWebsites[app.name] || '',
+      versions: cleaned.map(r => ({
+        version: r.version,
+        bucket: r.bucket,
+        manifestName: r.manifestName,
+        isInstalled: installedNames.value.has(r.manifestName),
+      })),
+    }
+  } catch {
+    selectedDiscoverApp.value = buildFallbackDiscoverApp(app)
+  } finally {
+    discoverLoading.value = false
+  }
+}
+
+function handleCardClick(app: StoreApp) {
+  if (getMVEnabled(app)) {
+    openDiscoverDrawer(app)
+  } else if (!installedNames.value.has(app.name)) {
+    storeQuickInstall(app.name)
+  }
+}
+
+async function handleDiscoverInstall(manifestName: string) {
+  if (storeInstallingSet.value.has(manifestName)) return
+  const s = new Set(storeInstallingSet.value)
+  s.add(manifestName)
+  storeInstallingSet.value = s
+  pkgProgress.startUpdate(manifestName)
+  try {
+    await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false })
+    pkgProgress.finishUpdate(manifestName)
+    message.success(`${manifestName} 安装完成`)
+    packagesStore.loadInstalled()
+    // 刷新 drawer 内的已安装状态
+    if (selectedDiscoverApp.value) {
+      selectedDiscoverApp.value = { ...selectedDiscoverApp.value }
+    }
+  } catch {
+    pkgProgress.failUpdate(manifestName)
+    message.error(`${manifestName} 安装失败`)
+  } finally {
+    const next = new Set(storeInstallingSet.value)
+    next.delete(manifestName)
     storeInstallingSet.value = next
   }
 }
@@ -452,7 +666,7 @@ async function handleBatchUpdate() {
       }
     }
     selectedPackages.value = new Set()
-    saveSelectedToStorage()
+    saveSelectedToConfig()
     // 后台静默刷新
     packagesStore.loadInstalled()
     packagesStore.loadUpdatable()
@@ -502,7 +716,7 @@ function handleUpdateAllConfirm() {
           }
         }
         selectedPackages.value = new Set()
-        saveSelectedToStorage()
+        saveSelectedToConfig()
         // 后台静默刷新
         packagesStore.loadUpdatable()
         packagesStore.loadInstalled()
@@ -564,7 +778,7 @@ async function executeBatchUninstall(names: string[]) {
   }
 
   selectedPackages.value = new Set()
-  saveSelectedToStorage()
+  saveSelectedToConfig()
   await packagesStore.loadInstalled()
   await packagesStore.loadUpdatable()
 
@@ -781,7 +995,9 @@ function openBucketDrawer() {
                   <div
                     v-for="app in activeCategory.apps"
                     :key="app.name"
-                    class="group relative flex items-center gap-3 p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-200"
+                    class="group relative flex items-center gap-3 p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] hover:border-white/[0.08] transition-all duration-200"
+                    :class="getMVEnabled(app) ? 'cursor-pointer' : installedNames.has(app.name) ? '' : 'cursor-pointer'"
+                    @click="handleCardClick(app)"
                   >
                     <!-- 图标 -->
                     <div
@@ -795,57 +1011,43 @@ function openBucketDrawer() {
                       <div class="flex items-center gap-2">
                         <span class="font-mono text-sm font-semibold text-white/90 truncate">{{ app.name }}</span>
                         <span v-if="installedNames.has(app.name)" class="text-[10px] text-gray-500 font-mono flex-shrink-0">已安装</span>
+                        <span v-else-if="getMVEnabled(app)" class="text-[10px] text-violet-500/60 font-mono flex-shrink-0">多版</span>
                       </div>
                       <p class="text-[11px] text-gray-500 truncate mt-0.5">{{ app.desc }}</p>
                     </div>
-                    <!-- 操作区：固定宽度，垂直居中 -->
-                    <div class="flex-shrink-0 flex items-center self-center">
-                      <!-- ═══ 静止态 ═══ -->
-                      <template v-if="!pkgProgress.hasProgress(app.name) && !storeInstallingSet.has(app.name)">
+                    <!-- 右侧操作区 -->
+                    <div class="flex-shrink-0 flex items-center self-center gap-1">
+                      <!-- MV 开启：多版本入口 -->
+                      <template v-if="getMVEnabled(app)">
                         <NButton
-                          v-if="!installedNames.has(app.name)"
-                          text size="small"
+                          text size="tiny"
+                          class="!text-violet-400/70 hover:!text-violet-300 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                          @click.stop="openDiscoverDrawer(app)"
+                        >
+                          <template #icon><NIcon :component="CubeOutline" size="13" /></template>
+                        </NButton>
+                      </template>
+                      <!-- MV 关闭 + 未安装：快速安装 -->
+                      <template v-else-if="!installedNames.has(app.name)">
+                        <NButton
+                          text size="tiny"
                           class="!text-gray-500 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
                           @click.stop="storeQuickInstall(app.name)"
                         >
                           <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
                         </NButton>
                       </template>
-                      <!-- ═══ 执行态：脉冲圆圈 ═══ -->
-                      <template v-else>
-                        <div class="flex items-center gap-2">
-                          <div class="relative flex items-center justify-center w-5 h-5 flex-shrink-0">
-                            <span
-                              class="absolute inset-0 rounded-full animate-ping bg-emerald-500/20"
-                              style="animation-duration: 1.5s;"
-                            />
-                            <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 20 20">
-                              <circle cx="10" cy="10" r="8" fill="none" stroke-width="2" class="stroke-white/[0.06]" />
-                              <circle
-                                cx="10" cy="10" r="8" fill="none" stroke-width="2" stroke-linecap="round"
-                                stroke-dasharray="50.265"
-                                :stroke-dashoffset="pkgProgress.getProgress(app.name)?.phase === 'installing' ? 0 : 50.265 * (1 - (pkgProgress.getProgress(app.name)?.percent ?? 0) / 100)"
-                                class="transition-all duration-300 stroke-emerald-500"
-                              />
-                            </svg>
-                            <span
-                              v-if="pkgProgress.getProgress(app.name)?.phase === 'downloading'"
-                              class="relative z-10 text-[8px] font-mono font-bold text-emerald-400 tabular-nums leading-none"
-                            >{{ pkgProgress.getProgress(app.name)?.percent }}</span>
-                            <span
-                              v-else
-                              class="relative z-10 w-2.5 h-2.5 border-[1.5px] border-t-transparent border-indigo-400 rounded-full animate-spin"
-                            />
-                          </div>
-                          <button
-                            class="flex items-center justify-center w-5 h-5 rounded text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0"
-                            title="查看终端日志"
-                            @click.stop="showPkgLogs(app.name)"
-                          >
-                            <NIcon :component="TerminalOutline" :size="11" />
-                          </button>
-                        </div>
-                      </template>
+                      <!-- MV 切换开关 -->
+                      <button
+                        class="w-5 h-5 flex items-center justify-center rounded transition-all duration-150"
+                        :class="getMVEnabled(app)
+                          ? 'text-violet-400/70 hover:text-violet-300 bg-violet-500/10'
+                          : 'text-gray-600 hover:text-gray-400 hover:bg-white/[0.04]'"
+                        :title="getMVEnabled(app) ? '关闭多版本模式' : '开启多版本模式'"
+                        @click.stop="toggleMV(app)"
+                      >
+                        <NIcon :component="FlashOutline" :size="11" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -863,6 +1065,15 @@ function openBucketDrawer() {
     </div>
 
     <BucketDrawer v-model:show="showBucketDrawer" />
+
+    <AppDiscoverDrawer
+      v-model:show="showDiscoverDrawer"
+      :app="selectedDiscoverApp"
+      :installed-names="installedNames"
+      :installing-set="storeInstallingSet"
+      :loading="discoverLoading"
+      @install="handleDiscoverInstall"
+    />
 
     <!-- 单包终端日志弹窗 -->
     <NModal

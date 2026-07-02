@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import {
   NConfigProvider,
   NMessageProvider,
@@ -26,6 +26,7 @@ const settingsStore = useSettingsStore()
 const pkgProgress = usePackageProgress()
 
 const isDark = ref(true)
+const fontFamily = ref('')
 const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
@@ -86,8 +87,8 @@ watch(searchQuery, (val) => {
   }
 })
 
-const themeOverrides = {
-  common: {
+const themeOverrides = computed(() => {
+  const base = {
     borderRadius: '8px',
     primaryColor: '#7B6FF0',
     primaryColorHover: '#9F94F5',
@@ -109,14 +110,25 @@ const themeOverrides = {
     buttonColor2Hover: '#262b36',
     closeColor: 'rgba(255,255,255,0.5)',
     closeColorHover: 'rgba(255,255,255,0.8)',
-  },
-}
+  } as Record<string, any>
+  if (fontFamily.value) base.fontFamily = fontFamily.value
+  return { common: base }
+})
 
 provide('searchQuery', searchQuery)
 provide('updateInfo', updateInfo)
 provide('checkForUpdate', checkForUpdate)
 
 onMounted(async () => {
+  // 从 config.json 加载主题配置
+  try {
+    const theme = await window.scoopAPI.getConfig('theme')
+    if (theme) {
+      if (typeof theme.dark === 'boolean') isDark.value = theme.dark
+      if (typeof theme.fontFamily === 'string') fontFamily.value = theme.fontFamily
+    }
+  } catch { /* use defaults */ }
+
   // 全局持久化日志监听器：始终路由到共享 progressMap，跨 tab 不丢失
   window.scoopAPI.onLog((data) => {
     if (data?.package && data?.message) {
@@ -134,13 +146,22 @@ onMounted(async () => {
       settingsStore.checkAria2(),
       settingsStore.loadProxy(),
     ])
+
     // Silently check for app updates
     checkForUpdate()
   }
 })
 
+// 字体配置变化时同步到全局 body + Naive UI
+watch(fontFamily, (val) => {
+  nextTick(() => {
+    document.body.style.fontFamily = val || null
+  })
+}, { immediate: true })
+
 function toggleTheme() {
   isDark.value = !isDark.value
+  window.scoopAPI.setConfig('theme.dark', isDark.value)
 }
 
 function openSettings() {

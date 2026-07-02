@@ -6,7 +6,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
-    "build:main": "tsc -p tsconfig.node.json",
+    "build:main": "tsc -p tsconfig.node.json && node scripts/copy-config.mjs",
     "build:renderer": "vite build",
     "build:icons": "node scripts/build-icons.cjs",
     "build": "npm run build:icons && npm run build:main && npm run build:renderer",

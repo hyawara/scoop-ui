@@ -24,6 +24,7 @@ interface Window {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
     installScoop: () => Promise<void>
     search: (query: string) => Promise<any[]>
+    searchRaw: (query: string) => Promise<string>
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>
@@ -35,6 +36,10 @@ interface Window {
     listUpdatable: () => Promise<any[]>
     updateAll: () => Promise<void>
     checkAria2: () => Promise<{ enabled: boolean }>
+    openExternal: (url: string) => Promise<void>
+    getConfig: (path?: string) => Promise<any>
+    setConfig: (path: string, value: any) => Promise<boolean>
+    getAllConfig: () => Promise<any>
     listBuckets: () => Promise<{ name: string; source: string }[]>
     addBucket: (name: string, repo?: string) => Promise<void>
     removeBucket: (name: string) => Promise<void>

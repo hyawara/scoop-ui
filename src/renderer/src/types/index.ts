@@ -45,3 +45,21 @@ export interface ProxyConfig {
   address: string
   type: 'http' | 'socks5'
 }
+
+export interface AppVersion {
+  version: string
+  bucket: string
+  manifestName: string
+  isInstalled: boolean
+  size?: string
+}
+
+export interface DiscoverApp {
+  id: string
+  name: string
+  description: string
+  icon: string
+  gradient: string
+  website?: string
+  versions: AppVersion[]
+}

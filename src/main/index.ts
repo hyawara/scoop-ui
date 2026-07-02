@@ -3,6 +3,7 @@ import { join, dirname } from 'path'
 import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { registerScoopIPC } from './ipc/scoop.js'
+import { registerConfigIPC } from './ipc/config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -84,6 +85,7 @@ function registerWindowIPC(): void {
 
 app.whenReady().then(() => {
   registerWindowIPC()
+  registerConfigIPC()
   registerScoopIPC()
   createWindow()
 

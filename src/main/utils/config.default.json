@@ -1,0 +1,18 @@
+{
+    "discover": {
+        "multiVersionPrefs": [
+            "openjdk",
+            "go",
+            "rust",
+            "nodejs",
+            "python"
+        ]
+    },
+    "packages": {
+        "selectedPackages": []
+    },
+    "theme": {
+        "dark": true,
+        "fontFamily": "'IosevkaAnony Medium','LXGW WenKai Mono Medium','Maple Mono NF','黑体'"
+    }
+}

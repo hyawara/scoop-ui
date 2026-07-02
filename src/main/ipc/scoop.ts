@@ -76,7 +76,16 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // Search packages
+  // Search packages (raw text, for precise client-side filtering)
+  ipcMain.handle('scoop:searchRaw', async (_event, query: string) => {
+    if (!/^[a-zA-Z0-9._\- ]{1,100}$/.test(query)) {
+      throw new Error('Invalid search query')
+    }
+    const { stdout } = await execScoop(`search ${query}`)
+    return stdout
+  })
+
+  // Search packages (parsed)
   ipcMain.handle('scoop:search', async (_event, query: string) => {
     if (!/^[a-zA-Z0-9._\- ]{1,100}$/.test(query)) {
       throw new Error('Invalid search query')
@@ -104,7 +113,7 @@ export function registerScoopIPC(): void {
 
   // Fetch package info (manifest) via scoop cat
   ipcMain.handle('scoop:info', async (_event, name: string) => {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(name)) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
     try {
@@ -116,7 +125,7 @@ export function registerScoopIPC(): void {
 
   // Install a package
   ipcMain.handle('scoop:install', async (event, name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) => {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(name)) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
     const args = ['install', name]
@@ -136,7 +145,7 @@ export function registerScoopIPC(): void {
 
   // Uninstall a package
   ipcMain.handle('scoop:uninstall', async (event, name: string, global?: boolean) => {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(name)) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
     const args = `uninstall ${name}${global ? ' --global' : ''}`
@@ -575,6 +584,13 @@ export function registerScoopIPC(): void {
             })
         }
       )
+    }
+  })
+
+  // Open external URL in default browser
+  ipcMain.handle('scoop:openExternal', async (_event, url: string) => {
+    if (/^https?:\/\/.+/.test(url)) {
+      await shell.openExternal(url)
     }
   })
 
