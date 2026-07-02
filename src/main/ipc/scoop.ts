@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, shell, app, net } from 'electron'
-import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
+import { execPowerShell, execGitBash, execScoop, execScoopJSON, BASH_EXE } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
 import { join, basename, dirname } from 'path'
 import { createWriteStream, existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
@@ -698,18 +698,15 @@ export function registerScoopIPC(): void {
     const currentDir = dirname(app.getPath('exe'))
     const appExe = join(currentDir, basename(app.getPath('exe')))
 
-    // Write a silent launcher script that waits for installation then re-launches the app
-    const scriptPath = join(tmpdir(), 'scoop-ui-relaunch.bat')
-    const scriptContent = [
-      '@echo off',
-      `start /wait "" "${installerPath}" /S /D="${currentDir}"`,
-      `start "" "${appExe}"`,
-      `del "${installerPath}" 2>nul`,
-      `del "${scriptPath}" 2>nul`,
-    ].join('\r\n')
-    writeFileSync(scriptPath, scriptContent, 'utf-8')
+    // Use git-bash to orchestrate: install → re-launch → cleanup
+    const relaunchCmd = [
+      `"${installerPath}" /S "/D=${currentDir}"`,
+      `&&`,
+      `"${appExe}" &`,
+      `rm -f "${installerPath}"`,
+    ].join(' ')
 
-    spawn('cmd.exe', ['/c', scriptPath], {
+    spawn(BASH_EXE, ['--login', '-c', relaunchCmd], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,

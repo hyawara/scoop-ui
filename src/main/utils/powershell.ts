@@ -44,6 +44,7 @@ function findBashExe(): string {
 }
 
 const BASH_EXE = findBashExe()
+export { BASH_EXE }
 
 /**
  * Execute a command via PowerShell (for Windows-specific ops: check, install, env, migrate).
