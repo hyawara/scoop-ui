@@ -53,6 +53,7 @@ const addModal = ref(false)
 const newName = ref('')
 const newUrl = ref('')
 const copied = ref(false)
+const syncing = ref(false)
 
 const currentView = ref<'list' | 'detail'>('list')
 const selectedBucket = ref<BucketItem | null>(null)
@@ -134,9 +135,18 @@ async function copyUrl(url: string) {
   }
 }
 
-function handleSync(name: string) {
-  emit('sync', name)
-  message.success(`正在强制同步「${name}」...`)
+async function handleSync(name: string) {
+  syncing.value = true
+  try {
+    emit('sync', name)
+    message.success(`正在强制同步「${name}」...`)
+    await window.scoopAPI.addBucket(name)
+    await fetchBuckets()
+  } catch (e: any) {
+    message.error('同步失败: ' + (e.message || e))
+  } finally {
+    syncing.value = false
+  }
 }
 
 async function fetchBuckets() {
@@ -295,80 +305,78 @@ onMounted(() => {
               <template v-if="selectedBucket">
                 <Transition name="detail-fade" mode="out-in">
                   <!-- VIEW MODE -->
-                  <div v-if="detailMode === 'view'" key="view" class="p-6 flex flex-col gap-6">
-                    <div class="flex items-center gap-3">
-                      <span class="w-3 h-3 rounded-full flex-shrink-0" :class="statusColor(selectedBucket.status)" />
-                      <h2 class="text-xl font-bold text-white tracking-tight">{{ selectedBucket.name }}</h2>
-                      <span
-                        class="px-2 py-0.5 text-[11px] border rounded font-mono leading-none"
-                        :class="isOfficial
-                          ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
-                          : 'border-white/[0.06] text-gray-500'"
-                      >{{ isOfficial ? 'Official' : 'Custom' }}</span>
-                      <span class="text-[11px] text-gray-500 ml-auto">{{ statusLabel(selectedBucket.status) }}</span>
-                    </div>
-
-                    <div>
-                      <label class="text-xs text-gray-500 mb-2 block">软件源地址</label>
-                      <div class="relative group">
-                        <div class="bg-white/[0.03] border border-white/[0.06] rounded-lg px-4 py-3 pr-12 text-[13px] font-mono text-gray-300 leading-relaxed break-all select-all whitespace-pre-wrap">{{ selectedBucket.url }}</div>
-                        <button
-                          class="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-md transition-all duration-200"
-                          :class="copied
-                            ? 'text-emerald-400 bg-emerald-500/10'
-                            : 'text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] opacity-0 group-hover:opacity-100'"
-                          title="复制链接"
-                          @click="copyUrl(selectedBucket.url)"
-                        >
-                          <NIcon :component="copied ? CheckmarkDoneOutline : CopyOutline" size="15" />
-                        </button>
+                  <div v-if="detailMode === 'view'" key="view" class="h-full flex flex-col">
+                    <!-- Top: scrollable content -->
+                    <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+                      <!-- Header: name + status -->
+                      <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0" :class="statusColor(selectedBucket.status)" />
+                        <h2 class="text-xl font-bold text-white tracking-tight">{{ selectedBucket.name }}</h2>
+                        <span
+                          class="px-2 py-0.5 text-[11px] border rounded font-mono leading-none"
+                          :class="isOfficial
+                            ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
+                            : 'border-white/[0.06] text-gray-500'"
+                        >{{ isOfficial ? 'Official' : 'Custom' }}</span>
+                        <span class="text-[11px] text-gray-500 ml-auto">{{ statusLabel(selectedBucket.status) }}</span>
                       </div>
-                    </div>
 
-                    <div class="flex flex-col gap-3.5">
-                      <div class="flex items-start gap-3">
-                        <span class="text-xs text-gray-500 w-20 flex-shrink-0 pt-1">本地路径</span>
-                        <div class="flex-1 flex items-start gap-2 min-w-0">
-                          <code class="text-xs font-mono text-gray-400 break-all leading-relaxed bg-white/[0.02] px-2 py-1 rounded">{{ selectedBucket.localPath }}</code>
+                      <!-- URL (read-only) -->
+                      <div class="space-y-2">
+                        <label class="text-xs text-gray-500 block">软件源地址</label>
+                        <div class="relative group">
+                          <div class="bg-white/[0.03] border border-white/[0.06] rounded-lg px-4 py-3 pr-12 text-[13px] font-mono text-gray-300 leading-relaxed break-all select-all whitespace-pre-wrap">{{ selectedBucket.url }}</div>
                           <button
-                            class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] transition-all"
-                            title="在资源管理器中打开"
-                            @click="emit('open-explorer', selectedBucket.localPath)"
+                            class="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-md transition-all duration-200"
+                            :class="copied
+                              ? 'text-emerald-400 bg-emerald-500/10'
+                              : 'text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] opacity-0 group-hover:opacity-100'"
+                            title="复制链接"
+                            @click="copyUrl(selectedBucket.url)"
                           >
-                            <NIcon :component="FolderOpenOutline" size="15" />
+                            <NIcon :component="copied ? CheckmarkDoneOutline : CopyOutline" size="15" />
                           </button>
                         </div>
                       </div>
-                      <div class="flex items-center gap-3">
-                        <span class="text-xs text-gray-500 w-20 flex-shrink-0">Manifests</span>
-                        <span class="text-sm text-gray-300 font-mono">{{ selectedBucket.appCount.toLocaleString() }} 个</span>
-                      </div>
-                      <div class="flex items-center gap-3">
-                        <span class="text-xs text-gray-500 w-20 flex-shrink-0">上次同步</span>
-                        <span class="text-sm text-gray-400">{{ selectedBucket.lastUpdated }}</span>
+
+                      <!-- Metadata card group -->
+                      <div class="bg-white/[0.03] border border-white/[0.05] rounded-lg divide-y divide-white/[0.05]">
+                        <div class="flex items-start px-4 py-3 gap-4">
+                          <span class="text-xs text-gray-500 w-16 flex-shrink-0 pt-0.5">本地路径</span>
+                          <code class="text-xs font-mono text-gray-300 break-all leading-relaxed select-all">{{ selectedBucket.localPath }}</code>
+                        </div>
+                        <div class="flex items-center px-4 py-3 gap-4">
+                          <span class="text-xs text-gray-500 w-16 flex-shrink-0">Manifests</span>
+                          <span class="text-xs text-gray-300 font-mono">{{ selectedBucket.appCount.toLocaleString() }} 个</span>
+                        </div>
+                        <div class="flex items-center px-4 py-3 gap-4">
+                          <span class="text-xs text-gray-500 w-16 flex-shrink-0">上次同步</span>
+                          <span class="text-xs text-gray-400">{{ selectedBucket.lastUpdated || '—' }}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div class="flex flex-col gap-2 pt-2">
-                      <div class="flex gap-2">
-                        <NButton size="small" secondary class="flex-1 !rounded-lg !h-9" @click="startEdit">
-                          <template #icon><NIcon :component="CreateOutline" size="15" /></template>
-                          编辑配置
-                        </NButton>
-                        <NButton size="small" secondary class="flex-1 !rounded-lg !h-9" @click="emit('open-explorer', selectedBucket.localPath)">
-                          <template #icon><NIcon :component="FolderOpenOutline" size="15" /></template>
+                    <!-- Bottom: sticky action button group -->
+                    <div class="flex-shrink-0 px-5 py-4 border-t border-white/[0.05] bg-[#111318]">
+                      <div class="flex gap-3">
+                        <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="emit('open-explorer', selectedBucket.localPath)">
+                          <template #icon><NIcon :component="FolderOpenOutline" size="16" /></template>
                           打开文件夹
                         </NButton>
+                        <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="startEdit">
+                          <template #icon><NIcon :component="CreateOutline" size="16" /></template>
+                          编辑配置
+                        </NButton>
+                        <NButton
+                          v-if="isOfficial"
+                          size="medium" secondary class="flex-1 !rounded-lg"
+                          :loading="syncing"
+                          @click="handleSync(selectedBucket.name)"
+                        >
+                          <template #icon><NIcon :component="RefreshOutline" size="16" /></template>
+                          强制同步
+                        </NButton>
                       </div>
-                      <NButton
-                        v-if="isOfficial"
-                        size="small" secondary block
-                        class="!rounded-lg !h-9 !border-cyan-500/20 !text-cyan-400 hover:!bg-cyan-500/10"
-                        @click="handleSync(selectedBucket.name)"
-                      >
-                        <template #icon><NIcon :component="RefreshOutline" size="15" /></template>
-                        强制同步
-                      </NButton>
                     </div>
                   </div>
 
