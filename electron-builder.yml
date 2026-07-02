@@ -13,5 +13,6 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: false
 files:
   - dist/**/*
