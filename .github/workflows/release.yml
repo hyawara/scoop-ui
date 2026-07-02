@@ -38,6 +38,7 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             release/update.json \
             release/Scoop*.exe \
+            release/Scoop*.zip \
             --title "Scoop UI ${{ github.ref_name }}" \
             --notes "${{ github.event.release.body }}" \
             --generate-notes
