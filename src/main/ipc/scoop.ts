@@ -688,10 +688,10 @@ export function registerScoopIPC(): void {
   })
 
   // ============================================
-  // Self-Update: Zip-overlay upgrade via detached BAT daemon
-  //   Phase 1: generate .bat guardian script in temp dir
-  //   Phase 2: spawn as orphan process (detached + unref)
-  //   Phase 3: commit suicide → file lock released → BAT wakes →
+  // Self-Update: Zip-overlay upgrade via detached git-bash daemon
+  //   Phase 1: construct inline bash command (no temp script file)
+  //   Phase 2: spawn via git-bash as orphan process (detached + unref)
+  //   Phase 3: commit suicide → lock released → bash wakes →
   //            unzip overlay → relaunch → self-cleanup
   // ============================================
   ipcMain.handle('app:startAppUpgrade', async () => {
@@ -704,55 +704,40 @@ export function registerScoopIPC(): void {
     const currentExeDir = dirname(app.getPath('exe'))
     const appExeName = basename(app.getPath('exe'))
 
-    // ---- 1. 生成 Windows 批处理升级守护脚本 ----
-    const scriptPath = join(tempDir, 'scoop_ui_updater.bat')
+    // Windows → git-bash path: "C:\Program Files\Scoop-UI" → "/c/Program Files/Scoop-UI"
+    const toBashPath = (p: string) => {
+      const n = p.replace(/\\/g, '/')
+      return /^[A-Za-z]:/.test(n) ? '/' + n[0].toLowerCase() + n.slice(2) : n
+    }
 
-    // PowerShell one-liner: 解压 zip（兼容含顶层目录的结构）→ 覆盖安装目录
-    // 路径在 PowerShell 中用单引号包裹，避免双引号转义地狱
-    const escSingle = (s: string) => s.replace(/'/g, "''")
-    const psExtractCmd = [
-      `$z='${escSingle(zipPath)}';`,
-      `$d='${escSingle(currentExeDir)}';`,
-      `$t=[System.IO.Path]::Combine([System.IO.Path]::GetTempPath(),[System.IO.Path]::GetRandomFileName());`,
-      'try{',
-      'Expand-Archive -Path $z -DestinationPath $t -Force;',
-      '$s=Get-ChildItem $t -Directory|Select-Object -First 1;',
-      'Copy-Item -Path $(Join-Path $(if($s){$s.FullName}else{$t}) \'*\') -Destination $d -Recurse -Force',
-      '}finally{',
-      'Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue',
-      '}',
-    ].join('')
+    const bashZipPath = toBashPath(zipPath)
+    const bashExeDir = toBashPath(currentExeDir)
 
-    const batLines = [
-      '@echo off',
-      'chcp 65001 > nul',
-      '',
-      ':: 等待主进程完全退出，释放文件锁',
-      'timeout /t 2 /nobreak > nul',
-      '',
-      ':: 静默解压 Zip 并覆盖安装目录',
-      `powershell -NoProfile -NonInteractive -Command "${psExtractCmd}"`,
-      '',
-      ':: 原地复活',
-      `cd /d "${currentExeDir}"`,
-      `start "" "${appExeName}"`,
-      '',
-      ':: 清理升级包和自身',
-      `del /f /q "${zipPath}"`,
-      '(goto) 2>nul & del "%~f0"',
-    ]
+    // Pure bash upgrade sequence (no PowerShell, no batch):
+    //   sleep 2         → wait for main process to release file lock
+    //   mktemp + unzip  → extract zip (handles top-level dir)
+    //   cp -rf          → overwrite install directory
+    //   cmd //c start   → launch new version via Windows shell
+    //   rm -rf          → self-cleanup
+    const bashCommand = [
+      `sleep 2`,
+      `TMPD=$(mktemp -d)`,
+      `unzip -oq "${bashZipPath}" -d "$TMPD"`,
+      `TOPD=$(ls -d "$TMPD"/*/ 2>/dev/null | head -1)`,
+      `cp -rf "\${TOPD:-$TMPD}/"* "${bashExeDir}/"`,
+      `rm -rf "$TMPD"`,
+      `cd "${bashExeDir}"`,
+      `cmd //c start "" "${appExeName}"`,
+      `rm -f "${bashZipPath}"`,
+    ].join(' && ')
 
-    writeFileSync(scriptPath, batLines.join('\r\n'), 'utf-8')
-
-    // ---- 2. 以"孤儿进程"模式拉起批处理（完全脱离父进程）----
-    const child = spawn('cmd.exe', ['/c', scriptPath], {
+    const child = spawn(BASH_EXE, ['--login', '-c', bashCommand], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
     })
     child.unref()
 
-    // ---- 3. 主程序立即自杀，释放文件锁 ----
     app.exit(0)
   })
 }
