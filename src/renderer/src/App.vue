@@ -27,6 +27,7 @@ const pkgProgress = usePackageProgress()
 
 const isDark = ref(true)
 const fontFamily = ref('')
+const colorPreset = ref('aurora')
 const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
@@ -87,11 +88,20 @@ watch(searchQuery, (val) => {
   }
 })
 
+const presetColors: Record<string, { primary: string; primaryHover: string }> = {
+  aurora: { primary: '#7B6FF0', primaryHover: '#9F94F5' },
+  ocean: { primary: '#3B82F6', primaryHover: '#60A5FA' },
+  emerald: { primary: '#10B981', primaryHover: '#34D399' },
+  sunset: { primary: '#F59E0B', primaryHover: '#FBBF24' },
+  rose: { primary: '#EC4899', primaryHover: '#F472B6' },
+}
+
 const themeOverrides = computed(() => {
-  const base = {
+  const colors = presetColors[colorPreset.value] || presetColors.aurora
+  const base: Record<string, any> = {
     borderRadius: '8px',
-    primaryColor: '#7B6FF0',
-    primaryColorHover: '#9F94F5',
+    primaryColor: colors.primary,
+    primaryColorHover: colors.primaryHover,
     bodyColor: 'transparent',
     cardColor: '#13151a',
     modalColor: '#1e222b',
@@ -102,7 +112,7 @@ const themeOverrides = computed(() => {
     inputColor: 'rgba(255,255,255,0.06)',
     inputColorFocus: 'rgba(255,255,255,0.1)',
     inputBorder: 'rgba(255,255,255,0.12)',
-    inputBorderFocus: '#7B6FF0',
+    inputBorderFocus: colors.primary,
     popoverColor: '#1e222b',
     tableColor: 'transparent',
     tagColor: 'rgba(255,255,255,0.08)',
@@ -110,7 +120,7 @@ const themeOverrides = computed(() => {
     buttonColor2Hover: '#262b36',
     closeColor: 'rgba(255,255,255,0.5)',
     closeColorHover: 'rgba(255,255,255,0.8)',
-  } as Record<string, any>
+  }
   if (fontFamily.value) base.fontFamily = fontFamily.value
   return { common: base }
 })
@@ -118,6 +128,9 @@ const themeOverrides = computed(() => {
 provide('searchQuery', searchQuery)
 provide('updateInfo', updateInfo)
 provide('checkForUpdate', checkForUpdate)
+provide('isDark', isDark)
+provide('fontFamily', fontFamily)
+provide('colorPreset', colorPreset)
 
 onMounted(async () => {
   // 从 config.json 加载主题配置
@@ -126,6 +139,7 @@ onMounted(async () => {
     if (theme) {
       if (typeof theme.dark === 'boolean') isDark.value = theme.dark
       if (typeof theme.fontFamily === 'string') fontFamily.value = theme.fontFamily
+      if (typeof theme.colorPreset === 'string') colorPreset.value = theme.colorPreset
     }
   } catch { /* use defaults */ }
 
@@ -210,11 +224,10 @@ function openSettings() {
             </div>
           </div>
         </NLoadingBarProvider>
+
+        <SettingsPanel v-model:show="showSettings" />
       </NDialogProvider>
     </NMessageProvider>
-
-    <!-- Settings Panel (inside providers for NModal context) -->
-    <SettingsPanel v-model:show="showSettings" />
   </NConfigProvider>
 </template>
 

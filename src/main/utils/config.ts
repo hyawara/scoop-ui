@@ -19,6 +19,7 @@ export interface AppConfig {
   theme: {
     dark: boolean
     fontFamily: string
+    colorPreset: string
   }
 }
 
@@ -32,6 +33,7 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: {
     dark: true,
     fontFamily: "'IosevkaAnony','LXGW WenKai Mono','Maple Mono NF','黑体'",
+    colorPreset: 'aurora',
   },
 }
 
