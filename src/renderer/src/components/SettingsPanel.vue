@@ -6,6 +6,7 @@ import {
   NModal,
   NTag,
   NSpin,
+  NProgress,
   NTabs,
   NTabPane,
   NAutoComplete,
@@ -39,14 +40,16 @@ const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 const appDownloading = inject<any>('appDownloading')
 
-const APP_VERSION = '1.0.7'
+const APP_VERSION = '1.0.8'
 
 const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
-type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available'
+type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'restarting'
 const updateStatus = ref<UpdateStatus>('idle')
 const remoteVersion = ref('')
 const releaseNotes = ref('')
 const downloadUrl = ref('')
+const zipUrl = ref('')
+const downloadProgress = ref(0)
 
 const scoopVersion = ref('')
 const scoopVersionLoading = ref(false)
@@ -163,6 +166,7 @@ async function handleCheckUpdate() {
       remoteVersion.value = result.version || ''
       releaseNotes.value = result.notes || ''
       downloadUrl.value = result.downloadUrl || ''
+      zipUrl.value = result.zipUrl || ''
       updateStatus.value = 'available'
       message.success(`发现新版本 v${result.version}`)
     } else {
@@ -177,16 +181,27 @@ async function handleCheckUpdate() {
 
 async function triggerAppUpgrade() {
   if (!downloadUrl.value) return
-  updateStatus.value = 'checking'
+  updateStatus.value = 'downloading'
+  downloadProgress.value = 0
   if (appDownloading) appDownloading.value = true
+
+  window.scoopAPI.onUpdateProgress((data: { percent: number }) => {
+    downloadProgress.value = data.percent
+  })
+
   try {
-    await window.scoopAPI.downloadUpdate(downloadUrl.value)
-    message.success('更新下载完成，即将重启安装...')
-    await new Promise(r => setTimeout(r, 2000))
-    window.scoopAPI.exitAndInstall()
+    const targetUrl = zipUrl.value || downloadUrl.value
+    await window.scoopAPI.downloadUpdate(targetUrl)
+
+    updateStatus.value = 'restarting'
+    downloadProgress.value = 100
+    message.success('下载完成，正在重启应用...')
+    await new Promise(r => setTimeout(r, 1500))
+    window.scoopAPI.startAppUpgrade()
   } catch (e) {
-    message.error(`更新下载失败: ${e instanceof Error ? e.message : String(e)}`)
+    message.error(`更新失败: ${e instanceof Error ? e.message : String(e)}`)
     if (appDownloading) appDownloading.value = false
+    window.scoopAPI.removeUpdateProgressListener()
     updateStatus.value = 'available'
   }
 }
@@ -214,6 +229,8 @@ watch(() => props.show, (val) => {
     remoteVersion.value = ''
     releaseNotes.value = ''
     downloadUrl.value = ''
+    zipUrl.value = ''
+    downloadProgress.value = 0
   }
 })
 </script>
@@ -475,6 +492,27 @@ watch(() => props.show, (val) => {
               <span v-if="releaseNotes" class="text-[11px] text-slate-500 truncate max-w-[200px]">
                 更新日志：{{ releaseNotes }}
               </span>
+            </div>
+
+            <div v-else-if="updateStatus === 'downloading'" class="flex items-center gap-3">
+              <div class="w-3.5 h-3.5 border-2 border-t-transparent border-blue-400 rounded-full animate-spin flex-shrink-0" />
+              <span class="text-xs text-blue-300 font-mono min-w-[8em] whitespace-nowrap">
+                {{ downloadProgress > 0 ? `正在下载 ${downloadProgress}%` : '准备下载...' }}
+              </span>
+              <NProgress
+                type="line"
+                :percentage="downloadProgress"
+                :height="4"
+                :border-radius="2"
+                :show-indicator="false"
+                status="info"
+                style="width: 100px"
+              />
+            </div>
+
+            <div v-else-if="updateStatus === 'restarting'" class="flex items-center gap-2">
+              <div class="w-3.5 h-3.5 border-2 border-t-transparent border-green-400 rounded-full animate-spin flex-shrink-0" />
+              <span class="text-xs text-green-400 font-mono animate-pulse">正在重启应用...</span>
             </div>
           </div>
         </div>

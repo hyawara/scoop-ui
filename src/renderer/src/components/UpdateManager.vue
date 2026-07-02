@@ -56,14 +56,15 @@ onUnmounted(() => {
 })
 
 async function startDownload() {
-  if (!updateInfo?.value?.downloadUrl) return
+  const dlUrl = updateInfo?.value?.zipUrl || updateInfo?.value?.downloadUrl
+  if (!dlUrl) return
   state.value = 'updating'
   downloadProgress.value = 0
   try {
-    await window.scoopAPI.downloadUpdate(updateInfo.value.downloadUrl)
+    await window.scoopAPI.downloadUpdate(dlUrl)
     state.value = 'hidden'
     await new Promise(r => setTimeout(r, 1500))
-    window.scoopAPI.exitAndInstall()
+    window.scoopAPI.startAppUpgrade()
   } catch {
     state.value = 'hidden'
   }

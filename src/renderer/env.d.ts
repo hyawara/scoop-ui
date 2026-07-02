@@ -69,10 +69,11 @@ interface Window {
       notes?: string
       pubDate?: string
       downloadUrl?: string
+      zipUrl?: string
       error?: string
     }>
     downloadUpdate: (url: string) => Promise<{ success: boolean; path: string }>
-    exitAndInstall: () => void
+    startAppUpgrade: () => void
     onUpdateProgress: (callback: (data: { percent: number }) => void) => void
     removeUpdateProgressListener: () => void
   }

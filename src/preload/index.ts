@@ -63,7 +63,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   // Self-Update APIs
   checkForUpdate: (url: string) => ipcRenderer.invoke('app:checkForUpdate', url),
   downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),
-  exitAndInstall: () => ipcRenderer.invoke('app:exitAndInstall'),
+  startAppUpgrade: () => ipcRenderer.invoke('app:startAppUpgrade'),
   onUpdateProgress: (callback: (data: { percent: number }) => void) => {
     ipcRenderer.on('app:updateProgress', (_event, data) => callback(data))
   },

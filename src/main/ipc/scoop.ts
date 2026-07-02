@@ -625,19 +625,21 @@ export function registerScoopIPC(): void {
         notes?: string
         pub_date?: string
         platforms?: {
-          'windows-x86_64'?: { url?: string; signature?: string }
+          'windows-x86_64'?: { url?: string; signature?: string; zipUrl?: string }
         }
       }
       const remoteVersion = data.version || ''
       const localVersion = app.getVersion()
       if (remoteVersion && semverGt(remoteVersion, localVersion)) {
         const downloadUrl = data.platforms?.['windows-x86_64']?.url || ''
+        const zipUrl = data.platforms?.['windows-x86_64']?.zipUrl || ''
         return {
           hasUpdate: true,
           version: remoteVersion,
           notes: data.notes || '',
           pubDate: data.pub_date || '',
           downloadUrl,
+          zipUrl,
         }
       }
       return { hasUpdate: false }
@@ -653,7 +655,7 @@ export function registerScoopIPC(): void {
   // ============================================
   ipcMain.handle('app:downloadUpdate', async (event, url: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const filePath = join(tmpdir(), 'scoop-ui-update.exe')
+    const filePath = join(tmpdir(), 'scoop-ui-update.zip')
     try {
       let response = await net.fetch(url, { signal: AbortSignal.timeout(300000) })
       if (!response.ok && response.status === 404) {
@@ -668,7 +670,6 @@ export function registerScoopIPC(): void {
       const fileStream = createWriteStream(filePath)
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No response body')
-      const decoder = new TextDecoder()
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -687,31 +688,71 @@ export function registerScoopIPC(): void {
   })
 
   // ============================================
-  // Self-Update: Exit app and launch installer
+  // Self-Update: Zip-overlay upgrade via detached BAT daemon
+  //   Phase 1: generate .bat guardian script in temp dir
+  //   Phase 2: spawn as orphan process (detached + unref)
+  //   Phase 3: commit suicide → file lock released → BAT wakes →
+  //            unzip overlay → relaunch → self-cleanup
   // ============================================
-  ipcMain.handle('app:exitAndInstall', async () => {
-    const installerPath = join(tmpdir(), 'scoop-ui-update.exe')
-    if (!existsSync(installerPath)) {
-      throw new Error('Installer not found')
+  ipcMain.handle('app:startAppUpgrade', async () => {
+    const tempDir = app.getPath('temp')
+    const zipPath = join(tempDir, 'scoop-ui-update.zip')
+    if (!existsSync(zipPath)) {
+      throw new Error('升级包未找到，请重新下载')
     }
-    // Use NSIS silent mode + current install directory for seamless incremental update
-    const currentDir = dirname(app.getPath('exe'))
-    const appExe = join(currentDir, basename(app.getPath('exe')))
 
-    // Use git-bash to orchestrate: install → re-launch → cleanup
-    const relaunchCmd = [
-      `"${installerPath}" /S "/D=${currentDir}"`,
-      `&&`,
-      `"${appExe}" &`,
-      `rm -f "${installerPath}"`,
-    ].join(' ')
+    const currentExeDir = dirname(app.getPath('exe'))
+    const appExeName = basename(app.getPath('exe'))
 
-    spawn(BASH_EXE, ['--login', '-c', relaunchCmd], {
+    // ---- 1. 生成 Windows 批处理升级守护脚本 ----
+    const scriptPath = join(tempDir, 'scoop_ui_updater.bat')
+
+    // PowerShell one-liner: 解压 zip（兼容含顶层目录的结构）→ 覆盖安装目录
+    // 路径在 PowerShell 中用单引号包裹，避免双引号转义地狱
+    const escSingle = (s: string) => s.replace(/'/g, "''")
+    const psExtractCmd = [
+      `$z='${escSingle(zipPath)}';`,
+      `$d='${escSingle(currentExeDir)}';`,
+      `$t=[System.IO.Path]::Combine([System.IO.Path]::GetTempPath(),[System.IO.Path]::GetRandomFileName());`,
+      'try{',
+      'Expand-Archive -Path $z -DestinationPath $t -Force;',
+      '$s=Get-ChildItem $t -Directory|Select-Object -First 1;',
+      'Copy-Item -Path $(Join-Path $(if($s){$s.FullName}else{$t}) \'*\') -Destination $d -Recurse -Force',
+      '}finally{',
+      'Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue',
+      '}',
+    ].join('')
+
+    const batLines = [
+      '@echo off',
+      'chcp 65001 > nul',
+      '',
+      ':: 等待主进程完全退出，释放文件锁',
+      'timeout /t 2 /nobreak > nul',
+      '',
+      ':: 静默解压 Zip 并覆盖安装目录',
+      `powershell -NoProfile -NonInteractive -Command "${psExtractCmd}"`,
+      '',
+      ':: 原地复活',
+      `cd /d "${currentExeDir}"`,
+      `start "" "${appExeName}"`,
+      '',
+      ':: 清理升级包和自身',
+      `del /f /q "${zipPath}"`,
+      '(goto) 2>nul & del "%~f0"',
+    ]
+
+    writeFileSync(scriptPath, batLines.join('\r\n'), 'utf-8')
+
+    // ---- 2. 以"孤儿进程"模式拉起批处理（完全脱离父进程）----
+    const child = spawn('cmd.exe', ['/c', scriptPath], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
-    }).unref()
+    })
+    child.unref()
 
-    app.quit()
+    // ---- 3. 主程序立即自杀，释放文件锁 ----
+    app.exit(0)
   })
 }
