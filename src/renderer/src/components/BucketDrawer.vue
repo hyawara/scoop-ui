@@ -135,11 +135,22 @@ async function copyUrl(url: string) {
   }
 }
 
-async function handleSync(name: string) {
+function handleSync(name: string) {
+  emit('sync', name)
+  message.success(`正在强制同步「${name}」...`)
+}
+
+async function openFolder(path: string) {
+  try {
+    await window.scoopAPI.openPath(path)
+  } catch (e: any) {
+    message.error('打开文件夹失败: ' + (e.message || e))
+  }
+}
+
+async function handleSyncAndRefresh(name: string) {
   syncing.value = true
   try {
-    emit('sync', name)
-    message.success(`正在强制同步「${name}」...`)
     await window.scoopAPI.addBucket(name)
     await fetchBuckets()
   } catch (e: any) {
@@ -359,7 +370,7 @@ onMounted(() => {
                     <!-- Bottom: sticky action button group -->
                     <div class="flex-shrink-0 px-5 pt-4 pb-5 border-t border-white/[0.08]">
                       <div class="flex gap-3">
-                        <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="emit('open-explorer', selectedBucket.localPath)">
+                        <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="openFolder(selectedBucket.localPath)">
                           <template #icon><NIcon :component="FolderOpenOutline" size="16" /></template>
                           打开文件夹
                         </NButton>
@@ -371,7 +382,7 @@ onMounted(() => {
                           v-if="isOfficial"
                           size="medium" secondary class="flex-1 !rounded-lg"
                           :loading="syncing"
-                          @click="handleSync(selectedBucket.name)"
+                          @click="handleSyncAndRefresh(selectedBucket.name)"
                         >
                           <template #icon><NIcon :component="RefreshOutline" size="16" /></template>
                           强制同步

@@ -443,7 +443,7 @@ export function registerScoopIPC(): void {
 
   // List buckets
   ipcMain.handle('scoop:listBuckets', async () => {
-    const { stdout } = await execScoop('bucket list')
+    const { stdout } = await execScoop('bucket list -v')
     const lines = stdout.split('\n')
     const items: { name: string; source: string }[] = []
     let pastHeader = false
@@ -453,8 +453,19 @@ export function registerScoopIPC(): void {
         continue
       }
       const fields = line.trim().split(/\s{2,}/)
+      // scoop bucket list -v 输出: Name  Source  [Updated  Info]
+      // fields[0] = name, fields[1] = source URL (可能带时间戳)
+      // 用正则提取 URL（http/https 开头到行尾或遇到时间模式）
       if (fields.length >= 2 && fields[0] && !fields[0].startsWith('Name')) {
-        items.push({ name: fields[0].trim(), source: fields[1]?.trim() || '' })
+        const name = fields[0].trim()
+        // 从 fields[1] 中提取纯 URL，去掉可能附带的时间戳
+        let source = fields[1]?.trim() || ''
+        // 匹配 URL 部分：http(s)://... 直到遇到日期模式或行尾
+        const urlMatch = source.match(/^(https?:\/\/\S+)/)
+        if (urlMatch) {
+          source = urlMatch[1]
+        }
+        items.push({ name, source })
       }
     }
 
