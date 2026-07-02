@@ -357,7 +357,7 @@ onMounted(() => {
                     </div>
 
                     <!-- Bottom: sticky action button group -->
-                    <div class="flex-shrink-0 px-5 py-4 border-t border-white/[0.05] bg-[#111318]">
+                    <div class="flex-shrink-0 px-5 pt-4 pb-5 border-t border-white/[0.08]">
                       <div class="flex gap-3">
                         <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="emit('open-explorer', selectedBucket.localPath)">
                           <template #icon><NIcon :component="FolderOpenOutline" size="16" /></template>
