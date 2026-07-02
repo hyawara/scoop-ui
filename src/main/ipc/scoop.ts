@@ -445,7 +445,7 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:listBuckets', async () => {
     const { stdout } = await execScoop('bucket list')
     const lines = stdout.split('\n')
-    const result: { name: string; source: string }[] = []
+    const items: { name: string; source: string }[] = []
     let pastHeader = false
     for (const line of lines) {
       if (!pastHeader) {
@@ -454,8 +454,56 @@ export function registerScoopIPC(): void {
       }
       const fields = line.trim().split(/\s{2,}/)
       if (fields.length >= 2 && fields[0] && !fields[0].startsWith('Name')) {
-        result.push({ name: fields[0].trim(), source: fields[1]?.trim() || '' })
+        items.push({ name: fields[0].trim(), source: fields[1]?.trim() || '' })
       }
+    }
+
+    // Enrich each bucket with localPath, appCount, lastUpdated
+    let scoopPath = ''
+    try {
+      const { stdout: envOut } = await execPowerShell('echo $env:SCOOP')
+      scoopPath = envOut.trim() || join(homedir(), 'scoop')
+    } catch {
+      scoopPath = join(homedir(), 'scoop')
+    }
+
+    const OFFICIAL = new Set(['main', 'extras', 'versions', 'nirsoft', 'php', 'dorado', 'nonportable', 'java', 'games'])
+    const result: {
+      name: string; source: string; type: 'official' | 'custom'
+      localPath: string; appCount: number; lastUpdated: string
+    }[] = []
+
+    for (const item of items) {
+      const localPath = join(scoopPath, 'buckets', item.name)
+      let appCount = 0
+      let lastUpdated = ''
+
+      try {
+        if (existsSync(localPath)) {
+          const ps = `
+            $count = (Get-ChildItem -Path '${localPath}' -Filter *.json -File -ErrorAction SilentlyContinue).Count
+            $gitDir = Join-Path '${localPath}' '.git'
+            $last = ''
+            if (Test-Path $gitDir) {
+              $last = (git -C '${localPath}' log -1 --format=%ci 2>$null)
+            }
+            Write-Output "$count|$last"
+          `.trim()
+          const { stdout: out } = await execPowerShell(ps)
+          const [countStr, ...rest] = out.trim().split('|')
+          appCount = parseInt(countStr) || 0
+          lastUpdated = rest.join('|').trim().slice(0, 16).replace('T', ' ') || ''
+        }
+      } catch { /* ignore */ }
+
+      result.push({
+        name: item.name,
+        source: item.source,
+        type: OFFICIAL.has(item.name) ? 'official' : 'custom',
+        localPath,
+        appCount,
+        lastUpdated,
+      })
     }
     return result
   })

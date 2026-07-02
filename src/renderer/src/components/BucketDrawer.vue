@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   NDrawer,
   NDrawerContent,
@@ -61,58 +61,7 @@ const editForm = ref<{ name: string; url: string }>({ name: '', url: '' })
 
 const OFFICIAL_NAMES = new Set(['main', 'extras', 'versions', 'nirsoft', 'php', 'dorado', 'nonportable', 'java', 'games'])
 
-const buckets = ref<BucketItem[]>([
-  {
-    id: '1',
-    name: 'main',
-    url: 'https://github.com/ScoopInstaller/Main',
-    status: 'success',
-    type: 'official',
-    appCount: 1280,
-    localPath: 'C:\Users\hyawa\scoop\buckets\main',
-    lastUpdated: '2024-06-30 14:32',
-  },
-  {
-    id: '2',
-    name: 'extras',
-    url: 'https://github.com/ScoopInstaller/Extras',
-    status: 'success',
-    type: 'official',
-    appCount: 2432,
-    localPath: 'C:\Users\hyawa\scoop\buckets\extras',
-    lastUpdated: '2024-06-30 12:15',
-  },
-  {
-    id: '3',
-    name: 'versions',
-    url: 'https://github.com/ScoopInstaller/Versions',
-    status: 'warning',
-    type: 'official',
-    appCount: 546,
-    localPath: 'C:\Users\hyawa\scoop\buckets\versions',
-    lastUpdated: '2024-06-28 09:40',
-  },
-  {
-    id: '4',
-    name: 'nirsoft',
-    url: 'https://github.com/ScoopInstaller/Nirsoft',
-    status: 'success',
-    type: 'official',
-    appCount: 218,
-    localPath: 'C:\Users\hyawa\scoop\buckets\nirsoft',
-    lastUpdated: '2024-06-29 18:22',
-  },
-  {
-    id: '5',
-    name: 'my-custom-bucket',
-    url: 'https://github.com/hyawara/scoop-bucket-with-a-very-long-name',
-    status: 'error',
-    type: 'custom',
-    appCount: 12,
-    localPath: 'C:\Users\hyawa\scoop\buckets\my-custom-bucket',
-    lastUpdated: '2024-06-25 11:00',
-  },
-])
+const buckets = ref<BucketItem[]>([])
 
 const isOfficial = computed(() => selectedBucket.value?.type === 'official')
 
@@ -190,39 +139,63 @@ function handleSync(name: string) {
   message.success(`正在强制同步「${name}」...`)
 }
 
-function handleRemove(name: string) {
-  const idx = buckets.value.findIndex(b => b.name === name)
-  if (idx === -1) return
-  buckets.value.splice(idx, 1)
-  if (selectedBucket.value?.name === name) {
-    goBack()
+async function fetchBuckets() {
+  loading.value = true
+  try {
+    const data = await window.scoopAPI.listBuckets()
+    buckets.value = (data as any[]).map((b: any, i: number) => ({
+      id: String(i),
+      name: b.name,
+      url: b.source,
+      status: 'success' as const,
+      type: b.type as 'official' | 'custom',
+      appCount: b.appCount || 0,
+      localPath: b.localPath || '',
+      lastUpdated: b.lastUpdated || '',
+    }))
+  } catch (e: any) {
+    message.error('获取软件源列表失败: ' + (e.message || e))
+  } finally {
+    loading.value = false
   }
-  emit('remove', name)
 }
 
-function handleAdd() {
+async function handleRemove(name: string) {
+  try {
+    await window.scoopAPI.removeBucket(name)
+    buckets.value = buckets.value.filter(b => b.name !== name)
+    if (selectedBucket.value?.name === name) {
+      goBack()
+    }
+    emit('remove', name)
+    message.success(`Bucket「${name}」已移除`)
+  } catch (e: any) {
+    message.error('移除失败: ' + (e.message || e))
+  }
+}
+
+async function handleAdd() {
   if (!newName.value.trim()) return
   const exists = buckets.value.some(b => b.name === newName.value.trim())
   if (exists) {
     message.warning('Bucket 名称已存在')
     return
   }
-  buckets.value.push({
-    id: String(Date.now()),
-    name: newName.value.trim(),
-    url: newUrl.value.trim() || `https://github.com/user/${newName.value.trim()}`,
-    status: 'success',
-    type: 'custom',
-    appCount: 0,
-    localPath: `C:\Users\hyawa\scoop\buckets\${newName.value.trim()}`,
-    lastUpdated: new Date().toLocaleString(),
-  })
-  emit('add', newName.value.trim(), newUrl.value.trim())
-  message.success(`Bucket「${newName.value.trim()}」已添加`)
-  newName.value = ''
-  newUrl.value = ''
-  addModal.value = false
+  try {
+    await window.scoopAPI.addBucket(newName.value.trim(), newUrl.value.trim() || undefined)
+    message.success(`Bucket「${newName.value.trim()}」已添加`)
+    newName.value = ''
+    newUrl.value = ''
+    addModal.value = false
+    await fetchBuckets()
+  } catch (e: any) {
+    message.error('添加失败: ' + (e.message || e))
+  }
 }
+
+onMounted(() => {
+  fetchBuckets()
+})
 </script>
 
 <template>
