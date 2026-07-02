@@ -14,18 +14,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: 'pnpm'
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
       - name: Build source
-        run: npm run build
+        run: pnpm run build
 
       - name: Package installer
-        run: npx electron-builder --win --x64
+        run: pnpm electron-builder --win --x64
         env:
           GH_TOKEN: ${{ github.token }}
 

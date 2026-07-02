@@ -38,54 +38,35 @@ scoop-ui/
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Vite dev server (port 5173) |
-| `npx vue-tsc --noEmit` | Full TS type check |
-| `npm run build:icons` | Generate PNG/ICO from SVG |
-| `npm run build:main` | `tsc -p tsconfig.node.json` + `copy-config.mjs` |
-| `npm run build:renderer` | `vite build` → `dist/renderer` |
-| `npm run build` | All three: icons → main → renderer |
-| `npm run electron:dev` | Build + run electron . |
-| `npm run electron:build` | Build + electron-builder + generate-update-json |
+| `pnpm run dev` | Vite dev server (port 5173) |
+| `pnpm vue-tsc --noEmit` | Full TS type check |
+| `pnpm run build:icons` | Generate PNG/ICO from SVG |
+| `pnpm run build:main` | `tsc -p tsconfig.node.json` + `copy-config.mjs` |
+| `pnpm run build:renderer` | `vite build` → `dist/renderer` |
+| `pnpm run build` | All three: icons → main → renderer |
+| `pnpm run electron:dev` | Build + run electron . |
+| `pnpm run electron:build` | Build + electron-builder + generate-update-json |
 
-Quick type-check: `npx vue-tsc --noEmit`
+Quick type-check: `pnpm vue-tsc --noEmit`
 
 ## Build & Release Pipeline
 
 Full release (for CI / tag push):
 
 ```bash
-npm run build:icons            # 1. Generate app icons (PNG + ICO + dist/icons/)
-npm run build:main             # 2. Compile main/preload TS + copy config template
-npm run build:renderer         # 3. Build Vue/Vite renderer
-npx electron-builder           # 4. Package NSIS installer → release/
+pnpm run build:icons            # 1. Generate app icons (PNG + ICO + dist/icons/)
+pnpm run build:main             # 2. Compile main/preload TS + copy config template
+pnpm run build:renderer         # 3. Build Vue/Vite renderer
+pnpm electron-builder           # 4. Package NSIS + Zip → release/
 node scripts/generate-update-json.mjs  # 5. Generate update.json
 ```
 
-Or one-liner: `npm run electron:build` (chains build → electron-builder → update.json)
+Or one-liner: `pnpm run electron:build` (chains build → electron-builder → update.json)
 
 Output:
 - `release/Scoop UI Setup X.Y.Z.exe` — NSIS installer
+- `release/Scoop UI-X.Y.Z-win.zip` — portable zip for overlay upgrade
 - `release/update.json` — auto-update metadata
-
-### CI (GitHub Actions) checklist for new tag:
-```yaml
-# Suggested workflow trigger: push tags v*
-jobs:
-  build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-      - run: npm ci
-      - run: npm run build
-      - run: npx electron-builder
-      - run: node scripts/generate-update-json.mjs
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release/*.exe
-            release/update.json
-```
 
 ## Key Architecture
 
