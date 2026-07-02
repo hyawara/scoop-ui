@@ -16,7 +16,7 @@ function sendProgress(win: BrowserWindow | null, data: any) {
 const SCOOP_INSTALL_SCRIPT = `
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 irm get.scoop.sh | iex
-scoop install git
+scoop install git 7zip
 `
 
 export function registerScoopIPC(): void {
@@ -713,16 +713,16 @@ export function registerScoopIPC(): void {
     const bashZipPath = toBashPath(zipPath)
     const bashExeDir = toBashPath(currentExeDir)
 
-    // Pure bash upgrade sequence (no PowerShell, no batch):
+    // Pure bash upgrade sequence (scoop guarantees git + 7zip installed):
     //   sleep 2         → wait for main process to release file lock
-    //   mktemp + unzip  → extract zip (handles top-level dir)
+    //   mktemp + 7z x   → extract zip (handles top-level dir)
     //   cp -rf          → overwrite install directory
     //   cmd //c start   → launch new version via Windows shell
     //   rm -rf          → self-cleanup
     const bashCommand = [
       `sleep 2`,
       `TMPD=$(mktemp -d)`,
-      `unzip -oq "${bashZipPath}" -d "$TMPD"`,
+      `7z x "${bashZipPath}" "-o$TMPD" -y`,
       `TOPD=$(ls -d "$TMPD"/*/ 2>/dev/null | head -1)`,
       `cp -rf "\${TOPD:-$TMPD}/"* "${bashExeDir}/"`,
       `rm -rf "$TMPD"`,
