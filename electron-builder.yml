@@ -14,5 +14,6 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
+  installDir: $PROGRAMFILES\Scoop-UI
 files:
   - dist/**/*
