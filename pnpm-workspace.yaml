@@ -1,3 +1,5 @@
-onlyBuiltDependencies:
-  - electron
-  - electron-winstaller
+packages:
+  - "."
+allowBuilds:
+  electron: true
+  electron-winstaller: true
