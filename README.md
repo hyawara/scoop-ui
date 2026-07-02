@@ -37,10 +37,17 @@ npm run electron:build
 
 ## Screenshots
 
-|                                         |                                   |
-| --------------------------------------- | --------------------------------- |
-| ![Dashboard](screenshots/dashboard.png) | ![Search](screenshots/search.png) |
-| ![Settings](screenshots/settings.png)   |                                   |
+### Dashboard
+
+![Dashboard](screenshots/dashboard.png)
+
+### Search
+
+![Search](screenshots/search.png)
+
+### Settings
+
+![Settings](screenshots/settings.png)
 
 ## Project Structure
 
