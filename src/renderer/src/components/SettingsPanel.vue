@@ -181,7 +181,9 @@ async function triggerAppUpgrade() {
   if (appDownloading) appDownloading.value = true
   try {
     await window.scoopAPI.downloadUpdate(downloadUrl.value)
-    setTimeout(() => window.scoopAPI.exitAndInstall(), 1500)
+    message.success('更新下载完成，即将重启安装...')
+    await new Promise(r => setTimeout(r, 2000))
+    window.scoopAPI.exitAndInstall()
   } catch (e) {
     message.error(`更新下载失败: ${e instanceof Error ? e.message : String(e)}`)
     if (appDownloading) appDownloading.value = false

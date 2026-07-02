@@ -61,9 +61,9 @@ async function startDownload() {
   downloadProgress.value = 0
   try {
     await window.scoopAPI.downloadUpdate(updateInfo.value.downloadUrl)
-    setTimeout(() => {
-      window.scoopAPI.exitAndInstall()
-    }, 1500)
+    state.value = 'hidden'
+    await new Promise(r => setTimeout(r, 1500))
+    window.scoopAPI.exitAndInstall()
   } catch {
     state.value = 'hidden'
   }

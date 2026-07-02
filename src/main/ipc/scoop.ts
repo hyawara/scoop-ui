@@ -696,11 +696,25 @@ export function registerScoopIPC(): void {
     }
     // Use NSIS silent mode + current install directory for seamless incremental update
     const currentDir = dirname(app.getPath('exe'))
-    spawn(installerPath, ['/S', `/D=${currentDir}`], {
+    const appExe = join(currentDir, basename(app.getPath('exe')))
+
+    // Write a silent launcher script that waits for installation then re-launches the app
+    const scriptPath = join(tmpdir(), 'scoop-ui-relaunch.bat')
+    const scriptContent = [
+      '@echo off',
+      `start /wait "" "${installerPath}" /S /D="${currentDir}"`,
+      `start "" "${appExe}"`,
+      `del "${installerPath}" 2>nul`,
+      `del "${scriptPath}" 2>nul`,
+    ].join('\r\n')
+    writeFileSync(scriptPath, scriptContent, 'utf-8')
+
+    spawn('cmd.exe', ['/c', scriptPath], {
       detached: true,
       stdio: 'ignore',
-      windowsHide: false,
+      windowsHide: true,
     }).unref()
+
     app.quit()
   })
 }
