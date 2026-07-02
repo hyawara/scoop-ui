@@ -20,6 +20,7 @@ import {
   ArrowBackOutline,
   ChevronForwardOutline,
   CopyOutline,
+  CheckmarkDoneOutline,
 } from '@vicons/ionicons5'
 
 interface BucketItem {
@@ -51,8 +52,10 @@ const loading = ref(false)
 const addModal = ref(false)
 const newName = ref('')
 const newUrl = ref('')
+const copied = ref(false)
 
-const activeBucket = ref<BucketItem | null>(null)
+const currentView = ref<'list' | 'detail'>('list')
+const selectedBucket = ref<BucketItem | null>(null)
 const detailMode = ref<'view' | 'edit'>('view')
 const editForm = ref<{ name: string; url: string }>({ name: '', url: '' })
 
@@ -66,7 +69,7 @@ const buckets = ref<BucketItem[]>([
     status: 'success',
     type: 'official',
     appCount: 1280,
-    localPath: 'C:\\Users\\hyawa\\scoop\\buckets\\main',
+    localPath: 'C:\Users\hyawa\scoop\buckets\main',
     lastUpdated: '2024-06-30 14:32',
   },
   {
@@ -76,7 +79,7 @@ const buckets = ref<BucketItem[]>([
     status: 'success',
     type: 'official',
     appCount: 2432,
-    localPath: 'C:\\Users\\hyawa\\scoop\\buckets\\extras',
+    localPath: 'C:\Users\hyawa\scoop\buckets\extras',
     lastUpdated: '2024-06-30 12:15',
   },
   {
@@ -86,7 +89,7 @@ const buckets = ref<BucketItem[]>([
     status: 'warning',
     type: 'official',
     appCount: 546,
-    localPath: 'C:\\Users\\hyawa\\scoop\\buckets\\versions',
+    localPath: 'C:\Users\hyawa\scoop\buckets\versions',
     lastUpdated: '2024-06-28 09:40',
   },
   {
@@ -96,7 +99,7 @@ const buckets = ref<BucketItem[]>([
     status: 'success',
     type: 'official',
     appCount: 218,
-    localPath: 'C:\\Users\\hyawa\\scoop\\buckets\\nirsoft',
+    localPath: 'C:\Users\hyawa\scoop\buckets\nirsoft',
     lastUpdated: '2024-06-29 18:22',
   },
   {
@@ -106,10 +109,12 @@ const buckets = ref<BucketItem[]>([
     status: 'error',
     type: 'custom',
     appCount: 12,
-    localPath: 'C:\\Users\\hyawa\\scoop\\buckets\\my-custom-bucket',
+    localPath: 'C:\Users\hyawa\scoop\buckets\my-custom-bucket',
     lastUpdated: '2024-06-25 11:00',
   },
 ])
+
+const isOfficial = computed(() => selectedBucket.value?.type === 'official')
 
 function statusColor(s: string): string {
   switch (s) {
@@ -120,21 +125,32 @@ function statusColor(s: string): string {
   }
 }
 
-function openDetail(b: BucketItem) {
-  activeBucket.value = b
-  detailMode.value = 'view'
+function statusLabel(s: string): string {
+  switch (s) {
+    case 'success': return '正常'
+    case 'warning': return '待更新'
+    case 'error': return '异常'
+    default: return '未知'
+  }
 }
 
-function closeDetail() {
-  activeBucket.value = null
+function openDetail(b: BucketItem) {
+  selectedBucket.value = b
+  detailMode.value = 'view'
+  currentView.value = 'detail'
+}
+
+function goBack() {
+  currentView.value = 'list'
+  selectedBucket.value = null
   detailMode.value = 'view'
 }
 
 function startEdit() {
-  if (!activeBucket.value) return
+  if (!selectedBucket.value) return
   editForm.value = {
-    name: activeBucket.value.name,
-    url: activeBucket.value.url,
+    name: selectedBucket.value.name,
+    url: selectedBucket.value.url,
   }
   detailMode.value = 'edit'
 }
@@ -144,7 +160,7 @@ function cancelEdit() {
 }
 
 function saveEdit() {
-  const b = activeBucket.value
+  const b = selectedBucket.value
   if (!b) return
   const orig = buckets.value.find(x => x.id === b.id)
   if (!orig) return
@@ -154,14 +170,16 @@ function saveEdit() {
     emit('update-bucket', orig.id, orig.name, orig.url)
     message.success(`Bucket「${orig.name}」已更新`)
   }
-  activeBucket.value = orig
+  selectedBucket.value = orig
   detailMode.value = 'view'
 }
 
 async function copyUrl(url: string) {
   try {
     await navigator.clipboard.writeText(url)
+    copied.value = true
     message.success('链接已复制到剪贴板')
+    setTimeout(() => { copied.value = false }, 1500)
   } catch {
     message.error('复制失败')
   }
@@ -175,10 +193,9 @@ function handleSync(name: string) {
 function handleRemove(name: string) {
   const idx = buckets.value.findIndex(b => b.name === name)
   if (idx === -1) return
-  const removed = buckets.value[idx]
   buckets.value.splice(idx, 1)
-  if (activeBucket.value?.id === removed.id) {
-    closeDetail()
+  if (selectedBucket.value?.name === name) {
+    goBack()
   }
   emit('remove', name)
 }
@@ -197,7 +214,7 @@ function handleAdd() {
     status: 'success',
     type: 'custom',
     appCount: 0,
-    localPath: `C:\\Users\\hyawa\\scoop\\buckets\\${newName.value.trim()}`,
+    localPath: `C:\Users\hyawa\scoop\buckets\${newName.value.trim()}`,
     lastUpdated: new Date().toLocaleString(),
   })
   emit('add', newName.value.trim(), newUrl.value.trim())
@@ -211,11 +228,11 @@ function handleAdd() {
 <template>
   <NDrawer
     v-model:show="props.show"
-    width="440"
+    :width="480"
     placement="right"
     @update:show="v => emit('update:show', v)"
   >
-    <NDrawerContent closable content-class="!p-0 flex flex-col flex-1 overflow-hidden">
+    <NDrawerContent closable content-class="!p-0 flex flex-col h-full overflow-hidden">
       <template #header>
         <div class="flex items-center gap-2">
           <span class="text-base font-semibold text-white/90">软件源管理</span>
@@ -223,15 +240,11 @@ function handleAdd() {
         </div>
       </template>
 
-      <div class="relative flex-1 overflow-hidden">
-        <!-- Slide container -->
-        <div
-          class="flex h-full transition-transform duration-300 ease-in-out"
-          :style="{ transform: activeBucket ? 'translateX(-100%)' : 'translateX(0)' }"
-        >
-          <!-- ═══ MASTER PANEL ═══ -->
-          <div class="min-w-full h-full flex flex-col flex-shrink-0 overflow-hidden">
-            <div class="flex items-center justify-between px-4 py-2 border-b border-white/[0.04] flex-shrink-0">
+      <div class="flex-1 overflow-hidden">
+        <!-- ═══ VIEW A: LIST ═══ -->
+        <Transition name="view-slide-left" mode="out-in">
+          <div v-if="currentView === 'list'" key="list" class="h-full flex flex-col overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04] flex-shrink-0">
               <span class="text-sm text-gray-500">已添加 {{ buckets.length }} 个源</span>
               <NButton size="tiny" secondary @click="addModal = true" class="!rounded-md">
                 <template #icon><NIcon :component="AddOutline" size="14" /></template>
@@ -256,32 +269,32 @@ function handleAdd() {
               <div
                 v-for="b in buckets"
                 :key="b.id"
-                class="group flex items-center h-12 px-4 transition-colors duration-150 border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.02]"
+                class="group flex items-center h-[52px] px-4 transition-all duration-150 border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.03]"
                 @click="openDetail(b)"
               >
-                <span class="w-2 h-2 rounded-full flex-shrink-0 mr-2.5" :class="statusColor(b.status)" />
-                <span class="font-medium text-[15px] text-white/90 truncate max-w-[130px] flex-shrink-0">{{ b.name }}</span>
+                <span class="w-2 h-2 rounded-full flex-shrink-0 mr-3" :class="statusColor(b.status)" />
+                <span class="font-medium text-[15px] text-white/90 truncate max-w-[140px] flex-shrink-0">{{ b.name }}</span>
                 <span
-                  class="ml-2 px-2 py-0.5 text-[12px] border rounded font-mono flex-shrink-0 leading-none"
+                  class="ml-2 px-2 py-0.5 text-[11px] border rounded font-mono flex-shrink-0 leading-none"
                   :class="b.type === 'official'
                     ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
                     : 'border-white/[0.06] text-gray-500'"
                 >{{ b.type === 'official' ? 'Official' : 'Custom' }}</span>
-                <span class="ml-3 text-slate-500 text-sm truncate min-w-0 flex-1 hidden sm:block">{{ b.url }}</span>
-                <div class="ml-auto flex items-center gap-0.5 flex-shrink-0">
+                <span class="ml-3 text-slate-500 text-xs truncate min-w-0 flex-1 hidden sm:block font-mono">{{ b.url }}</span>
+                <div class="ml-auto pl-2 flex items-center gap-1 flex-shrink-0">
                   <NIcon
                     :component="ChevronForwardOutline"
-                    size="14"
-                    class="text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                    size="16"
+                    class="text-gray-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200"
                   />
                   <NPopconfirm @positive-click.stop="handleRemove(b.name)">
                     <template #trigger>
                       <NButton
                         text size="small"
-                        class="!text-gray-500 hover:!text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                        class="!w-6 !h-6 !text-gray-500 hover:!text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
                         @click.stop
                       >
-                        <template #icon><NIcon :component="CloseOutline" size="14" /></template>
+                        <template #icon><NIcon :component="CloseOutline" size="13" /></template>
                       </NButton>
                     </template>
                     确认移除 <span class="font-medium text-white/90">{{ b.name }}</span>？
@@ -291,174 +304,146 @@ function handleAdd() {
             </div>
           </div>
 
-          <!-- ═══ DETAIL PANEL ═══ -->
-          <div
-            v-if="activeBucket"
-            class="min-w-full h-full flex flex-col flex-shrink-0 overflow-hidden"
-            style="background: #13151a;"
-          >
-            <!-- Back navigation -->
+          <!-- ═══ VIEW B: DETAIL / EDIT (full width) ═══ -->
+          <div v-else key="detail" class="h-full flex flex-col overflow-hidden">
             <div class="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.04] flex-shrink-0">
               <button
                 class="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
-                @click="closeDetail"
+                @click="goBack"
               >
                 <NIcon :component="ArrowBackOutline" size="16" />
                 返回
               </button>
               <span class="text-sm text-gray-600">/</span>
-              <span class="text-sm font-medium text-white/80">{{ activeBucket.name }}</span>
+              <span class="text-sm font-medium text-white/80 truncate">{{ selectedBucket?.name }}</span>
             </div>
 
-            <!-- Scrollable content -->
             <div class="flex-1 overflow-y-auto custom-scrollbar">
-              <Transition name="fade-switch" mode="out-in">
-                <!-- ═══ VIEW MODE ═══ -->
-                <div v-if="detailMode === 'view'" key="view" class="p-5 flex flex-col gap-5">
-                  <!-- Name row -->
-                  <div class="flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full flex-shrink-0" :class="statusColor(activeBucket.status)" />
-                    <h2 class="text-xl font-bold text-white">{{ activeBucket.name }}</h2>
-                    <span
-                      class="px-2 py-0.5 text-[12px] border rounded font-mono leading-none"
-                      :class="activeBucket.type === 'official'
-                        ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
-                        : 'border-white/[0.06] text-gray-500'"
-                    >{{ activeBucket.type === 'official' ? 'Official' : 'Custom' }}</span>
-                  </div>
-
-                  <!-- URL section -->
-                  <div>
-                    <label class="text-xs text-gray-500 mb-1.5 block">软件源地址</label>
-                    <div class="relative group">
-                      <div
-                        class="bg-white/[0.04] border border-white/[0.06] rounded-lg px-3.5 py-2.5 pr-10 text-sm font-mono text-gray-300 leading-relaxed break-all select-all"
-                      >{{ activeBucket.url }}</div>
-                      <button
-                        class="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] transition-all opacity-0 group-hover:opacity-100"
-                        title="复制链接"
-                        @click="copyUrl(activeBucket.url)"
-                      >
-                        <NIcon :component="CopyOutline" size="15" />
-                      </button>
+              <template v-if="selectedBucket">
+                <Transition name="detail-fade" mode="out-in">
+                  <!-- VIEW MODE -->
+                  <div v-if="detailMode === 'view'" key="view" class="p-6 flex flex-col gap-6">
+                    <div class="flex items-center gap-3">
+                      <span class="w-3 h-3 rounded-full flex-shrink-0" :class="statusColor(selectedBucket.status)" />
+                      <h2 class="text-xl font-bold text-white tracking-tight">{{ selectedBucket.name }}</h2>
+                      <span
+                        class="px-2 py-0.5 text-[11px] border rounded font-mono leading-none"
+                        :class="isOfficial
+                          ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
+                          : 'border-white/[0.06] text-gray-500'"
+                      >{{ isOfficial ? 'Official' : 'Custom' }}</span>
+                      <span class="text-[11px] text-gray-500 ml-auto">{{ statusLabel(selectedBucket.status) }}</span>
                     </div>
-                  </div>
 
-                  <!-- Info rows -->
-                  <div class="flex flex-col gap-3">
-                    <div class="flex items-start gap-3">
-                      <span class="text-xs text-gray-500 w-20 flex-shrink-0 pt-0.5">本地路径</span>
-                      <div class="flex-1 flex items-center gap-2 min-w-0">
-                        <code class="text-xs font-mono text-gray-400 break-all leading-relaxed">{{ activeBucket.localPath }}</code>
+                    <div>
+                      <label class="text-xs text-gray-500 mb-2 block">软件源地址</label>
+                      <div class="relative group">
+                        <div class="bg-white/[0.03] border border-white/[0.06] rounded-lg px-4 py-3 pr-12 text-[13px] font-mono text-gray-300 leading-relaxed break-all select-all whitespace-pre-wrap">{{ selectedBucket.url }}</div>
                         <button
-                          class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] transition-all"
-                          title="在资源管理器中打开"
-                          @click="emit('open-explorer', activeBucket.localPath)"
+                          class="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-md transition-all duration-200"
+                          :class="copied
+                            ? 'text-emerald-400 bg-emerald-500/10'
+                            : 'text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] opacity-0 group-hover:opacity-100'"
+                          title="复制链接"
+                          @click="copyUrl(selectedBucket.url)"
                         >
-                          <NIcon :component="FolderOpenOutline" size="15" />
+                          <NIcon :component="copied ? CheckmarkDoneOutline : CopyOutline" size="15" />
                         </button>
                       </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                      <span class="text-xs text-gray-500 w-20 flex-shrink-0">Manifests</span>
-                      <span class="text-sm text-gray-300 font-mono">{{ activeBucket.appCount.toLocaleString() }} 个</span>
+
+                    <div class="flex flex-col gap-3.5">
+                      <div class="flex items-start gap-3">
+                        <span class="text-xs text-gray-500 w-20 flex-shrink-0 pt-1">本地路径</span>
+                        <div class="flex-1 flex items-start gap-2 min-w-0">
+                          <code class="text-xs font-mono text-gray-400 break-all leading-relaxed bg-white/[0.02] px-2 py-1 rounded">{{ selectedBucket.localPath }}</code>
+                          <button
+                            class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] transition-all"
+                            title="在资源管理器中打开"
+                            @click="emit('open-explorer', selectedBucket.localPath)"
+                          >
+                            <NIcon :component="FolderOpenOutline" size="15" />
+                          </button>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500 w-20 flex-shrink-0">Manifests</span>
+                        <span class="text-sm text-gray-300 font-mono">{{ selectedBucket.appCount.toLocaleString() }} 个</span>
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500 w-20 flex-shrink-0">上次同步</span>
+                        <span class="text-sm text-gray-400">{{ selectedBucket.lastUpdated }}</span>
+                      </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                      <span class="text-xs text-gray-500 w-20 flex-shrink-0">上次同步</span>
-                      <span class="text-sm text-gray-400">{{ activeBucket.lastUpdated }}</span>
+
+                    <div class="flex flex-col gap-2 pt-2">
+                      <div class="flex gap-2">
+                        <NButton size="small" secondary class="flex-1 !rounded-lg !h-9" @click="startEdit">
+                          <template #icon><NIcon :component="CreateOutline" size="15" /></template>
+                          编辑配置
+                        </NButton>
+                        <NButton size="small" secondary class="flex-1 !rounded-lg !h-9" @click="emit('open-explorer', selectedBucket.localPath)">
+                          <template #icon><NIcon :component="FolderOpenOutline" size="15" /></template>
+                          打开文件夹
+                        </NButton>
+                      </div>
+                      <NButton
+                        v-if="isOfficial"
+                        size="small" secondary block
+                        class="!rounded-lg !h-9 !border-cyan-500/20 !text-cyan-400 hover:!bg-cyan-500/10"
+                        @click="handleSync(selectedBucket.name)"
+                      >
+                        <template #icon><NIcon :component="RefreshOutline" size="15" /></template>
+                        强制同步
+                      </NButton>
                     </div>
                   </div>
 
-                  <!-- Action buttons -->
-                  <div class="flex flex-col gap-2 pt-2">
-                    <div class="flex gap-2">
-                      <NButton
+                  <!-- EDIT MODE -->
+                  <div v-else key="edit" class="p-6 flex flex-col gap-5">
+                    <div>
+                      <label class="text-xs text-gray-500 mb-1.5 block">Bucket 名称</label>
+                      <NInput
+                        v-model:value="editForm.name"
                         size="small"
-                        secondary
-                        class="flex-1 !rounded-md"
-                        @click="startEdit"
-                      >
-                        <template #icon><NIcon :component="CreateOutline" size="14" /></template>
-                        编辑配置
+                        placeholder="Bucket 名称"
+                        :disabled="OFFICIAL_NAMES.has(selectedBucket.name)"
+                      />
+                    </div>
+                    <div>
+                      <label class="text-xs text-gray-500 mb-1.5 block">远程仓库地址</label>
+                      <NInput
+                        v-model:value="editForm.url"
+                        type="textarea"
+                        :autosize="{ minRows: 3, maxRows: 8 }"
+                        placeholder="https://github.com/..."
+                        :disabled="OFFICIAL_NAMES.has(selectedBucket.name)"
+                        class="font-mono text-sm"
+                      />
+                      <p v-if="OFFICIAL_NAMES.has(selectedBucket.name)" class="text-[11px] text-amber-500/70 mt-2">
+                        官方源地址为只读，如需修改请 Fork 后使用自定义源
+                      </p>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                      <NButton size="small" type="primary" class="flex-1 !rounded-lg !h-9" @click="saveEdit">
+                        <template #icon><NIcon :component="CheckmarkOutline" size="15" /></template>
+                        保存修改
                       </NButton>
-                      <NButton
-                        size="small"
-                        secondary
-                        class="flex-1 !rounded-md"
-                        @click="emit('open-explorer', activeBucket.localPath)"
-                      >
-                        <template #icon><NIcon :component="FolderOpenOutline" size="14" /></template>
-                        打开文件夹
+                      <NButton size="small" secondary class="flex-1 !rounded-lg !h-9" @click="cancelEdit">
+                        取消
                       </NButton>
                     </div>
-                    <NButton
-                      v-if="activeBucket.type === 'official'"
-                      size="small"
-                      secondary
-                      block
-                      class="!rounded-md !border-cyan-500/20 !text-cyan-400 hover:!bg-cyan-500/10"
-                      @click="handleSync(activeBucket.name)"
-                    >
-                      <template #icon><NIcon :component="RefreshOutline" size="14" /></template>
-                      强制同步
-                    </NButton>
                   </div>
-                </div>
-
-                <!-- ═══ EDIT MODE ═══ -->
-                <div v-else key="edit" class="p-5 flex flex-col gap-5">
-                  <div>
-                    <label class="text-xs text-gray-500 mb-1.5 block">Bucket 名称</label>
-                    <NInput
-                      v-model:value="editForm.name"
-                      size="small"
-                      placeholder="Bucket 名称"
-                      :disabled="OFFICIAL_NAMES.has(activeBucket.name)"
-                    />
-                  </div>
-                  <div>
-                    <label class="text-xs text-gray-500 mb-1.5 block">远程仓库地址</label>
-                    <NInput
-                      v-model:value="editForm.url"
-                      type="textarea"
-                      :autosize="{ minRows: 2, maxRows: 5 }"
-                      placeholder="https://github.com/..."
-                      :disabled="OFFICIAL_NAMES.has(activeBucket.name)"
-                    />
-                    <p
-                      v-if="OFFICIAL_NAMES.has(activeBucket.name)"
-                      class="text-[11px] text-amber-500/70 mt-1.5"
-                    >官方源地址为只读，如需修改请 Fork 后使用自定义源</p>
-                  </div>
-                  <div class="flex gap-2 pt-2">
-                    <NButton
-                      size="small"
-                      type="primary"
-                      class="flex-1 !rounded-md"
-                      @click="saveEdit"
-                    >
-                      <template #icon><NIcon :component="CheckmarkOutline" size="14" /></template>
-                      保存修改
-                    </NButton>
-                    <NButton
-                      size="small"
-                      secondary
-                      class="flex-1 !rounded-md"
-                      @click="cancelEdit"
-                    >
-                      取消
-                    </NButton>
-                  </div>
-                </div>
-              </Transition>
+                </Transition>
+              </template>
             </div>
           </div>
-        </div>
+        </Transition>
       </div>
     </NDrawerContent>
   </NDrawer>
 
-  <NModal v-model:show="addModal" preset="card" title="添加软件源" style="width: 400px" :mask-closable="true">
+  <NModal v-model:show="addModal" preset="card" title="添加软件源" style="width: 420px" :mask-closable="true">
     <div class="flex flex-col gap-4">
       <div>
         <label class="text-xs text-gray-500 mb-1.5 block">Bucket 名称</label>
@@ -474,16 +459,25 @@ function handleAdd() {
 </template>
 
 <style scoped>
-.fade-switch-enter-active,
-.fade-switch-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+.view-slide-enter-active,
+.view-slide-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
 }
-.fade-switch-enter-from {
+.view-slide-enter-from {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateX(20px);
 }
-.fade-switch-leave-to {
+.view-slide-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateX(-20px);
+}
+
+.detail-fade-enter-active,
+.detail-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.detail-fade-enter-from,
+.detail-fade-leave-to {
+  opacity: 0;
 }
 </style>
