@@ -27,8 +27,7 @@ interface BucketItem {
   id: string
   name: string
   url: string
-  status: 'success' | 'warning' | 'error'
-  type: 'official' | 'custom'
+  status: 'success' | 'warning'
   appCount: number
   localPath: string
   lastUpdated: string
@@ -60,17 +59,15 @@ const selectedBucket = ref<BucketItem | null>(null)
 const detailMode = ref<'view' | 'edit'>('view')
 const editForm = ref<{ name: string; url: string }>({ name: '', url: '' })
 
-const OFFICIAL_NAMES = new Set(['main', 'extras', 'versions', 'nirsoft', 'php', 'dorado', 'nonportable', 'java', 'games'])
-
 const buckets = ref<BucketItem[]>([])
 
-const isOfficial = computed(() => selectedBucket.value?.type === 'official')
+/** 只有 main 源不允许编辑 */
+const isMain = computed(() => selectedBucket.value?.name.toLowerCase() === 'main')
 
 function statusColor(s: string): string {
   switch (s) {
     case 'success': return 'bg-emerald-500'
     case 'warning': return 'bg-amber-500'
-    case 'error': return 'bg-rose-500'
     default: return 'bg-gray-500'
   }
 }
@@ -79,7 +76,6 @@ function statusLabel(s: string): string {
   switch (s) {
     case 'success': return '正常'
     case 'warning': return '待更新'
-    case 'error': return '异常'
     default: return '未知'
   }
 }
@@ -97,7 +93,7 @@ function goBack() {
 }
 
 function startEdit() {
-  if (!selectedBucket.value) return
+  if (!selectedBucket.value || isMain.value) return
   editForm.value = {
     name: selectedBucket.value.name,
     url: selectedBucket.value.url,
@@ -111,7 +107,7 @@ function cancelEdit() {
 
 function saveEdit() {
   const b = selectedBucket.value
-  if (!b) return
+  if (!b || isMain.value) return
   const orig = buckets.value.find(x => x.id === b.id)
   if (!orig) return
   if (orig.name !== editForm.value.name || orig.url !== editForm.value.url) {
@@ -135,11 +131,6 @@ async function copyUrl(url: string) {
   }
 }
 
-function handleSync(name: string) {
-  emit('sync', name)
-  message.success(`正在强制同步「${name}」...`)
-}
-
 async function openFolder(path: string) {
   try {
     await window.scoopAPI.openPath(path)
@@ -160,16 +151,50 @@ async function handleSyncAndRefresh(name: string) {
   }
 }
 
+/**
+ * 解析 Scoop Bucket 原始文本列表
+ */
+function parseScoopBuckets(rawText: string): BucketItem[] {
+  if (!rawText || typeof rawText !== 'string') return []
+
+  return rawText
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map((line, index) => {
+      const parts = line.split(/\s{2,}/)
+      if (parts.length < 2) return null
+
+      const name = parts[0]
+      const url = parts[1]
+      const lastUpdated = parts[2] ? parts[2].replace(/\s+/g, ' ') : ''
+      let appCount = 0
+      if (parts[3]) {
+        appCount = parseInt(parts[3], 10) || 0
+      }
+
+      return {
+        id: `${name}-${index}`,
+        name,
+        url,
+        status: 'success' as const,
+        appCount,
+        localPath: '',
+        lastUpdated,
+      }
+    })
+    .filter((item): item is BucketItem => item !== null)
+}
+
 async function fetchBuckets() {
   loading.value = true
   try {
     const data = await window.scoopAPI.listBuckets()
     buckets.value = (data as any[]).map((b: any, i: number) => ({
-      id: String(i),
+      id: `${b.name}-${i}`,
       name: b.name,
       url: b.source,
       status: 'success' as const,
-      type: b.type as 'official' | 'custom',
       appCount: b.appCount || 0,
       localPath: b.localPath || '',
       lastUpdated: b.lastUpdated || '',
@@ -267,13 +292,7 @@ onMounted(() => {
                 @click="openDetail(b)"
               >
                 <span class="w-2 h-2 rounded-full flex-shrink-0 mr-3" :class="statusColor(b.status)" />
-                <span class="font-medium text-[15px] text-white/90 truncate max-w-[140px] flex-shrink-0">{{ b.name }}</span>
-                <span
-                  class="ml-2 px-2 py-0.5 text-[11px] border rounded font-mono flex-shrink-0 leading-none"
-                  :class="b.type === 'official'
-                    ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
-                    : 'border-white/[0.06] text-gray-500'"
-                >{{ b.type === 'official' ? 'Official' : 'Custom' }}</span>
+                <span class="font-medium text-[15px] text-white/90 truncate max-w-[160px] flex-shrink-0">{{ b.name }}</span>
                 <span class="ml-3 text-slate-500 text-xs truncate min-w-0 flex-1 hidden sm:block font-mono">{{ b.url }}</span>
                 <div class="ml-auto pl-2 flex items-center gap-1 flex-shrink-0">
                   <NIcon
@@ -323,12 +342,6 @@ onMounted(() => {
                       <div class="flex items-center gap-3">
                         <span class="w-3 h-3 rounded-full flex-shrink-0" :class="statusColor(selectedBucket.status)" />
                         <h2 class="text-xl font-bold text-white tracking-tight">{{ selectedBucket.name }}</h2>
-                        <span
-                          class="px-2 py-0.5 text-[11px] border rounded font-mono leading-none"
-                          :class="isOfficial
-                            ? 'border-indigo-500/20 text-indigo-400 bg-indigo-500/10'
-                            : 'border-white/[0.06] text-gray-500'"
-                        >{{ isOfficial ? 'Official' : 'Custom' }}</span>
                         <span class="text-[11px] text-gray-500 ml-auto">{{ statusLabel(selectedBucket.status) }}</span>
                       </div>
 
@@ -374,12 +387,11 @@ onMounted(() => {
                           <template #icon><NIcon :component="FolderOpenOutline" size="16" /></template>
                           打开文件夹
                         </NButton>
-                        <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="startEdit">
+                        <NButton size="medium" secondary class="flex-1 !rounded-lg" :disabled="isMain" @click="startEdit">
                           <template #icon><NIcon :component="CreateOutline" size="16" /></template>
                           编辑配置
                         </NButton>
                         <NButton
-                          v-if="isOfficial"
                           size="medium" secondary class="flex-1 !rounded-lg"
                           :loading="syncing"
                           @click="handleSyncAndRefresh(selectedBucket.name)"
@@ -399,7 +411,7 @@ onMounted(() => {
                         v-model:value="editForm.name"
                         size="small"
                         placeholder="Bucket 名称"
-                        :disabled="OFFICIAL_NAMES.has(selectedBucket.name)"
+                        :disabled="isMain"
                       />
                     </div>
                     <div>
@@ -409,15 +421,15 @@ onMounted(() => {
                         type="textarea"
                         :autosize="{ minRows: 3, maxRows: 8 }"
                         placeholder="https://github.com/..."
-                        :disabled="OFFICIAL_NAMES.has(selectedBucket.name)"
+                        :disabled="isMain"
                         class="font-mono text-sm"
                       />
-                      <p v-if="OFFICIAL_NAMES.has(selectedBucket.name)" class="text-[11px] text-amber-500/70 mt-2">
-                        官方源地址为只读，如需修改请 Fork 后使用自定义源
+                      <p v-if="isMain" class="text-[11px] text-amber-500/70 mt-2">
+                        main 源为系统核心源，不允许修改
                       </p>
                     </div>
                     <div class="flex gap-2 pt-2">
-                      <NButton size="small" type="primary" class="flex-1 !rounded-lg !h-9" @click="saveEdit">
+                      <NButton size="small" type="primary" class="flex-1 !rounded-lg !h-9" :disabled="isMain" @click="saveEdit">
                         <template #icon><NIcon :component="CheckmarkOutline" size="15" /></template>
                         保存修改
                       </NButton>

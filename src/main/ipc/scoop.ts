@@ -478,9 +478,8 @@ export function registerScoopIPC(): void {
       scoopPath = join(homedir(), 'scoop')
     }
 
-    const OFFICIAL = new Set(['main', 'extras', 'versions', 'nirsoft', 'php', 'dorado', 'nonportable', 'java', 'games'])
     const result: {
-      name: string; source: string; type: 'official' | 'custom'
+      name: string; source: string
       localPath: string; appCount: number; lastUpdated: string
     }[] = []
 
@@ -510,7 +509,6 @@ export function registerScoopIPC(): void {
       result.push({
         name: item.name,
         source: item.source,
-        type: OFFICIAL.has(item.name) ? 'official' : 'custom',
         localPath,
         appCount,
         lastUpdated,
