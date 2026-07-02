@@ -53,8 +53,6 @@ contextBridge.exposeInMainWorld('scoopAPI', {
     close: () => ipcRenderer.send('window:close'),
   },
 
-  openPath: (path: string) => ipcRenderer.invoke('window:openPath', path),
-
   // Self-Update APIs
   checkForUpdate: (url: string) => ipcRenderer.invoke('app:checkForUpdate', url),
   downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),

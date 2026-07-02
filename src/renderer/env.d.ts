@@ -56,7 +56,6 @@ interface Window {
       maximize: () => void
       close: () => void
     }
-    openPath: (path: string) => Promise<{ success: boolean; error?: string }>
 
     // Self-Update APIs
     checkForUpdate: (url: string) => Promise<{

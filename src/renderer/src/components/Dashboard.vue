@@ -862,7 +862,7 @@ function openBucketDrawer() {
       <ProxyCard />
     </div>
 
-    <BucketDrawer v-model:show="showBucketDrawer" @open-explorer="(p: string) => window.scoopAPI.openPath(p)" />
+    <BucketDrawer v-model:show="showBucketDrawer" />
 
     <!-- 单包终端日志弹窗 -->
     <NModal

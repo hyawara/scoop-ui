@@ -14,7 +14,6 @@ import {
   CloseOutline,
   CreateOutline,
   RefreshOutline,
-  FolderOpenOutline,
   CheckmarkOutline,
   CubeOutline,
   ArrowBackOutline,
@@ -29,7 +28,6 @@ interface BucketItem {
   url: string
   status: 'success' | 'warning'
   appCount: number
-  localPath: string
   lastUpdated: string
 }
 
@@ -43,7 +41,6 @@ const emit = defineEmits<{
   remove: [name: string]
   sync: [name: string]
   'update-bucket': [id: string, name: string, url: string]
-  'open-explorer': [path: string]
 }>()
 
 const message = useMessage()
@@ -131,19 +128,12 @@ async function copyUrl(url: string) {
   }
 }
 
-async function openFolder(path: string) {
-  try {
-    await window.scoopAPI.openPath(path)
-  } catch (e: any) {
-    message.error('打开文件夹失败: ' + (e.message || e))
-  }
-}
-
 async function handleSyncAndRefresh(name: string) {
   syncing.value = true
   try {
     await window.scoopAPI.addBucket(name)
     await fetchBuckets()
+    message.success(`Bucket「${name}」同步完成`)
   } catch (e: any) {
     message.error('同步失败: ' + (e.message || e))
   } finally {
@@ -196,9 +186,15 @@ async function fetchBuckets() {
       url: b.source,
       status: 'success' as const,
       appCount: b.appCount || 0,
-      localPath: b.localPath || '',
       lastUpdated: b.lastUpdated || '',
     }))
+    // 同步更新详情卡片数据
+    if (selectedBucket.value) {
+      const updated = buckets.value.find(b => b.name === selectedBucket.value!.name)
+      if (updated) {
+        selectedBucket.value = updated
+      }
+    }
   } catch (e: any) {
     message.error('获取软件源列表失败: ' + (e.message || e))
   } finally {
@@ -365,10 +361,6 @@ onMounted(() => {
 
                       <!-- Metadata card group -->
                       <div class="bg-white/[0.03] border border-white/[0.05] rounded-lg divide-y divide-white/[0.05]">
-                        <div class="flex items-start px-4 py-3 gap-4">
-                          <span class="text-xs text-gray-500 w-16 flex-shrink-0 pt-0.5">本地路径</span>
-                          <code class="text-xs font-mono text-gray-300 break-all leading-relaxed select-all">{{ selectedBucket.localPath }}</code>
-                        </div>
                         <div class="flex items-center px-4 py-3 gap-4">
                           <span class="text-xs text-gray-500 w-16 flex-shrink-0">Manifests</span>
                           <span class="text-xs text-gray-300 font-mono">{{ selectedBucket.appCount.toLocaleString() }} 个</span>
@@ -383,10 +375,6 @@ onMounted(() => {
                     <!-- Bottom: sticky action button group -->
                     <div class="flex-shrink-0 px-5 pt-4 pb-5 border-t border-white/[0.08]">
                       <div class="flex gap-3">
-                        <NButton size="medium" secondary class="flex-1 !rounded-lg" @click="openFolder(selectedBucket.localPath)">
-                          <template #icon><NIcon :component="FolderOpenOutline" size="16" /></template>
-                          打开文件夹
-                        </NButton>
                         <NButton size="medium" secondary class="flex-1 !rounded-lg" :disabled="isMain" @click="startEdit">
                           <template #icon><NIcon :component="CreateOutline" size="16" /></template>
                           编辑配置
