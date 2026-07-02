@@ -443,78 +443,58 @@ export function registerScoopIPC(): void {
 
   // List buckets
   ipcMain.handle('scoop:listBuckets', async () => {
-    const { stdout } = await execScoop('bucket list -v')
-    const lines = stdout.split('\n')
-    const items: { name: string; source: string }[] = []
-    let pastHeader = false
-    for (const line of lines) {
-      if (!pastHeader) {
-        if (/^-+\s+-+/.test(line)) { pastHeader = true }
-        continue
-      }
-      const fields = line.trim().split(/\s{2,}/)
-      // scoop bucket list -v 输出: Name  Source  [Updated  Info]
-      // fields[0] = name, fields[1] = source URL (可能带时间戳)
-      // 用正则提取 URL（http/https 开头到行尾或遇到时间模式）
-      if (fields.length >= 2 && fields[0] && !fields[0].startsWith('Name')) {
-        const name = fields[0].trim()
-        // 从 fields[1] 中提取纯 URL，去掉可能附带的时间戳
-        let source = fields[1]?.trim() || ''
-        // 匹配 URL 部分：http(s)://... 直到遇到日期模式或行尾
-        const urlMatch = source.match(/^(https?:\/\/\S+)/)
-        if (urlMatch) {
-          source = urlMatch[1]
-        }
-        items.push({ name, source })
-      }
-    }
+    const ps = `
+      $scoopRoot = if ($env:SCOOP) { $env:SCOOP } else { Join-Path $env:USERPROFILE 'scoop' }
 
-    // Enrich each bucket with localPath, appCount, lastUpdated
-    let scoopPath = ''
-    try {
-      const { stdout: envOut } = await execPowerShell('echo $env:SCOOP')
-      scoopPath = envOut.trim() || join(homedir(), 'scoop')
-    } catch {
-      scoopPath = join(homedir(), 'scoop')
-    }
+      $lines = scoop bucket list 2>$null | Select-Object -Skip 2
+      $result = @()
 
-    const result: {
-      name: string; source: string
-      localPath: string; appCount: number; lastUpdated: string
-    }[] = []
+      foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed -match '^Name\\s+Source') { continue }
 
-    for (const item of items) {
-      const localPath = join(scoopPath, 'buckets', item.name)
-      let appCount = 0
-      let lastUpdated = ''
+        $parts = [regex]::Split($trimmed, '\\s{2,}')
+        if ($parts.Length -lt 2) { continue }
 
-      try {
-        if (existsSync(localPath)) {
-          const ps = `
-            $count = (Get-ChildItem -Path '${localPath}' -Filter *.json -File -ErrorAction SilentlyContinue).Count
-            $gitDir = Join-Path '${localPath}' '.git'
-            $last = ''
-            if (Test-Path $gitDir) {
-              $last = (git -C '${localPath}' log -1 --format=%ci 2>$null)
+        $name = $parts[0].Trim()
+        $source = $parts[1].Trim()
+
+        $urlMatch = [regex]::Match($source, '^https?://\\S+')
+        if ($urlMatch.Success) { $source = $urlMatch.Value }
+
+        $localPath = Join-Path $scoopRoot 'buckets' $name
+        $appCount = 0
+        $lastUpdated = ''
+
+        if (Test-Path $localPath) {
+          $appCount = @(Get-ChildItem $localPath -Filter *.json -File -ErrorAction SilentlyContinue).Count
+          $gitDir = Join-Path $localPath '.git'
+          if (Test-Path $gitDir) {
+            $raw = git -C $localPath log -1 --format=%ci 2>$null
+            if ($raw) {
+              $dt = $raw.Trim()
+              if ($dt.Length -ge 16) { $lastUpdated = $dt.Substring(0, 16).Replace('T', ' ') }
             }
-            Write-Output "$count|$last"
-          `.trim()
-          const { stdout: out } = await execPowerShell(ps)
-          const [countStr, ...rest] = out.trim().split('|')
-          appCount = parseInt(countStr) || 0
-          lastUpdated = rest.join('|').trim().slice(0, 16).replace('T', ' ') || ''
+          }
         }
-      } catch { /* ignore */ }
 
-      result.push({
-        name: item.name,
-        source: item.source,
-        localPath,
-        appCount,
-        lastUpdated,
-      })
+        $result += [PSCustomObject]@{
+          name       = $name
+          source     = $source
+          localPath  = $localPath
+          appCount   = $appCount
+          lastUpdated = $lastUpdated
+        }
+      }
+
+      ConvertTo-Json $result -Compress
+    `
+    const { stdout } = await execPowerShell(ps)
+    try {
+      return JSON.parse(stdout.trim().split('\n').pop() || '[]')
+    } catch {
+      return []
     }
-    return result
   })
 
   // Add bucket
