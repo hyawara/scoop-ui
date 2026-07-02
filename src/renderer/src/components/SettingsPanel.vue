@@ -39,7 +39,7 @@ const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 const appDownloading = inject<any>('appDownloading')
 
-const APP_VERSION = '1.0.4'
+const APP_VERSION = '1.0.5'
 
 const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
 type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available'
