@@ -27,6 +27,7 @@ const pkgProgress = usePackageProgress()
 
 const isDark = ref(true)
 const fontFamily = ref('')
+const fontList = ref<string[]>([])
 const colorPreset = ref('aurora')
 const searchQuery = ref('')
 const committedSearch = ref('')
@@ -130,7 +131,42 @@ provide('updateInfo', updateInfo)
 provide('checkForUpdate', checkForUpdate)
 provide('isDark', isDark)
 provide('fontFamily', fontFamily)
+provide('fontList', fontList)
 provide('colorPreset', colorPreset)
+
+function parseFontFamilyToArray(cssStr: string): string[] {
+  if (!cssStr) return []
+  const result: string[] = []
+  let current = ''
+  let inQuote = false
+  let quoteChar = ''
+  for (const ch of cssStr) {
+    if ((ch === "'" || ch === '"') && !inQuote) {
+      inQuote = true
+      quoteChar = ch
+    } else if (ch === quoteChar && inQuote) {
+      inQuote = false
+    } else if (ch === ',' && !inQuote) {
+      const trimmed = current.trim()
+      if (trimmed) result.push(trimmed)
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  const trimmed = current.trim()
+  if (trimmed) result.push(trimmed)
+  const generics = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded'])
+  return result.filter(f => !generics.has(f.toLowerCase()))
+}
+
+function fontListToCssString(list: string[]): string {
+  if (!list || list.length === 0) {
+    return "'Segoe UI','Microsoft YaHei',sans-serif"
+  }
+  const quoted = list.map(f => `'${f}'`)
+  return [...quoted, 'sans-serif'].join(',')
+}
 
 onMounted(async () => {
   // 从 config.json 加载主题配置
@@ -138,7 +174,10 @@ onMounted(async () => {
     const theme = await window.scoopAPI.getConfig('theme')
     if (theme) {
       if (typeof theme.dark === 'boolean') isDark.value = theme.dark
-      if (typeof theme.fontFamily === 'string') fontFamily.value = theme.fontFamily
+      if (typeof theme.fontFamily === 'string') {
+        fontFamily.value = theme.fontFamily
+        fontList.value = parseFontFamilyToArray(theme.fontFamily)
+      }
       if (typeof theme.colorPreset === 'string') colorPreset.value = theme.colorPreset
     }
   } catch { /* use defaults */ }
@@ -166,10 +205,17 @@ onMounted(async () => {
   }
 })
 
+// 字体列表变化时同步到 fontFamily CSS 字符串并持久化
+watch(fontList, (newList) => {
+  const cssStr = fontListToCssString(newList)
+  fontFamily.value = cssStr
+  window.scoopAPI.setConfig('theme.fontFamily', cssStr)
+}, { deep: true })
+
 // 字体配置变化时同步到全局 body + Naive UI
 watch(fontFamily, (val) => {
   nextTick(() => {
-    document.body.style.fontFamily = val || null
+    document.body.style.fontFamily = val || ''
   })
 }, { immediate: true })
 

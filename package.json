@@ -1,7 +1,7 @@
 {
   "name": "scoop-ui",
   "type": "module",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A modern GUI for Scoop package manager on Windows, built with Electron and Vue 3",
   "main": "dist/main/index.js",
   "scripts": {

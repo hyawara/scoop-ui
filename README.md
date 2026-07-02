@@ -35,38 +35,36 @@ npm run electron:dev
 npm run electron:build
 ```
 
+## Screenshots
+
+| | |
+|:--|:--|
+| ![Dashboard](screenshots/dashboard.png) | ![Search](screenshots/search.png) |
+| ![Settings](screenshots/settings.png) | ![Dark Theme](screenshots/dark-theme.png) |
+
 ## Project Structure
 
 ```
 src/
-├── main/              # Electron main process
-│   ├── index.ts       # Window creation, Mica config
+├── main/                    # Electron main process
+│   ├── index.ts             # Window creation, Mica, IPC registration
 │   ├── ipc/
-│   │   └── scoop.ts   # Scoop IPC handlers
+│   │   ├── scoop.ts         # Scoop command IPC handlers
+│   │   └── config.ts        # Config read/write IPC
 │   └── utils/
-│       └── powershell.ts  # PowerShell execution wrapper
+│       ├── config.ts        # ~/.scoop-ui/config.json CRUD
+│       ├── config.default.json
+│       └── powershell.ts    # PowerShell wrapper (GBK→UTF-8)
 ├── preload/
-│   └── index.ts       # contextBridge API
-└── renderer/
-    ├── index.html
+│   └── index.ts             # contextBridge → window.scoopAPI
+└── renderer/                # Vue 3 app
     └── src/
-        ├── App.vue
+        ├── App.vue          # Root component, theme provider
         ├── main.ts
-        ├── components/
-        │   ├── Header.vue
-        │   ├── Dashboard.vue
-        │   ├── SearchPanel.vue
-        │   ├── AppDetail.vue
-        │   ├── Onboarding.vue
-        │   ├── CacheCard.vue
-        │   ├── StorageCard.vue
-        │   └── ProxyCard.vue
-        ├── stores/
-        │   ├── app.ts
-        │   ├── packages.ts
-        │   └── settings.ts
+        ├── components/      # ~18 components
+        ├── stores/          # Pinia (app, packages, settings)
+        ├── composables/
         ├── types/
-        │   └── index.ts
         └── assets/
             └── main.css
 ```

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, watch } from 'vue'
+import { ref, inject, computed, watch } from 'vue'
 import {
   NButton,
   NIcon,
@@ -8,7 +8,7 @@ import {
   NSpin,
   NTabs,
   NTabPane,
-  NSelect,
+  NAutoComplete,
   useMessage,
 } from 'naive-ui'
 import {
@@ -21,6 +21,9 @@ import {
   SunnyOutline,
   MoonOutline,
   LogoGithub,
+  AddOutline,
+  CloseOutline,
+  ReorderThreeOutline,
 } from '@vicons/ionicons5'
 import type { Ref } from 'vue'
 
@@ -31,12 +34,13 @@ const message = useMessage()
 
 const isDark = inject<Ref<boolean>>('isDark')!
 const fontFamily = inject<Ref<string>>('fontFamily')!
+const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 
 const updateInfo = inject<any>('updateInfo')
 const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
 
-const APP_VERSION = '1.0.2'
+const APP_VERSION = '1.0.3'
 
 const scoopVersion = ref('')
 const scoopVersionLoading = ref(false)
@@ -50,15 +54,85 @@ const colorPresets: Record<string, { name: string; primary: string }> = {
   rose: { name: '玫瑰红', primary: '#EC4899' },
 }
 
-const fontOptions = [
-  { label: 'Iosevka Anony（默认）', value: "'IosevkaAnony','LXGW WenKai Mono','Segoe UI','Microsoft YaHei',sans-serif" },
-  { label: 'LXGW WenKai Mono', value: "'LXGW WenKai Mono','Segoe UI',serif" },
-  { label: 'JetBrains Mono', value: "'JetBrains Mono','LXGW WenKai Mono',monospace" },
-  { label: 'Cascadia Code', value: "'Cascadia Code','LXGW WenKai Mono',monospace" },
-  { label: 'Fira Code', value: "'Fira Code','LXGW WenKai Mono',monospace" },
-  { label: 'Maple Mono NF', value: "'Maple Mono NF','LXGW WenKai Mono',monospace" },
-  { label: '系统默认', value: "'Segoe UI','Microsoft YaHei',sans-serif" },
+// ========== Font Fallback Chain ==========
+const fontInput = ref('')
+const dragIndex = ref<number | null>(null)
+const hoverIndex = ref<number | null>(null)
+
+const commonFonts = [
+  { label: 'Cascadia Code', value: 'Cascadia Code' },
+  { label: 'Cascadia Mono', value: 'Cascadia Mono' },
+  { label: 'Fira Code', value: 'Fira Code' },
+  { label: 'Fira Mono', value: 'Fira Mono' },
+  { label: 'JetBrains Mono', value: 'JetBrains Mono' },
+  { label: 'JetBrains Mono NL', value: 'JetBrains Mono NL' },
+  { label: 'Maple Mono NF', value: 'Maple Mono NF' },
+  { label: 'Maple Mono', value: 'Maple Mono' },
+  { label: 'Sarasa Term SC', value: 'Sarasa Term SC' },
+  { label: 'IosevkaAnony', value: 'IosevkaAnony' },
+  { label: 'LXGW WenKai Mono', value: 'LXGW WenKai Mono' },
+  { label: 'Source Code Pro', value: 'Source Code Pro' },
+  { label: 'Noto Sans SC', value: 'Noto Sans SC' },
+  { label: 'Noto Sans Mono', value: 'Noto Sans Mono' },
+  { label: 'Segoe UI', value: 'Segoe UI' },
+  { label: 'Microsoft YaHei', value: 'Microsoft YaHei' },
+  { label: 'Consolas', value: 'Consolas' },
+  { label: 'HarmonyOS Sans', value: 'HarmonyOS Sans' },
 ]
+
+const filteredSuggestions = computed(() => {
+  const q = fontInput.value.toLowerCase().trim()
+  if (!q) return commonFonts
+  return commonFonts.filter(f => f.value.toLowerCase().includes(q))
+})
+
+function addFont() {
+  const name = fontInput.value.trim()
+  if (!name) return
+  if (fontList.value.includes(name)) {
+    fontInput.value = ''
+    return
+  }
+  fontList.value.push(name)
+  fontInput.value = ''
+}
+
+function removeFont(index: number) {
+  fontList.value.splice(index, 1)
+}
+
+// Drag & Drop
+function onDragStart(e: DragEvent, index: number) {
+  if (!e.dataTransfer) return
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('text/plain', String(index))
+  dragIndex.value = index
+}
+
+function onDragOver(e: DragEvent, index: number) {
+  e.preventDefault()
+  if (dragIndex.value === null) return
+  e.dataTransfer!.dropEffect = 'move'
+  hoverIndex.value = index
+}
+
+function onDrop(e: DragEvent, index: number) {
+  e.preventDefault()
+  if (dragIndex.value === null || dragIndex.value === index) {
+    dragIndex.value = null
+    hoverIndex.value = null
+    return
+  }
+  const item = fontList.value.splice(dragIndex.value, 1)[0]
+  fontList.value.splice(index, 0, item)
+  dragIndex.value = null
+  hoverIndex.value = null
+}
+
+function onDragEnd() {
+  dragIndex.value = null
+  hoverIndex.value = null
+}
 
 async function loadScoopVersion() {
   scoopVersionLoading.value = true
@@ -90,11 +164,6 @@ function selectPreset(key: string) {
 function toggleDark() {
   isDark.value = !isDark.value
   window.scoopAPI.setConfig('theme.dark', isDark.value)
-}
-
-function onFontChange(value: string) {
-  fontFamily.value = value
-  window.scoopAPI.setConfig('theme.fontFamily', value)
 }
 
 function handleClose() {
@@ -193,17 +262,79 @@ watch(() => props.show, (val) => {
               <TextOutline class="w-4 h-4 text-slate-400" />
               <span class="text-sm font-semibold text-white">字体配置</span>
             </div>
-            <NSelect
-              :value="fontFamily.value"
-              :options="fontOptions"
-              @update:value="onFontChange"
-              filterable
-              tag
-              placeholder="选择或输入字体..."
-            />
-            <p class="text-xs text-slate-500 mt-2">
-              支持输入自定义字体名称，多个字体用逗号分隔
+
+            <p class="text-xs text-slate-500 mb-3 leading-relaxed">
+              列表中第一种字体将被应用。若该字体不存在于当前设备上，则顺延至存在于当前设备上的字体。
             </p>
+
+            <div class="flex gap-2 mb-4">
+              <NAutoComplete
+                v-model:value="fontInput"
+                :options="filteredSuggestions"
+                placeholder="输入或选择自定义字体名称..."
+                size="small"
+                class="flex-1"
+                clearable
+                @keyup.enter="addFont"
+              />
+              <NButton
+                size="small"
+                type="primary"
+                @click="addFont"
+                :disabled="!fontInput.trim()"
+                class="!rounded-lg shrink-0"
+              >
+                <template #icon><NIcon :component="AddOutline" size="16" /></template>
+                添加
+              </NButton>
+            </div>
+
+            <TransitionGroup
+              name="font-stack"
+              tag="div"
+              class="flex flex-col gap-1"
+            >
+              <div
+                v-for="(font, index) in fontList"
+                :key="font"
+                draggable="true"
+                @dragstart="onDragStart($event, index)"
+                @dragover="onDragOver($event, index)"
+                @drop="onDrop($event, index)"
+                @dragend="onDragEnd"
+                class="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-150 border cursor-default select-none"
+                :class="[
+                  hoverIndex === index && dragIndex !== null && dragIndex !== index
+                    ? 'border-indigo-500/40 bg-indigo-500/8'
+                    : 'border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06]'
+                ]"
+              >
+                <div class="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 transition-colors touch-none">
+                  <NIcon :component="ReorderThreeOutline" size="16" />
+                </div>
+
+                <span
+                  class="flex-1 text-sm truncate"
+                  :style="{ fontFamily: font }"
+                >
+                  {{ font }}
+                </span>
+
+                <button
+                  @click="removeFont(index)"
+                  class="opacity-0 group-hover:opacity-100 transition-all duration-150 text-red-400 hover:text-red-300 p-0.5 rounded"
+                >
+                  <NIcon :component="CloseOutline" size="14" />
+                </button>
+              </div>
+            </TransitionGroup>
+
+            <div
+              v-if="fontList.length === 0"
+              class="text-center py-5 text-xs text-slate-500 bg-white/[0.02] rounded-lg border border-dashed border-white/[0.06]"
+            >
+              尚未添加字体，请通过上方输入框添加至少一种字体
+            </div>
           </div>
         </div>
       </NTabPane>
@@ -292,3 +423,19 @@ watch(() => props.show, (val) => {
     </template>
   </NModal>
 </template>
+
+<style scoped>
+.font-stack-move,
+.font-stack-enter-active,
+.font-stack-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.font-stack-enter-from,
+.font-stack-leave-to {
+  opacity: 0;
+  transform: translateX(-16px);
+}
+.font-stack-leave-active {
+  position: absolute;
+}
+</style>
