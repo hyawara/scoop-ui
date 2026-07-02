@@ -69,6 +69,7 @@ interface Window {
       notes?: string
       pubDate?: string
       downloadUrl?: string
+      error?: string
     }>
     downloadUpdate: (url: string) => Promise<{ success: boolean; path: string }>
     exitAndInstall: () => void

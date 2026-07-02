@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
 import {
   NButton,
   NIcon,
@@ -16,19 +16,34 @@ import {
 
 const updateInfo = inject<any>('updateInfo')
 const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
+const showSettings = inject<any>('showSettings')
+const appDownloading = inject<any>('appDownloading')
 
 type BannerState = 'hidden' | 'notified' | 'updating'
 const state = ref<BannerState>('hidden')
 const downloadProgress = ref(0)
 const showNotesModal = ref(false)
+const dismissed = ref(false)
 
 const BANNER_HEIGHT = 'h-10'
 
 function shouldShow(): BannerState {
+  if (dismissed.value && !appDownloading?.value) return 'hidden'
+  if (showSettings?.value && !appDownloading?.value) return 'hidden'
+  if (appDownloading?.value) return 'updating'
   if (state.value === 'updating') return 'updating'
   if (updateInfo?.value?.hasUpdate) return 'notified'
   return 'hidden'
 }
+
+function dismissBanner() {
+  dismissed.value = true
+  state.value = 'hidden'
+}
+
+watch(() => updateInfo?.value?.hasUpdate, (newVal) => {
+  if (newVal) dismissed.value = false
+})
 
 onMounted(() => {
   window.scoopAPI.onUpdateProgress((data: { percent: number }) => {
@@ -84,7 +99,7 @@ async function startDownload() {
       <NButton
         text
         size="tiny"
-        @click="state = 'hidden'"
+        @click="dismissBanner"
         class="!text-slate-400 hover:!text-slate-200 !rounded-md"
       >
         <template #icon><NIcon :component="CloseOutline" size="14" /></template>

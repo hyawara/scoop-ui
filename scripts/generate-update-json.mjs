@@ -29,9 +29,10 @@ const installerPath = join(RELEASE_DIR, installer)
 const content = readFileSync(installerPath)
 const stats = statSync(installerPath)
 const sha512 = createHash('sha512').update(content).digest('base64')
-const encodedName = encodeURIComponent(installer)
+// gh CLI replaces spaces with dots when uploading release assets
+const githubAssetName = installer.replace(/ /g, '.')
 const tagName = `v${version}`
-const downloadUrl = `https://github.com/hyawara/scoop-ui/releases/download/${tagName}/${encodedName}`
+const downloadUrl = `https://github.com/hyawara/scoop-ui/releases/download/${tagName}/${encodeURIComponent(githubAssetName)}`
 
 const updateJson = {
   version,

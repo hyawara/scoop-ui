@@ -1,7 +1,7 @@
-import { ipcMain, BrowserWindow, shell, app } from 'electron'
+import { ipcMain, BrowserWindow, shell, app, net } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
 import { createWriteStream, existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { pipeline } from 'stream/promises'
 import { execSync, spawn } from 'child_process'
@@ -597,13 +597,29 @@ export function registerScoopIPC(): void {
   // ============================================
   // Self-Update: Check for app updates
   // ============================================
+
+  function semverGt(a: string, b: string): boolean {
+    const pa = a.replace(/^v/, '').split('.').map(Number)
+    const pb = b.replace(/^v/, '').split('.').map(Number)
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = pa[i] || 0
+      const nb = pb[i] || 0
+      if (na > nb) return true
+      if (na < nb) return false
+    }
+    return false
+  }
+
   ipcMain.handle('app:checkForUpdate', async (_event, url: string) => {
     try {
-      const response = await fetch(url, {
+      const response = await net.fetch(url, {
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
       })
-      if (!response.ok) return { hasUpdate: false }
+      if (!response.ok) {
+        console.warn(`[app:checkForUpdate] HTTP ${response.status}`)
+        return { hasUpdate: false, error: `服务器返回 ${response.status}` }
+      }
       const data = await response.json() as {
         version?: string
         notes?: string
@@ -614,7 +630,7 @@ export function registerScoopIPC(): void {
       }
       const remoteVersion = data.version || ''
       const localVersion = app.getVersion()
-      if (remoteVersion && remoteVersion !== localVersion) {
+      if (remoteVersion && semverGt(remoteVersion, localVersion)) {
         const downloadUrl = data.platforms?.['windows-x86_64']?.url || ''
         return {
           hasUpdate: true,
@@ -625,8 +641,10 @@ export function registerScoopIPC(): void {
         }
       }
       return { hasUpdate: false }
-    } catch {
-      return { hasUpdate: false }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[app:checkForUpdate]', msg)
+      return { hasUpdate: false, error: msg }
     }
   })
 
@@ -637,7 +655,13 @@ export function registerScoopIPC(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     const filePath = join(tmpdir(), 'scoop-ui-update.exe')
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(300000) })
+      let response = await net.fetch(url, { signal: AbortSignal.timeout(300000) })
+      if (!response.ok && response.status === 404) {
+        // gh CLI replaces spaces with dots; try fallback URL
+        const fallbackUrl = url.replace(/%20/g, '.')
+        const retry = await net.fetch(fallbackUrl, { signal: AbortSignal.timeout(300000) })
+        if (retry.ok) response = retry
+      }
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const total = Number(response.headers.get('content-length')) || 0
       let downloaded = 0
@@ -670,8 +694,9 @@ export function registerScoopIPC(): void {
     if (!existsSync(installerPath)) {
       throw new Error('Installer not found')
     }
-    // Launch installer with silent flags (NSIS: /SILENT, Inno Setup: /SILENT)
-    spawn(installerPath, ['/SILENT'], {
+    // Use NSIS silent mode + current install directory for seamless incremental update
+    const currentDir = dirname(app.getPath('exe'))
+    spawn(installerPath, ['/S', `/D=${currentDir}`], {
       detached: true,
       stdio: 'ignore',
       windowsHide: false,

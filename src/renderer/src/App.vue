@@ -41,6 +41,7 @@ const updateInfo = ref<{
   pubDate: string
   downloadUrl: string
   checking: boolean
+  error: string
 }>({
   hasUpdate: false,
   version: '',
@@ -48,7 +49,10 @@ const updateInfo = ref<{
   pubDate: '',
   downloadUrl: '',
   checking: false,
+  error: '',
 })
+
+const appDownloading = ref(false)
 
 const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
 
@@ -57,7 +61,9 @@ async function checkForUpdate() {
   updateInfo.value.checking = true
   try {
     const result = await window.scoopAPI.checkForUpdate(UPDATE_CHECK_URL)
-    if (result.hasUpdate) {
+    if (result.error) {
+      updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false, error: result.error }
+    } else if (result.hasUpdate) {
       updateInfo.value = {
         hasUpdate: true,
         version: result.version || '',
@@ -65,12 +71,14 @@ async function checkForUpdate() {
         pubDate: result.pubDate || '',
         downloadUrl: result.downloadUrl || '',
         checking: false,
+        error: '',
       }
     } else {
-      updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false }
+      updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false, error: '' }
     }
-  } catch {
-    updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false, error: msg }
   }
 }
 
@@ -133,6 +141,8 @@ provide('isDark', isDark)
 provide('fontFamily', fontFamily)
 provide('fontList', fontList)
 provide('colorPreset', colorPreset)
+provide('showSettings', showSettings)
+provide('appDownloading', appDownloading)
 
 function parseFontFamilyToArray(cssStr: string): string[] {
   if (!cssStr) return []

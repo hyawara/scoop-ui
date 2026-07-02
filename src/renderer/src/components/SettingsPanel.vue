@@ -24,6 +24,7 @@ import {
   AddOutline,
   CloseOutline,
   ReorderThreeOutline,
+  RocketOutline,
 } from '@vicons/ionicons5'
 import type { Ref } from 'vue'
 
@@ -36,11 +37,16 @@ const isDark = inject<Ref<boolean>>('isDark')!
 const fontFamily = inject<Ref<string>>('fontFamily')!
 const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
+const appDownloading = inject<any>('appDownloading')
 
-const updateInfo = inject<any>('updateInfo')
-const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
+const APP_VERSION = '1.0.4'
 
-const APP_VERSION = '1.0.3'
+const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
+type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available'
+const updateStatus = ref<UpdateStatus>('idle')
+const remoteVersion = ref('')
+const releaseNotes = ref('')
+const downloadUrl = ref('')
 
 const scoopVersion = ref('')
 const scoopVersionLoading = ref(false)
@@ -147,12 +153,39 @@ async function loadScoopVersion() {
 }
 
 async function handleCheckUpdate() {
-  if (!checkForUpdate) return
-  await checkForUpdate()
-  if (updateInfo?.value?.hasUpdate) {
-    message.success(`发现新版本 v${updateInfo.value.version}`)
-  } else {
-    message.info('当前已是最新版本')
+  updateStatus.value = 'checking'
+  try {
+    const result = await window.scoopAPI.checkForUpdate(UPDATE_CHECK_URL)
+    if (result.error) {
+      message.error(`检查更新失败: ${result.error}`)
+      updateStatus.value = 'idle'
+    } else if (result.hasUpdate) {
+      remoteVersion.value = result.version || ''
+      releaseNotes.value = result.notes || ''
+      downloadUrl.value = result.downloadUrl || ''
+      updateStatus.value = 'available'
+      message.success(`发现新版本 v${result.version}`)
+    } else {
+      updateStatus.value = 'latest'
+      message.info('当前已是最新版本')
+    }
+  } catch (e) {
+    message.error(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`)
+    updateStatus.value = 'idle'
+  }
+}
+
+async function triggerAppUpgrade() {
+  if (!downloadUrl.value) return
+  updateStatus.value = 'checking'
+  if (appDownloading) appDownloading.value = true
+  try {
+    await window.scoopAPI.downloadUpdate(downloadUrl.value)
+    setTimeout(() => window.scoopAPI.exitAndInstall(), 1500)
+  } catch (e) {
+    message.error(`更新下载失败: ${e instanceof Error ? e.message : String(e)}`)
+    if (appDownloading) appDownloading.value = false
+    updateStatus.value = 'available'
   }
 }
 
@@ -174,6 +207,11 @@ watch(() => props.show, (val) => {
   if (val) {
     activeTab.value = 'theme'
     loadScoopVersion()
+  } else {
+    updateStatus.value = 'idle'
+    remoteVersion.value = ''
+    releaseNotes.value = ''
+    downloadUrl.value = ''
   }
 })
 </script>
@@ -386,17 +424,56 @@ watch(() => props.show, (val) => {
                 <p class="text-xs text-slate-400">获取最新 Scoop UI 版本</p>
               </div>
             </div>
+
             <NButton
+              v-if="updateStatus === 'idle'"
               size="small"
               secondary
-              type="primary"
-              :loading="updateInfo?.checking"
+              type="warning"
               @click="handleCheckUpdate"
               class="!rounded-lg"
             >
               <template #icon><NIcon :component="RefreshOutline" size="14" /></template>
               检查更新
             </NButton>
+
+            <NButton
+              v-else-if="updateStatus === 'checking'"
+              size="small"
+              loading
+              disabled
+              class="!rounded-lg"
+            >
+              正在检查...
+            </NButton>
+
+            <div
+              v-else-if="updateStatus === 'latest'"
+              class="flex items-center gap-1.5 text-green-500 text-sm font-medium"
+            >
+              <NIcon :component="CheckmarkCircleOutline" size="16" />
+              已是最新版本 (v{{ APP_VERSION }})
+            </div>
+
+            <div v-else-if="updateStatus === 'available'" class="flex flex-col items-end gap-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded font-mono">
+                  New v{{ remoteVersion }}
+                </span>
+                <NButton
+                  size="small"
+                  type="primary"
+                  @click="triggerAppUpgrade"
+                  class="!rounded-lg"
+                >
+                  <template #icon><NIcon :component="RocketOutline" size="14" /></template>
+                  立即更新
+                </NButton>
+              </div>
+              <span v-if="releaseNotes" class="text-[11px] text-slate-500 truncate max-w-[200px]">
+                更新日志：{{ releaseNotes }}
+              </span>
+            </div>
           </div>
         </div>
       </NTabPane>
