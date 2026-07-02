@@ -36,7 +36,7 @@ const colorPreset = inject<Ref<string>>('colorPreset')!
 const updateInfo = inject<any>('updateInfo')
 const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
 
-const APP_VERSION = '1.0.1'
+const APP_VERSION = '1.0.2'
 
 const scoopVersion = ref('')
 const scoopVersionLoading = ref(false)
