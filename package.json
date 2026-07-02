@@ -41,9 +41,6 @@
       "shortcutName": "Scoop UI"
     }
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["electron", "electron-winstaller"]
-  },
   "keywords": [
     "scoop",
     "package-manager",
