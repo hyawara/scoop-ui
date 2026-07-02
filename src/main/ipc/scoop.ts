@@ -441,11 +441,10 @@ export function registerScoopIPC(): void {
     return { enabled: installed || enabled }
   })
 
-  // List buckets — 直接用 execPowerShell 执行，避免 git-bash 管道破坏编码
+  // List buckets
   ipcMain.handle('scoop:listBuckets', async () => {
     const { stdout } = await execScoop('bucket list')
 
-    // 获取 SCOOP 目录
     let scoopRoot = ''
     try {
       const { stdout: envOut } = await execPowerShell('echo $env:SCOOP')
@@ -466,16 +465,25 @@ export function registerScoopIPC(): void {
         continue
       }
 
-      const parts = line.split(/\s{2,}/)
-      if (parts.length < 2) continue
+      // 按字段模式匹配：name + url + 可选的时间 + 可选的 manifests 数
+      // 格式: name  url  [date/time]  [count]
+      const full = line.match(/^(\S+)\s+(https?:\/\/\S+)\s+(\d{4}\/\d{1,2}\/\d{1,2}\/\S+\s+\d{1,2}:\d{2}:\d{2})\s+(\d+)$/)
+      if (full) {
+        const name = full[1], source = full[2]
+        const lastUpdated = full[3]
+        const appCount = parseInt(full[4], 10) || 0
+        const localPath = scoopRoot ? join(scoopRoot, 'buckets', name) : join(homedir(), 'scoop', 'buckets', name)
+        result.push({ name, source, localPath, appCount, lastUpdated })
+        continue
+      }
 
-      const name = parts[0].trim()
-      const source = parts[1].trim()
-      const lastUpdated = parts.length >= 3 ? parts[2].trim() : ''
-      const appCount = (parts.length >= 4 ? parseInt(parts[3], 10) : 0) || 0
-      const localPath = scoopRoot ? join(scoopRoot, 'buckets', name) : join(homedir(), 'scoop', 'buckets', name)
-
-      result.push({ name, source, localPath, appCount, lastUpdated })
+      // Fallback: 只匹配 name + url（没有时间/manifests 的旧行）
+      const basic = line.match(/^(\S+)\s+(https?:\/\/\S+)/)
+      if (basic) {
+        const name = basic[1], source = basic[2]
+        const localPath = scoopRoot ? join(scoopRoot, 'buckets', name) : join(homedir(), 'scoop', 'buckets', name)
+        result.push({ name, source, localPath, appCount: 0, lastUpdated: '' })
+      }
     }
 
     return result
