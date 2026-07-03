@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('scoopAPI', {
     close: () => ipcRenderer.send('window:close'),
   },
 
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+
   // Self-Update APIs
   checkForUpdate: (url: string) => ipcRenderer.invoke('app:checkForUpdate', url),
   downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),

@@ -62,6 +62,8 @@ interface Window {
       close: () => void
     }
 
+    getAppVersion: () => Promise<string>
+
     // Self-Update APIs
     checkForUpdate: (url: string) => Promise<{
       hasUpdate: boolean

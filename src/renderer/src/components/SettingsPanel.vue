@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, computed, watch } from 'vue'
+import { ref, inject, computed, watch, onMounted } from 'vue'
 import {
   NButton,
   NIcon,
@@ -40,7 +40,11 @@ const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 const appDownloading = inject<any>('appDownloading')
 
-const APP_VERSION = '1.0.8'
+const APP_VERSION = ref('')
+
+onMounted(async () => {
+  APP_VERSION.value = (await window.scoopAPI.getAppVersion()) || '0.0.0'
+})
 
 const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
 type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'restarting'

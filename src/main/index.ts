@@ -81,6 +81,10 @@ function registerWindowIPC(): void {
   ipcMain.handle('window:isMaximized', () => {
     return mainWindow?.isMaximized() ?? false
   })
+
+  ipcMain.handle('app:getVersion', () => {
+    return app.getVersion()
+  })
 }
 
 app.whenReady().then(() => {
