@@ -38,6 +38,8 @@ jobs:
         run: pnpm electron-builder --win --x64
         env:
           GH_TOKEN: ${{ github.token }}
+          electron_config_cache: ${{ runner.temp }}/electron-cache
+          LOCALAPPDATA: ${{ runner.temp }}/local-app-data
 
       - name: Generate update manifest
         run: node scripts/generate-update-json.mjs
