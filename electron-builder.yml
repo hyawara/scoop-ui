@@ -19,5 +19,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
   installDir: $PROGRAMFILES\Scoop-UI
+  include: build/installer.nsh
 files:
   - dist/**/*
