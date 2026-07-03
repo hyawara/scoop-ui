@@ -23,6 +23,10 @@ jobs:
           node-version: 22
           cache: 'pnpm'
 
+      - run: pnpm approve-builds --all
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
       - run: pnpm install --frozen-lockfile
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
