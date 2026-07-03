@@ -1,5 +1,5 @@
 /**
- * 构建后脚本：从 release/ 目录解析 NSIS 安装包 + Zip 包，生成 update.json
+ * 构建后脚本：从 release/ 目录解析 NSIS 安装包，生成 update.json
  *
  * 用法: node scripts/generate-update-json.mjs
  * 环境变量:
@@ -19,7 +19,6 @@ const version = pkg.version
 
 const files = readdirSync(RELEASE_DIR)
 const installer = files.find(f => /Setup.*\.exe$/i.test(f))
-const zipFile = files.find(f => /\.zip$/i.test(f) && !/\.blockmap/i.test(f))
 
 if (!installer) {
   console.error('❌ 在 release/ 中未找到 NSIS 安装包（匹配 *Setup*.exe）')
@@ -37,17 +36,6 @@ const sha512 = createHash('sha512').update(content).digest('base64')
 const githubAssetName = installer.replace(/ /g, '.')
 const downloadUrl = `${ghPrefix}/${encodeURIComponent(githubAssetName)}`
 
-// -- Zip 便携包（用于原地覆盖升级）--
-let zipUrl = ''
-let zipSize = 0
-if (zipFile) {
-  const zipPath = join(RELEASE_DIR, zipFile)
-  const zipStats = statSync(zipPath)
-  zipSize = zipStats.size
-  const zipAssetName = zipFile.replace(/ /g, '.')
-  zipUrl = `${ghPrefix}/${encodeURIComponent(zipAssetName)}`
-}
-
 const updateJson = {
   version,
   notes: process.env.RELEASE_NOTES || '',
@@ -56,7 +44,6 @@ const updateJson = {
     'windows-x86_64': {
       url: downloadUrl,
       signature: sha512,
-      ...(zipUrl ? { zipUrl } : {}),
     },
   },
 }
@@ -67,7 +54,5 @@ writeFileSync(outPath, JSON.stringify(updateJson, null, 2))
 console.log(`✅ update.json 生成完毕 → ${outPath}`)
 console.log(`   Version:   ${version}`)
 console.log(`   Installer: ${installer} (${(stats.size / 1024 / 1024).toFixed(1)} MB)`)
-if (zipFile) console.log(`   Zip:       ${zipFile} (${(zipSize / 1024 / 1024).toFixed(1)} MB)`)
 console.log(`   SHA512:    ${sha512.slice(0, 32)}...`)
 console.log(`   URL:       ${downloadUrl}`)
-if (zipUrl) console.log(`   Zip URL:   ${zipUrl}`)
