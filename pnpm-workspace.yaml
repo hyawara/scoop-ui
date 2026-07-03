@@ -3,3 +3,5 @@ packages:
 allowBuilds:
   electron: true
   electron-winstaller: true
+overrides:
+  app-builder-lib>@electron/get: "3.1.0"
