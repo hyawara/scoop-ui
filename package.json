@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.scoop-ui.app",
-    "productName": "Scoop UI",
+    "productName": "Scoop-UI",
     "directories": {
       "output": "release"
     },
@@ -37,7 +37,7 @@
       "installerIcon": "build/icons/icon.ico",
       "uninstallerIcon": "build/icons/icon.ico",
       "installerHeaderIcon": "build/icons/icon.ico",
-      "shortcutName": "Scoop UI"
+      "shortcutName": "Scoop-UI"
     }
   },
   "keywords": [

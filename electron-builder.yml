@@ -1,5 +1,5 @@
 appId: com.hyawara.scoop-ui
-productName: Scoop UI
+productName: Scoop-UI
 copyright: Copyright © 2025 hyawara
 directories:
   output: release
@@ -19,5 +19,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
   installDir: $PROGRAMFILES\Scoop-UI
+  include: build/installer.nsh
 files:
   - dist/**/*
