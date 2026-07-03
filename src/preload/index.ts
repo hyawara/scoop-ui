@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('scoopAPI', {
   checkScoop: () => ipcRenderer.invoke('scoop:check'),
-  installScoop: () => ipcRenderer.invoke('scoop:installScoop'),
+  installScoop: (options?: { scoopPath?: string; globalPath?: string }) => ipcRenderer.invoke('scoop:installScoop', options),
 
   search: (query: string) => ipcRenderer.invoke('scoop:search', query),
   searchRaw: (query: string) => ipcRenderer.invoke('scoop:searchRaw', query),

@@ -1,11 +1,33 @@
 <script setup lang="ts">
-import { NButton, NProgress, NCard } from 'naive-ui'
+import { NButton, NProgress, NCard, NInput } from 'naive-ui'
 import { useAppStore } from '@/stores/app'
+import { ref, watch } from 'vue'
 
 const appStore = useAppStore()
 
+const scoopPath = ref('~/scoop')
+const globalPath = ref('~/scoop/global')
+let userEditedGlobal = false
+
+watch(scoopPath, (newPath) => {
+  if (!userEditedGlobal) {
+    globalPath.value = `${newPath}/global`
+  }
+})
+
+watch(globalPath, () => {
+  userEditedGlobal = true
+})
+
 async function startInstall() {
-  await appStore.installScoop()
+  const options: { scoopPath?: string; globalPath?: string } = {}
+  if (scoopPath.value.trim()) {
+    options.scoopPath = scoopPath.value.trim()
+  }
+  if (globalPath.value.trim()) {
+    options.globalPath = globalPath.value.trim()
+  }
+  await appStore.installScoop(options)
 }
 </script>
 
@@ -34,6 +56,30 @@ async function startInstall() {
           <div class="flex items-center gap-3 text-left text-sm text-gray-500 dark:text-gray-400">
             <span class="w-5 h-5 rounded-full bg-green-100 dark:bg-green-900 text-green-600 flex items-center justify-center text-xs">&#10003;</span>
             海量开源软件，一键安装
+          </div>
+        </div>
+
+        <!-- 安装目录配置 -->
+        <div class="mb-6 space-y-3 text-left">
+          <div>
+            <label class="text-xs text-gray-400 mb-1 block">安装目录</label>
+            <NInput
+              v-model:value="scoopPath"
+              placeholder="例如: C:\Users\你的用户名\scoop"
+              :disabled="appStore.loading"
+              clearable
+            />
+            <p class="text-xs text-gray-400 mt-1">Scoop 主程序安装位置</p>
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 mb-1 block">全局程序目录</label>
+            <NInput
+              v-model:value="globalPath"
+              placeholder="例如: C:\Users\你的用户名\scoop\global"
+              :disabled="appStore.loading"
+              clearable
+            />
+            <p class="text-xs text-gray-400 mt-1">全局安装的软件存放位置</p>
           </div>
         </div>
 

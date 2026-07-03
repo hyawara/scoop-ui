@@ -17,13 +17,13 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function installScoop() {
+  async function installScoop(options?: { scoopPath?: string; globalPath?: string }) {
     loading.value = true
     try {
       window.scoopAPI.onProgress((data: ProgressData) => {
         progress.value = data
       })
-      await window.scoopAPI.installScoop()
+      await window.scoopAPI.installScoop(options)
       await checkScoop()
     } finally {
       loading.value = false

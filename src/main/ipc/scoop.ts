@@ -13,11 +13,15 @@ function sendProgress(win: BrowserWindow | null, data: any) {
   }
 }
 
-const SCOOP_INSTALL_SCRIPT = `
+function buildInstallScript(scoopPath: string, globalPath: string): string {
+  return `
+$env:SCOOP = '${scoopPath.replace(/'/g, "''")}'
+$env:SCOOP_GLOBAL = '${globalPath.replace(/'/g, "''")}'
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 irm get.scoop.sh | iex
 scoop install git 7zip
 `
+}
 
 export function registerScoopIPC(): void {
   // Check if Scoop is installed
@@ -65,9 +69,12 @@ export function registerScoopIPC(): void {
   })
 
   // Install Scoop (bootstrap)
-  ipcMain.handle('scoop:installScoop', async (event) => {
+  ipcMain.handle('scoop:installScoop', async (event, options?: { scoopPath?: string; globalPath?: string }) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    await execPowerShell(SCOOP_INSTALL_SCRIPT, (data) => {
+    const scoopPath = options?.scoopPath || join(homedir(), 'scoop')
+    const globalPath = options?.globalPath || join(scoopPath, 'global')
+    const script = buildInstallScript(scoopPath, globalPath)
+    await execPowerShell(script, (data) => {
         sendProgress(win, {
           type: 'message',
           package: 'scoop',

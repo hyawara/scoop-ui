@@ -22,7 +22,7 @@ interface ProgressData {
 interface Window {
   scoopAPI: {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
-    installScoop: () => Promise<void>
+    installScoop: (options?: { scoopPath?: string; globalPath?: string }) => Promise<void>
     search: (query: string) => Promise<any[]>
     searchRaw: (query: string) => Promise<string>
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
