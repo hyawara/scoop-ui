@@ -231,18 +231,6 @@ export function registerScoopIPC(): void {
     const result: { name: string; version: string; bucket: string; global: boolean }[] = []
     let pastHeader = false
 
-    // Get globally installed packages for cross-reference
-    let globalSet = new Set<string>()
-    try {
-      const g = await execScoop('list --global')
-      for (const l of g.stdout.split('\n')) {
-        const parts = l.trim().split(/\s{2,}/)
-        if (parts[0] && !parts[0].startsWith('-') && !parts[0].startsWith('Name')) {
-          globalSet.add(parts[0].trim())
-        }
-      }
-    } catch { /* no global packages */ }
-
     for (const line of lines) {
       if (!pastHeader) {
         if (/^-+\s+-+/.test(line)) { pastHeader = true }
@@ -250,11 +238,15 @@ export function registerScoopIPC(): void {
       }
       const fields = line.trim().split(/\s{2,}/)
       if (fields.length >= 2 && fields[0] && fields[1]) {
+        const name = fields[0].trim()
+        const version = fields[1].trim()
+        const bucket = fields[2]?.trim() || ''
+        const info = fields[3]?.trim() || ''
         result.push({
-          name: fields[0].trim(),
-          version: fields[1].trim(),
-          bucket: fields[2]?.trim() || '',
-          global: globalSet.has(fields[0].trim()),
+          name,
+          version,
+          bucket,
+          global: info.toLowerCase().includes('global'),
         })
       }
     }
