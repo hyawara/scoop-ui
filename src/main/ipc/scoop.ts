@@ -545,10 +545,20 @@ export function registerScoopIPC(): void {
 
   // Get scoop environment
   ipcMain.handle('scoop:getEnv', async () => {
-    const { stdout } = await execPowerShell('echo "SCOOP=$env:SCOOP; GLOBAL=$env:SCOOP_GLOBAL"')
-    const scoop = stdout.match(/SCOOP=([^;\s]+)/)?.[1]?.trim() || ''
-    const global = stdout.match(/GLOBAL=([^;\s]+)/)?.[1]?.trim() || ''
-    return { scoop, global }
+    let scoop = ''
+    let globalPath = ''
+
+    try {
+      const { stdout } = await execPowerShell('scoop config root_path')
+      scoop = stdout.trim()
+    } catch { /* scoop not installed */ }
+
+    try {
+      const { stdout } = await execPowerShell('scoop config global_path')
+      globalPath = stdout.trim()
+    } catch { /* global_path not set */ }
+
+    return { scoop, global: globalPath }
   })
 
   // Get disk space for scoop directories

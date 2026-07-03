@@ -11,6 +11,7 @@ import {
   AppsOutline,
   GlobeOutline,
   SparklesOutline,
+  CheckmarkCircleOutline,
 } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
 import { usePackagesStore } from '@/stores/packages'
@@ -130,25 +131,23 @@ async function handleInstallAria2() {
               <span class="text-sm text-slate-300 font-medium flex-shrink-0">Root</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
-              <span
-                class="text-sm text-white/80 truncate max-w-[100px] text-right font-medium"
-                :title="settingsStore.scoopEnv.scoop || '使用默认路径'"
-              >
-                {{ settingsStore.scoopEnv.scoop || '默认' }}
-              </span>
-              <NTooltip trigger="hover" placement="top">
-                <template #trigger>
-                  <NButton
-                    quaternary
-                    size="small"
-                    class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
-                    @click="openFolder(settingsStore.scoopEnv.scoop)"
-                  >
-                    <FolderOpenOutline class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
-                  </NButton>
-                </template>
-                在资源管理器中打开
-              </NTooltip>
+              <template v-if="settingsStore.scoopEnv.scoop">
+                <CheckmarkCircleOutline class="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <NTooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <NButton
+                      quaternary
+                      size="small"
+                      class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
+                      @click="openFolder(settingsStore.scoopEnv.scoop)"
+                    >
+                      <FolderOpenOutline class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                    </NButton>
+                  </template>
+                  {{ settingsStore.scoopEnv.scoop }}
+                </NTooltip>
+              </template>
+              <span v-else class="text-sm text-slate-500">默认</span>
             </div>
           </div>
 
@@ -159,26 +158,23 @@ async function handleInstallAria2() {
               <span class="text-sm text-slate-300 font-medium flex-shrink-0">Global</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
-              <span
-                class="text-sm text-white/80 truncate max-w-[100px] text-right font-medium"
-                :title="settingsStore.scoopEnv.global || '未配置原生路径'"
-              >
-                {{ settingsStore.scoopEnv.global || '未配置' }}
-              </span>
-              <NTooltip trigger="hover" placement="top">
-                <template #trigger>
-                  <NButton
-                    quaternary
-                    size="small"
-                    :disabled="!settingsStore.scoopEnv.global"
-                    class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
-                    @click="openFolder(settingsStore.scoopEnv.global)"
-                  >
-                    <FolderOpenOutline class="w-3.5 h-3.5 transition-colors" :class="settingsStore.scoopEnv.global ? 'text-slate-400 group-hover:text-cyan-400' : 'text-slate-600'" />
-                  </NButton>
-                </template>
-                {{ settingsStore.scoopEnv.global ? '在资源管理器中打开' : '未配置全局路径' }}
-              </NTooltip>
+              <template v-if="settingsStore.scoopEnv.global">
+                <CheckmarkCircleOutline class="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <NTooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <NButton
+                      quaternary
+                      size="small"
+                      class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
+                      @click="openFolder(settingsStore.scoopEnv.global)"
+                    >
+                      <FolderOpenOutline class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                    </NButton>
+                  </template>
+                  {{ settingsStore.scoopEnv.global }}
+                </NTooltip>
+              </template>
+              <span v-else class="text-sm text-slate-500">未配置</span>
             </div>
           </div>
 

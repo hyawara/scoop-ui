@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   },
 
   openExternal: (url: string) => ipcRenderer.invoke('scoop:openExternal', url),
+  openPath: (path: string) => ipcRenderer.invoke('scoop:openPath', path),
 
   onLog: (callback: (data: any) => void) => {
     ipcRenderer.on('scoop:log', (_event, data) => callback(data))
