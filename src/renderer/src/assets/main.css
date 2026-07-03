@@ -1,94 +1,100 @@
 @import "tailwindcss";
 
-:root {
-  --app-bg: #0b0c0e;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+@layer base {
+  :root {
+    --app-bg: #0b0c0e;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+  }
+
+  .dark {
+    --app-bg: #0b0c0e;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  #app {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%), var(--app-bg);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
+  *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 }
 
-.dark {
-  --app-bg: #0b0c0e;
+@layer components {
+  /* 等宽字体类 */
+  .font-mono {
+    font-family: ui-monospace, 'Cascadia Code', 'Consolas', 'Microsoft YaHei Mono', monospace;
+  }
+
+  /* 统一圆角类 */
+  .rounded-app-sm { border-radius: var(--radius-sm); }
+  .rounded-app { border-radius: var(--radius-md); }
+  .rounded-app-lg { border-radius: var(--radius-lg); }
+  .rounded-app-xl { border-radius: var(--radius-xl); }
+
+  /* Card backdrops */
+  .glass-card {
+    background: #13151a;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: var(--radius-lg);
+  }
+
+  .glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
+    transform: translateY(-2px);
+  }
+
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Search box focus glow */
+  .search-glow:focus-within .search-wrapper {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(107, 91, 237, 0.6);
+    box-shadow: 0 0 0 3px rgba(107, 91, 237, 0.15), 0 0 20px rgba(107, 91, 237, 0.08);
+    transition: all 0.3s ease;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+
+  /* Button hover */
+  .btn-hover-scale { transition: transform 0.2s ease; }
+  .btn-hover-scale:hover { transform: scale(1.02); }
+  .btn-hover-scale:active { transform: scale(0.98); }
+
+  /* Micro-card animation */
+  .micro-card { animation: fadeInUp 0.3s ease-out; }
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
-  background: transparent;
-  overflow: hidden;
-}
-
-#app {
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-  background: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%), var(--app-bg);
-}
-
-/* 等宽字体类 */
-.font-mono {
-  font-family: ui-monospace, 'Cascadia Code', 'Consolas', 'Microsoft YaHei Mono', monospace;
-}
-
-/* 统一圆角类 */
-.rounded-app-sm { border-radius: var(--radius-sm); }
-.rounded-app { border-radius: var(--radius-md); }
-.rounded-app-lg { border-radius: var(--radius-lg); }
-.rounded-app-xl { border-radius: var(--radius-xl); }
-
-/* Layer 2: Card backdrops */
-.glass-card {
-  background: #13151a;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: var(--radius-lg);
-}
-
-.glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
-  transform: translateY(-2px);
-}
-
-.drag-region {
-  -webkit-app-region: drag;
-}
-
-.no-drag {
-  -webkit-app-region: no-drag;
-}
-
-/* Search box focus glow */
-.search-glow:focus-within .search-wrapper {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(107, 91, 237, 0.6);
-  box-shadow: 0 0 0 3px rgba(107, 91, 237, 0.15), 0 0 20px rgba(107, 91, 237, 0.08);
-  transition: all 0.3s ease;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
-*:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
-.custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
-
-/* Button hover */
-.btn-hover-scale { transition: transform 0.2s ease; }
-.btn-hover-scale:hover { transform: scale(1.02); }
-.btn-hover-scale:active { transform: scale(0.98); }
-
-/* Micro-card animation */
-.micro-card { animation: fadeInUp 0.3s ease-out; }
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
