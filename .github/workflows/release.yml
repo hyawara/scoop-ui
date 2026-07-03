@@ -40,6 +40,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LOCALAPPDATA: ${{ runner.temp }}/local-app-data
 
+      - name: Cleanup release files
+        run: node scripts/cleanup-release.mjs
+
       - name: Generate update manifest
         run: node scripts/generate-update-json.mjs
 

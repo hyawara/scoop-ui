@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: AppConfig = {
   },
   theme: {
     dark: true,
-    fontFamily: "'IosevkaAnony','LXGW WenKai Mono','Maple Mono NF','黑体'",
+    fontFamily: "'Segoe UI','Microsoft YaHei','Maple Mono NF','sans-serif'",
     colorPreset: 'aurora',
   },
 }

@@ -13,7 +13,7 @@
     },
     "theme": {
         "dark": true,
-        "fontFamily": "'IosevkaAnony Medium','LXGW WenKai Mono Medium','Maple Mono NF','黑体'",
+        "fontFamily": "'Segoe UI','Microsoft YaHei','Maple Mono NF','sans-serif'",
         "colorPreset": "aurora"
     }
 }

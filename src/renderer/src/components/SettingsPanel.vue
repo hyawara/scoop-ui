@@ -78,8 +78,6 @@ const commonFonts = [
   { label: 'Maple Mono NF', value: 'Maple Mono NF' },
   { label: 'Maple Mono', value: 'Maple Mono' },
   { label: 'Sarasa Term SC', value: 'Sarasa Term SC' },
-  { label: 'IosevkaAnony', value: 'IosevkaAnony' },
-  { label: 'LXGW WenKai Mono', value: 'LXGW WenKai Mono' },
   { label: 'Source Code Pro', value: 'Source Code Pro' },
   { label: 'Noto Sans SC', value: 'Noto Sans SC' },
   { label: 'Noto Sans Mono', value: 'Noto Sans Mono' },
