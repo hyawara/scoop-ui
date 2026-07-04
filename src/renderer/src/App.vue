@@ -222,10 +222,11 @@ watch(fontList, (newList) => {
   window.scoopAPI.setConfig('theme.fontFamily', cssStr)
 }, { deep: true })
 
-// 字体配置变化时同步到全局 body + Naive UI
+// 字体配置变化时同步到全局 body + CSS 自定义属性 + Naive UI
 watch(fontFamily, (val) => {
   nextTick(() => {
     document.body.style.fontFamily = val || ''
+    if (val) document.documentElement.style.setProperty('--font-mono', val)
   })
 }, { immediate: true })
 

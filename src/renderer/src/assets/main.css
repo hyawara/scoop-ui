@@ -7,6 +7,7 @@
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-xl: 16px;
+    --font-mono: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
   }
 
   .dark {
@@ -41,9 +42,9 @@
 }
 
 @layer components {
-  /* 等宽字体类 */
+  /* 等宽字体类 — 使用 CSS 自定义属性，由 App.vue 动态设置 */
   .font-mono {
-    font-family: ui-monospace, 'Cascadia Code', 'Consolas', 'Microsoft YaHei Mono', monospace;
+    font-family: var(--font-mono);
   }
 
   /* 统一圆角类 */
