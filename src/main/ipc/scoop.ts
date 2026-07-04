@@ -500,12 +500,20 @@ export function registerScoopIPC(): void {
   // Add bucket
   ipcMain.handle('scoop:addBucket', async (_event, name: string, repo?: string) => {
     const cmd = repo ? `bucket add ${name} ${repo}` : `bucket add ${name}`
-    return execScoop(cmd)
+    const { stdout, stderr, code } = await execScoop(cmd)
+    if (code !== 0) {
+      throw new Error(stderr.trim() || stdout.trim() || `添加软件源失败 (exit ${code})`)
+    }
+    return { stdout, stderr, code }
   })
 
   // Remove bucket
   ipcMain.handle('scoop:removeBucket', async (_event, name: string) => {
-    return execScoop(`bucket rm ${name}`)
+    const { stdout, stderr, code } = await execScoop(`bucket rm ${name}`)
+    if (code !== 0) {
+      throw new Error(stderr.trim() || stdout.trim() || `删除软件源失败 (exit ${code})`)
+    }
+    return { stdout, stderr, code }
   })
 
   // Get current proxy config
@@ -601,6 +609,36 @@ export function registerScoopIPC(): void {
     if (/^https?:\/\/.+/.test(url)) {
       await shell.openExternal(url)
     }
+  })
+
+  // Get scoop config key-value pairs
+  ipcMain.handle('scoop:config', async () => {
+    const { stdout } = await execScoop('config')
+    const lines = stdout.split('\n')
+    const config: Record<string, string> = {}
+    for (const line of lines) {
+      // Format: "key               : value"
+      const match = line.match(/^\s*(\S[\S ]*?)\s*:\s*(.*)$/)
+      if (match) {
+        const key = match[1].trim()
+        const val = match[2].trim()
+        if (key) config[key] = val
+      }
+    }
+    return config
+  })
+
+  // Set a single scoop config value
+  ipcMain.handle('scoop:setConfig', async (_event, key: string, value: string) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9\-]{0,100}$/.test(key)) {
+      throw new Error('Invalid config key')
+    }
+    // Remove the config key if value is empty
+    if (!value || value.trim() === '') {
+      return execScoop(`config rm ${key}`)
+    }
+    const safeValue = value.includes(' ') ? `"${value}"` : value
+    return execScoop(`config ${key} ${safeValue}`)
   })
 
   // ============================================

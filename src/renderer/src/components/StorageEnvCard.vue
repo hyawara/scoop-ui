@@ -214,7 +214,7 @@ async function handleInstallAria2() {
           @click="clearCache"
           :disabled="settingsStore.cacheInfo.files === 0"
           class="!rounded-lg btn-hover-scale"
-          style="background: rgba(136,19,55,0.3); color: #fda4af; border: 1px solid rgba(159,68,86,0.4);"
+          style="background: rgba(78,138,100,0.15); color: #4E8A64; border: 1px solid rgba(78,138,100,0.3);"
         >
           <template #icon><TrashOutline class="w-3.5 h-3.5" /></template>
           清除缓存
@@ -245,26 +245,26 @@ async function handleInstallAria2() {
 
       <!-- 下半区：Scoop 生态统计微型网格（带独立发光背景） -->
       <div class="grid grid-cols-3 gap-2.5">
-        <div class="flex flex-col items-center py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:border-white/[0.12] transition-all cursor-default">
+        <div class="flex flex-col items-center py-3 rounded-xl dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <CubeOutline class="w-4 h-4 text-cyan-400" />
             <span class="text-xl font-extrabold text-cyan-400 leading-none">{{ settingsStore.bucketCount }}</span>
           </div>
-          <span class="text-xs text-slate-300 mt-1.5 font-medium">Buckets</span>
+          <span class="text-xs dark:text-slate-300 text-gray-600 mt-1.5 font-medium">Buckets</span>
         </div>
-        <div class="flex flex-col items-center py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:border-white/[0.12] transition-all cursor-default">
+        <div class="flex flex-col items-center py-3 rounded-xl dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
-            <AppsOutline class="w-4 h-4 text-purple-400" />
-            <span class="text-xl font-extrabold text-purple-400 leading-none">{{ settingsStore.installedCount }}</span>
+            <AppsOutline class="w-4 h-4 text-emerald-500" />
+            <span class="text-xl font-extrabold text-emerald-500 leading-none">{{ settingsStore.installedCount }}</span>
           </div>
-          <span class="text-xs text-slate-300 mt-1.5 font-medium">Apps</span>
+          <span class="text-xs dark:text-slate-300 text-gray-600 mt-1.5 font-medium">Apps</span>
         </div>
-        <div class="flex flex-col items-center py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:border-white/[0.12] transition-all cursor-default">
+        <div class="flex flex-col items-center py-3 rounded-xl dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
-            <GlobeOutline class="w-4 h-4 text-violet-400" />
-            <span class="text-xl font-extrabold text-violet-400 leading-none">{{ settingsStore.globalCount }}</span>
+            <GlobeOutline class="w-4 h-4 text-teal-500" />
+            <span class="text-xl font-extrabold text-teal-500 leading-none">{{ settingsStore.globalCount }}</span>
           </div>
-          <span class="text-xs text-slate-300 mt-1.5 font-medium">Global</span>
+          <span class="text-xs dark:text-slate-300 text-gray-600 mt-1.5 font-medium">Global</span>
         </div>
       </div>
     </div>

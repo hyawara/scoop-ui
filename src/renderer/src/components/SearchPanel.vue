@@ -105,8 +105,8 @@ const skeletonItems = Array.from({ length: 5 })
     <div class="w-5/12 flex flex-col min-w-0">
       <div class="flex items-center gap-2 mb-3 h-9">
         <SearchOutline class="w-4 h-4 text-slate-400" />
-        <span class="text-sm text-slate-400">搜索 "<strong class="text-white">{{ query }}</strong>" 的结果</span>
-        <span class="px-2 py-0.5 text-[12px] bg-white/[0.06] text-slate-400 rounded font-mono">
+        <span class="text-sm dark:text-slate-400 text-gray-600">搜索 "<strong class="dark:text-white text-gray-900">{{ query }}</strong>" 的结果</span>
+        <span class="px-2 py-0.5 text-[12px] dark:bg-white/[0.06] bg-black/[0.04] dark:text-slate-400 text-gray-500 rounded font-mono">
           {{ isSearching ? '搜索中...' : `${packagesStore.searchResults.length} 个` }}
         </span>
       </div>
@@ -117,7 +117,7 @@ const skeletonItems = Array.from({ length: 5 })
           <div
             v-for="(_, i) in skeletonItems"
             :key="i"
-            class="flex items-center gap-3 h-11 px-4 border-b border-white/[0.04]"
+            class="flex items-center gap-3 h-11 px-4 border-b dark:border-white/[0.04] border-black/[0.06]"
           >
             <NSkeleton :width="28" :height="28" :border-radius="6" />
             <div class="flex-1 space-y-2">
@@ -164,7 +164,7 @@ const skeletonItems = Array.from({ length: 5 })
           :installed="installedNames.has(selectedPackage.name)"
           :is-installing="installingSet.has(selectedPackage.name)"
         />
-        <div v-else class="h-full flex flex-col items-center justify-center text-slate-500 rounded-xl border border-dashed border-white/[0.08]">
+        <div v-else class="h-full flex flex-col items-center justify-center dark:text-slate-500 text-gray-500 rounded-xl border border-dashed dark:border-white/[0.08] border-black/[0.08]">
           <CloudDownloadOutline class="w-16 h-16 mb-4 opacity-20" />
           <p class="text-sm">选择一个软件包查看详情</p>
         </div>
@@ -186,7 +186,7 @@ const skeletonItems = Array.from({ length: 5 })
       </div>
       <div
         ref="pkgLogContainerRef"
-        class="bg-[#090a0d] p-4 rounded-xl text-emerald-400 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border border-white/[0.06]"
+        class="dark:bg-[#090a0d] bg-gray-100 p-4 rounded-xl dark:text-emerald-400 text-emerald-700 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border dark:border-white/[0.06] border-black/[0.08]"
       >
         <div v-if="activePkgLogLines.length === 0" class="text-slate-600 text-center py-8">
           暂无日志输出

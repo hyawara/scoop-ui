@@ -75,7 +75,7 @@ async function applyProxy() {
       class="flex items-center gap-2 p-3 rounded-xl transition-all duration-300"
       :class="proxyEnabled
         ? 'bg-emerald-500/[0.06] border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.08)]'
-        : 'bg-white/[0.03] border border-white/[0.06]'"
+        : 'dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06]'"
     >
       <!-- 协议选择 -->
       <NSelect
@@ -113,7 +113,7 @@ async function applyProxy() {
       <button
         v-if="!proxyEnabled"
         @click="applyProxy"
-        class="flex items-center justify-center w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] transition-all duration-200 flex-shrink-0"
+        class="flex items-center justify-center w-8 h-8 rounded-lg dark:bg-white/[0.06] bg-black/[0.04] dark:hover:bg-white/[0.12] hover:bg-black/[0.08] border dark:border-white/[0.08] border-black/[0.1] transition-all duration-200 flex-shrink-0"
       >
         <svg class="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />

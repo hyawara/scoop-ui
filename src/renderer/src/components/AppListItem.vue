@@ -49,10 +49,10 @@ const ringDashoffset = computed(() => {
 
 <template>
   <div
-    class="group flex items-center h-12 px-4 transition-colors duration-150 border-b border-white/[0.04] hover:bg-white/[0.02]"
+    class="group flex items-center h-12 px-4 transition-colors duration-150 border-b dark:border-white/[0.04] border-black/[0.06] dark:hover:bg-white/[0.02] hover:bg-black/[0.02]"
     :class="{
       'opacity-40': disabled,
-      'bg-white/[0.04]': isSelected,
+      'dark:bg-white/[0.04] bg-black/[0.04]': isSelected,
       'cursor-pointer': mode === 'search',
     }"
     @click="mode === 'search' && emit('select', pkg)"
@@ -67,7 +67,7 @@ const ringDashoffset = computed(() => {
     </div>
 
     <!-- 软件图标 -->
-    <div class="w-9 h-9 rounded-lg bg-white/[0.04] flex items-center justify-center flex-shrink-0 overflow-hidden">
+    <div class="w-9 h-9 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] flex items-center justify-center flex-shrink-0 overflow-hidden">
       <img
         v-if="icon"
         :src="icon"
@@ -79,10 +79,10 @@ const ringDashoffset = computed(() => {
 
     <!-- 信息区：名称 + 版本 + 标签，永不换行 -->
     <div class="flex-1 min-w-0 flex items-center ml-2.5 overflow-hidden">
-      <span class="font-medium text-[15px] text-white/90 truncate flex-shrink-0">{{ pkg.name }}</span>
+      <span class="font-medium text-[15px] dark:text-white/90 text-gray-800 truncate flex-shrink-0">{{ pkg.name }}</span>
       <span class="text-slate-400 text-sm font-mono ml-3 flex-shrink-0">{{ pkg.version }}</span>
-      <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-[12px] border border-white/[0.06] text-gray-500 rounded font-mono flex-shrink-0">{{ pkg.bucket }}</span>
-      <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-[12px] border border-white/[0.06] text-gray-500 rounded font-mono flex-shrink-0">Global</span>
+      <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-[12px] border dark:border-white/[0.06] border-black/[0.08] dark:text-gray-500 text-gray-500 rounded font-mono flex-shrink-0">{{ pkg.bucket }}</span>
+      <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-[12px] border dark:border-white/[0.06] border-black/[0.08] dark:text-gray-500 text-gray-500 rounded font-mono flex-shrink-0">Global</span>
       <span v-if="newVersion && !progress" class="ml-3 text-amber-500/90 text-sm font-mono flex-shrink-0">→ {{ newVersion }}</span>
       <span v-if="mode === 'search' && isInstalled" class="ml-3 text-[12px] text-gray-500 font-mono flex-shrink-0">已安装</span>
     </div>
@@ -115,7 +115,7 @@ const ringDashoffset = computed(() => {
         <NButton
           v-if="mode === 'search' && !isInstalled && !progress"
           text size="small"
-          class="!text-gray-600 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+          class="!text-gray-600 dark:hover:!text-white hover:!text-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
           @click.stop="emit('install', pkg.name)"
         >
           <template #icon><NIcon :component="DownloadOutline" size="15" /></template>

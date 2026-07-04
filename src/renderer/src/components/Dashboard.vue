@@ -809,7 +809,7 @@ function openBucketDrawer() {
           :pane-style="{ padding: '0', height: '100%' }"
         >
           <template #prefix>
-            <span class="font-semibold text-base text-white ml-5">应用管理</span>
+            <span class="font-semibold text-base dark:text-white text-gray-800 ml-5">应用管理</span>
           </template>
           <template #suffix>
             <div class="flex items-center gap-1 mr-3">
@@ -880,8 +880,8 @@ function openBucketDrawer() {
 
               <!-- 批量操作工具栏（Raycast 风格，与列表行全等对齐） -->
               <div
-                class="sticky top-0 z-20 py-2 backdrop-blur-md border-b border-white/[0.03]"
-                style="background: rgba(18,19,26,0.95);"
+                class="sticky top-0 z-20 py-2 backdrop-blur-md border-b dark:border-white/[0.03] border-black/[0.04]"
+                style="background: var(--app-bg); opacity: 0.95;"
               >
                 <div class="flex items-center gap-3 px-4 h-14">
                   <!-- 左侧：全选 + 计数 -->
@@ -908,7 +908,7 @@ function openBucketDrawer() {
                         @click="handleBatchUpdate"
                         class="flex items-center gap-1.5 px-3 py-1.5 text-[14px] font-medium rounded-md border transition-all select-none"
                         :class="selectedPackageNames.length === 0
-                          ? 'border-white/[0.04] bg-transparent text-gray-600 cursor-not-allowed'
+                          ? 'dark:border-white/[0.04] border-black/[0.06] bg-transparent text-gray-500 cursor-not-allowed'
                           : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 cursor-pointer'"
                       >
                         <NIcon :component="DownloadOutline" :size="15" />
@@ -919,7 +919,7 @@ function openBucketDrawer() {
                         @click="handleBatchUninstall"
                         class="flex items-center gap-1.5 px-3 py-1.5 text-[14px] font-medium rounded-md border transition-all select-none"
                         :class="selectedPackageNames.length === 0
-                          ? 'border-white/[0.04] bg-transparent text-gray-600 cursor-not-allowed'
+                          ? 'dark:border-white/[0.04] border-black/[0.06] bg-transparent text-gray-500 cursor-not-allowed'
                           : 'border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 cursor-pointer'"
                       >
                         <NIcon :component="TrashOutline" :size="15" />
@@ -930,8 +930,8 @@ function openBucketDrawer() {
                         @click="handleUpdateAllConfirm"
                         class="flex items-center gap-1 px-2.5 py-1.5 text-[14px] rounded-md transition-colors select-none"
                         :class="packagesStore.updatable.length === 0
-                          ? 'text-gray-600 cursor-not-allowed'
-                          : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] cursor-pointer'"
+                          ? 'text-gray-500 cursor-not-allowed'
+                          : 'dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-white/[0.04] text-gray-600 hover:text-gray-800 hover:bg-black/[0.03] cursor-pointer'"
                       >
                         全部更新
                       </button>
@@ -966,14 +966,14 @@ function openBucketDrawer() {
           <NTabPane name="discover" tab="软件发现" class="flex-1 overflow-hidden">
             <div class="flex h-full overflow-hidden">
               <!-- ═══ 左侧分类导航 ═══ -->
-              <div class="w-[140px] flex-shrink-0 border-r border-white/[0.04] py-2 overflow-y-auto custom-scrollbar">
+              <div class="w-[140px] flex-shrink-0 border-r dark:border-white/[0.04] border-black/[0.06] py-2 overflow-y-auto custom-scrollbar">
                 <div
                   v-for="cat in categories"
                   :key="cat.id"
                   class="flex items-center gap-2 px-3 py-2 mx-1 rounded-lg cursor-pointer transition-colors duration-150 text-[13px]"
                   :class="activeCategoryId === cat.id
-                    ? 'bg-white/[0.06] text-white'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.02]'"
+                    ? 'dark:bg-white/[0.06] dark:text-white bg-black/[0.06] text-gray-800'
+                    : 'dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-white/[0.02] text-gray-600 hover:text-gray-800 hover:bg-black/[0.03]'"
                   @click="activeCategoryId = cat.id"
                 >
                   <NIcon :component="cat.icon" :size="14" class="flex-shrink-0" />
@@ -985,9 +985,9 @@ function openBucketDrawer() {
               <div class="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-4 py-3">
                 <!-- 分类标题 -->
                 <div class="flex items-center gap-2 mb-3">
-                  <NIcon :component="activeCategory.icon" :size="15" class="text-gray-400" />
-                  <span class="text-sm font-medium text-gray-300">{{ activeCategory.name }}</span>
-                  <span class="px-1.5 py-0.5 text-[11px] bg-white/[0.04] text-gray-500 rounded font-mono">{{ activeCategory.apps.length }}</span>
+                  <NIcon :component="activeCategory.icon" :size="15" class="dark:text-gray-400 text-gray-500" />
+                  <span class="text-sm font-medium dark:text-gray-300 text-gray-700">{{ activeCategory.name }}</span>
+                  <span class="px-1.5 py-0.5 text-[11px] dark:bg-white/[0.04] bg-black/[0.04] dark:text-gray-500 text-gray-500 rounded font-mono">{{ activeCategory.apps.length }}</span>
                 </div>
 
                 <!-- 应用卡片网格 -->
@@ -995,7 +995,7 @@ function openBucketDrawer() {
                   <div
                     v-for="app in activeCategory.apps"
                     :key="app.name"
-                    class="group relative flex items-center gap-3 p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03] hover:border-white/[0.08] transition-all duration-200"
+                    class="group relative flex items-center gap-3 p-3 rounded-xl dark:border-white/[0.04] dark:bg-white/[0.01] dark:hover:bg-white/[0.03] dark:hover:border-white/[0.08] border-black/[0.06] bg-black/[0.02] hover:bg-black/[0.04] hover:border-black/[0.12] transition-all duration-200"
                     :class="getMVEnabled(app) ? 'cursor-pointer' : installedNames.has(app.name) ? '' : 'cursor-pointer'"
                     @click="handleCardClick(app)"
                   >
@@ -1009,7 +1009,7 @@ function openBucketDrawer() {
                     <!-- 信息 -->
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
-                        <span class="font-mono text-sm font-semibold text-white/90 truncate">{{ app.name }}</span>
+                        <span class="font-mono text-sm font-semibold dark:text-white/90 text-gray-800 truncate">{{ app.name }}</span>
                         <span v-if="installedNames.has(app.name)" class="text-[10px] text-gray-500 font-mono flex-shrink-0">已安装</span>
                         <span v-else-if="getMVEnabled(app)" class="text-[10px] text-violet-500/60 font-mono flex-shrink-0">多版</span>
                       </div>
@@ -1031,7 +1031,7 @@ function openBucketDrawer() {
                       <template v-else-if="!installedNames.has(app.name)">
                         <NButton
                           text size="tiny"
-                          class="!text-gray-500 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                          class="!text-gray-500 dark:hover:!text-white hover:!text-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
                           @click.stop="storeQuickInstall(app.name)"
                         >
                           <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
@@ -1042,7 +1042,7 @@ function openBucketDrawer() {
                         class="w-5 h-5 flex items-center justify-center rounded transition-all duration-150"
                         :class="getMVEnabled(app)
                           ? 'text-violet-400/70 hover:text-violet-300 bg-violet-500/10'
-                          : 'text-gray-600 hover:text-gray-400 hover:bg-white/[0.04]'"
+                          : 'dark:text-gray-600 dark:hover:text-gray-400 dark:hover:bg-white/[0.04] text-gray-500 hover:text-gray-700 hover:bg-black/[0.04]'"
                         :title="getMVEnabled(app) ? '关闭多版本模式' : '开启多版本模式'"
                         @click.stop="toggleMV(app)"
                       >
@@ -1059,7 +1059,7 @@ function openBucketDrawer() {
     </div>
 
     <!-- === 右侧列 === -->
-    <div class="flex-[2] flex flex-col gap-5 h-full min-w-0 overflow-y-auto">
+    <div class="flex-[3] flex flex-col gap-5 h-full min-w-0">
       <StorageEnvCard />
       <ProxyCard />
     </div>
@@ -1090,7 +1090,7 @@ function openBucketDrawer() {
       </div>
       <div
         ref="pkgLogContainerRef"
-        class="bg-[#090a0d] p-4 rounded-xl text-emerald-400 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border border-white/[0.06]"
+        class="dark:bg-[#090a0d] bg-gray-100 p-4 rounded-xl dark:text-emerald-400 text-emerald-700 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border dark:border-white/[0.06] border-black/[0.08]"
       >
         <div v-if="activePkgLogLines.length === 0" class="text-slate-600 text-center py-8">
           暂无日志输出

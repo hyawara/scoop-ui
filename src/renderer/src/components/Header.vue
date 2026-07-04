@@ -72,22 +72,22 @@ async function refreshAll() {
     <!-- Left: Logo & Status -->
     <div class="flex items-center gap-3 no-drag flex-shrink-0">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-sm">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
           <span class="text-white text-xs font-bold">S</span>
         </div>
         <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">Scoop UI</span>
       </div>
       <div class="h-5 w-px bg-gray-200 dark:bg-gray-700" />
-      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-900/40 border border-green-700/30">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-        <span class="text-xs text-emerald-300 font-medium">Scoop 正常</span>
+      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full dark:bg-green-900/40 dark:border-green-700/30 bg-green-100 border border-green-200">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+        <span class="text-xs dark:text-emerald-300 text-emerald-700 font-medium">Scoop 正常</span>
       </div>
     </div>
 
     <!-- Center: Search Box -->
     <div class="flex-1 flex justify-center no-drag">
       <div class="search-glow w-full max-w-md">
-        <div class="search-wrapper flex items-center gap-2 px-4 py-2 bg-white/[0.06] border border-white/[0.1] rounded-full transition-all duration-300">
+        <div class="search-wrapper flex items-center gap-2 px-4 py-2 dark:bg-white/[0.06] dark:border-white/[0.1] bg-[#EFF2EF] border-transparent rounded-full transition-all duration-300">
           <SearchOutline class="w-4 h-4 text-gray-400 flex-shrink-0" />
           <input
             ref="searchInputRef"
@@ -100,13 +100,13 @@ async function refreshAll() {
           <button
             v-if="searchQuery"
             @click="emit('update:searchQuery', ''); emit('search', '')"
-            class="inline-flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/[0.08] text-slate-500 hover:text-slate-300 transition-all flex-shrink-0"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-lg dark:hover:bg-white/[0.08] hover:bg-black/[0.04] dark:text-slate-500 dark:hover:text-slate-300 text-gray-500 hover:text-gray-700 transition-all flex-shrink-0"
           >
             <CloseOutline class="w-3.5 h-3.5" />
           </button>
           <button
             @click="emit('search', searchQuery)"
-            class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 hover:text-purple-300 transition-all flex-shrink-0"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-lg dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 dark:text-emerald-400 text-emerald-600 hover:text-emerald-700 transition-all flex-shrink-0"
           >
             <SearchOutline class="w-3.5 h-3.5" />
           </button>
@@ -123,7 +123,7 @@ async function refreshAll() {
       </NButton>
       <NButton text @click="emit('toggleTheme')" size="small">
         <template #icon>
-          <NIcon :component="isDark ? SunnyOutline : MoonOutline" size="16" />
+          <NIcon :component="isDark ? MoonOutline : SunnyOutline" size="16" />
         </template>
       </NButton>
       <NButton text size="small" @click="emit('openSettings')">
@@ -144,7 +144,7 @@ async function refreshAll() {
           <NIcon :component="isMaximized ? SquareOutline : ExpandOutline" size="14" />
         </template>
       </NButton>
-      <NButton text @click="closeWindow" size="small" class="hover:!bg-red-500 hover:!text-white">
+      <NButton text @click="closeWindow" size="small" class="!text-gray-600 dark:!text-gray-300 hover:!bg-red-500 hover:!text-white">
         <template #icon>
           <NIcon :component="CloseOutline" size="16" />
         </template>

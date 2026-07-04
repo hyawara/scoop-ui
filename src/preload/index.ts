@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   getDiskSpace: () => ipcRenderer.invoke('scoop:diskSpace'),
   migrateScoop: (newPath: string) => ipcRenderer.invoke('scoop:migrate', newPath),
   getScoopVersion: () => ipcRenderer.invoke('scoop:version'),
+  getScoopConfig: () => ipcRenderer.invoke('scoop:config'),
+  setScoopConfig: (key: string, value: string) => ipcRenderer.invoke('scoop:setConfig', key, value),
   getAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:getAppIcon', packageName),
   clearAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:clearAppIcon', packageName),
 

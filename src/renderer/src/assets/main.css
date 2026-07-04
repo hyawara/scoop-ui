@@ -1,17 +1,59 @@
 @import "tailwindcss";
 
+/* ─── Make Tailwind's dark: variant honor .dark class instead of prefers-color-scheme ─── */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
+  /* ══════════════════════════════════════════════
+     🍵 护眼豆沙绿 (Matcha Light) — 默认值
+     ══════════════════════════════════════════════ */
   :root {
-    --app-bg: #0b0c0e;
+    --app-bg: #F4F7F4;
+    --app-bg-gradient: radial-gradient(ellipse at 50% 0%, rgba(78, 138, 100, 0.05) 0%, transparent 60%);
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-xl: 16px;
     --font-mono: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+
+    /* Scrollbar — light */
+    --scrollbar-thumb: rgba(0, 0, 0, 0.08);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb-visible: rgba(0, 0, 0, 0.12);
+
+    /* Glass card — light */
+    --glass-bg: #ffffff;
+    --glass-border: rgba(0, 0, 0, 0.06);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
+    --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+
+    /* Subtle overlays — light (black with low opacity) */
+    --subtle-bg: rgba(0, 0, 0, 0.03);
+    --subtle-bg-hover: rgba(0, 0, 0, 0.05);
+    --subtle-border: rgba(0, 0, 0, 0.06);
+    --subtle-border-hover: rgba(0, 0, 0, 0.10);
   }
 
+  /* ══════════════════════════════════════════════
+     🌑 极客暗色模式
+     ══════════════════════════════════════════════ */
   .dark {
     --app-bg: #0b0c0e;
+    --app-bg-gradient: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%);
+
+    --scrollbar-thumb: rgba(255, 255, 255, 0.06);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb-visible: rgba(255, 255, 255, 0.12);
+
+    --glass-bg: #13151a;
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+    --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
+
+    --subtle-bg: rgba(255, 255, 255, 0.03);
+    --subtle-bg-hover: rgba(255, 255, 255, 0.06);
+    --subtle-border: rgba(255, 255, 255, 0.06);
+    --subtle-border-hover: rgba(255, 255, 255, 0.10);
   }
 
   * {
@@ -30,15 +72,16 @@
     height: 100vh;
     width: 100vw;
     overflow: hidden;
-    background: radial-gradient(ellipse at 50% 0%, rgba(107,91,237,0.06) 0%, transparent 60%), var(--app-bg);
+    background: var(--app-bg-gradient), var(--app-bg);
+    transition: background 0.35s ease;
   }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 4px; }
-  *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; transition: background 0.2s; }
+  *:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-visible); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 }
 
 @layer components {
@@ -53,18 +96,18 @@
   .rounded-app-lg { border-radius: var(--radius-lg); }
   .rounded-app-xl { border-radius: var(--radius-xl); }
 
-  /* Card backdrops */
+  /* Card backdrops — 自动跟随主题变量 */
   .glass-card {
-    background: #13151a;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     border-radius: var(--radius-lg);
   }
 
   .glass-card:hover {
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--glass-shadow-hover);
     transform: translateY(-2px);
   }
 
@@ -72,20 +115,23 @@
     -webkit-app-region: drag;
   }
 
-  .no-drag {
+  .no-drag,
+  .no-drag * {
     -webkit-app-region: no-drag;
   }
 
-  /* Search box focus glow */
-  .search-glow:focus-within .search-wrapper {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(107, 91, 237, 0.6);
-    box-shadow: 0 0 0 3px rgba(107, 91, 237, 0.15), 0 0 20px rgba(107, 91, 237, 0.08);
+  /* Search box focus glow — 跟随主题 */
+  .search-wrapper {
     transition: all 0.3s ease;
   }
+  .search-glow:focus-within .search-wrapper {
+    border-color: rgba(107, 91, 237, 0.6) !important;
+    box-shadow: 0 0 0 3px rgba(107, 91, 237, 0.15), 0 0 20px rgba(107, 91, 237, 0.08) !important;
+  }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+  /* 自定义滚动条类 */
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-visible); }
 
   /* Button hover */
   .btn-hover-scale { transition: transform 0.2s ease; }

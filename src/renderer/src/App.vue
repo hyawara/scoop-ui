@@ -105,7 +105,118 @@ const presetColors: Record<string, { primary: string; primaryHover: string }> = 
   rose: { primary: '#EC4899', primaryHover: '#F472B6' },
 }
 
-const themeOverrides = computed(() => {
+// ─── 🍵 护眼豆沙绿 (Matcha Light) 主题覆盖 ───
+const lightMatchaOverrides = computed(() => {
+  // 亮色模式下强制统一使用抹茶绿为主色调，不随 colorPreset 改变
+  const MATCHA_GREEN = '#4E8A64'
+  const MATCHA_GREEN_HOVER = '#5D9E74'
+  const base: Record<string, any> = {
+    borderRadius: '8px',
+    primaryColor: MATCHA_GREEN,
+    primaryColorHover: MATCHA_GREEN_HOVER,
+    bodyColor: 'transparent',
+    cardColor: '#FFFFFF',
+    modalColor: '#FFFFFF',
+    actionColor: '#F4F7F4',
+    scrollbarColor: 'rgba(0,0,0,0.12)',
+    scrollbarColorHover: 'rgba(0,0,0,0.2)',
+    // ── 全面去除边框线 ──
+    dividerColor: 'transparent',
+    borderColor: 'transparent',
+    // ── 输入框（浅绿色背景，确保光标清晰可见） ──
+    inputColor: '#EAEFEA',
+    inputColorFocus: '#EAEFEA',
+    inputBorder: 'transparent',
+    inputBorderFocus: MATCHA_GREEN,
+    // ── 弹出层 ──
+    popoverColor: '#FFFFFF',
+    // ── 表格 ──
+    tableColor: 'transparent',
+    tableHeaderColor: '#F4F7F4',
+    tableRowColorHover: 'rgba(0,0,0,0.02)',
+    // ── 标签 ──
+    tagColor: 'rgba(0,0,0,0.04)',
+    // ── 按钮 ──
+    buttonColor2: '#FFFFFF',
+    buttonColor2Hover: '#F0F2F0',
+    // ── 关闭按钮 ──
+    closeColor: 'rgba(0,0,0,0.4)',
+    closeColorHover: 'rgba(0,0,0,0.7)',
+    // ── 文字（高对比度，确保清晰） ──
+    textColor1: '#1E2D22',
+    textColor2: '#55665A',
+    textColor3: '#8A9D8E',
+    placeholderColor: '#9EAD9E',
+    // ── 输入框内部文字 ──
+    inputTextColor: '#1E2D22',
+    inputTextColorFocus: '#1E2D22',
+    inputPlaceholderColor: '#9EAD9E',
+    // ── 状态色 ──
+    loadingColor: MATCHA_GREEN,
+    successColor: MATCHA_GREEN,
+    warningColor: '#E6A23C',
+    errorColor: '#E87461',
+    // ── 进度条 ──
+    railColor: 'rgba(0,0,0,0.04)',
+    fillColor: MATCHA_GREEN,
+    // ── 悬停效果 ──
+    hoverColor: 'rgba(0,0,0,0.03)',
+  }
+  if (fontFamily.value) base.fontFamily = fontFamily.value
+
+  // ── 组件级覆盖 ──
+  const components: Record<string, any> = {
+    Card: { borderColor: 'transparent', titleTextColor: '#1E2D22' },
+    DataTable: {
+      borderColor: 'transparent',
+      tdColor: '#FFFFFF',
+      thColor: '#F4F7F4',
+      thTextColor: '#55665A',
+    },
+    Input: {
+      border: 'rgba(0,0,0,0.06)',
+      borderHover: MATCHA_GREEN,
+      borderFocus: MATCHA_GREEN,
+    },
+    Select: {
+      border: 'rgba(0,0,0,0.06)',
+      borderHover: MATCHA_GREEN,
+      borderFocus: MATCHA_GREEN,
+    },
+    Tag: { border: 'transparent' },
+    Dialog: { border: 'transparent' },
+    Modal: { border: 'transparent' },
+    Button: {
+      // 次要按钮：白底无边框，灰色悬浮
+      color2: '#FFFFFF',
+      color2Hover: '#F0F2F0',
+      border: 'transparent',
+      borderHover: 'transparent',
+      borderFocus: 'transparent',
+      textColor2: '#55665A',
+      textColor2Hover: '#1E2D22',
+    },
+    Checkbox: {
+      checkMarkColor: '#FFFFFF',
+      border: 'rgba(0,0,0,0.15)',
+      borderFocus: MATCHA_GREEN,
+      colorChecked: MATCHA_GREEN,
+    },
+    Switch: {
+      railColor: 'rgba(0,0,0,0.12)',
+      railColorActive: MATCHA_GREEN,
+    },
+    Progress: {
+      railColor: 'rgba(0,0,0,0.04)',
+      fillColor: MATCHA_GREEN,
+    },
+  }
+
+  return { common: base, ...components }
+})
+
+// ─── 🌑 极客暗色模式 主题覆盖 ───
+const darkDefaultOverrides = computed(() => {
   const colors = presetColors[colorPreset.value] || presetColors.aurora
   const base: Record<string, any> = {
     borderRadius: '8px',
@@ -129,9 +240,30 @@ const themeOverrides = computed(() => {
     buttonColor2Hover: '#262b36',
     closeColor: 'rgba(255,255,255,0.5)',
     closeColorHover: 'rgba(255,255,255,0.8)',
+    textColor1: '#e2e8f0',
+    textColor2: '#94a3b8',
+    textColor3: '#64748b',
+    placeholderColor: '#475569',
+    borderColor: 'rgba(255,255,255,0.08)',
+    hoverColor: 'rgba(255,255,255,0.03)',
+    tableHeaderColor: 'rgba(255,255,255,0.04)',
+    tableRowColorHover: 'rgba(255,255,255,0.02)',
+    loadingColor: colors.primary,
+    successColor: '#10B981',
+    warningColor: '#F59E0B',
+    errorColor: '#EF4444',
+    inputTextColor: '#e2e8f0',
+    inputTextColorFocus: '#e2e8f0',
+    inputPlaceholderColor: '#475569',
+    railColor: 'rgba(255,255,255,0.08)',
+    fillColor: colors.primary,
   }
   if (fontFamily.value) base.fontFamily = fontFamily.value
   return { common: base }
+})
+
+const themeOverrides = computed(() => {
+  return isDark.value ? darkDefaultOverrides.value : lightMatchaOverrides.value
 })
 
 provide('searchQuery', searchQuery)
@@ -178,8 +310,16 @@ function fontListToCssString(list: string[]): string {
   return [...quoted, 'sans-serif'].join(',')
 }
 
+function syncHtmlDarkClass(dark: boolean) {
+  if (dark) {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+}
+
 onMounted(async () => {
-  // 从 config.json 加载主题配置
+  // 从 config.json 加载主题配置 (冷启动回显)
   try {
     const theme = await window.scoopAPI.getConfig('theme')
     if (theme) {
@@ -191,6 +331,15 @@ onMounted(async () => {
       if (typeof theme.colorPreset === 'string') colorPreset.value = theme.colorPreset
     }
   } catch { /* use defaults */ }
+
+  // 同步 .dark 类到 <html> (Tailwind dark: variant 的开关)
+  syncHtmlDarkClass(isDark.value)
+
+  // Watch isDark 变化：同步 HTML class + 持久化到 config.json
+  watch(isDark, (val) => {
+    syncHtmlDarkClass(val)
+    window.scoopAPI.setConfig('theme.dark', val)
+  })
 
   // 全局持久化日志监听器：始终路由到共享 progressMap，跨 tab 不丢失
   window.scoopAPI.onLog((data) => {
@@ -232,7 +381,7 @@ watch(fontFamily, (val) => {
 
 function toggleTheme() {
   isDark.value = !isDark.value
-  window.scoopAPI.setConfig('theme.dark', isDark.value)
+  // syncHtmlDarkClass + persistence handled by watch(isDark)
 }
 
 function openSettings() {

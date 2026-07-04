@@ -48,6 +48,8 @@ interface Window {
     removeProxy: () => Promise<void>
     getEnv: () => Promise<{ scoop: string; global: string }>
     getScoopVersion: () => Promise<{ version: string }>
+    getScoopConfig: () => Promise<Record<string, string>>
+    setScoopConfig: (key: string, value: string) => Promise<void>
     getAppIcon: (packageName: string) => Promise<{ icon: string | null }>
     clearAppIcon: (packageName: string) => Promise<{ success: boolean }>
     getDiskSpace: () => Promise<any>

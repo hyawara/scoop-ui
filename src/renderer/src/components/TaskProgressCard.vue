@@ -24,19 +24,19 @@ const lastLine = computed(() => {
   <Transition name="fade-slide">
     <div
       v-if="isUpdating"
-      class="bg-[#181a21] border border-white/[0.06] rounded-xl p-4"
+      class="dark:bg-[#181a21] bg-white border dark:border-white/[0.06] border-black/[0.08] rounded-xl p-4"
     >
       <!-- 头部行 -->
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
           <div class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
-          <span class="text-xs font-medium text-white">正在更新系统软件...</span>
+  
         </div>
         <NButton
           text
           size="tiny"
           @click="emit('show-logs')"
-          class="!text-slate-400 hover:!text-slate-200 !rounded-md"
+
         >
           <template #icon><NIcon :component="TerminalOutline" size="12" /></template>
           查看原始日志

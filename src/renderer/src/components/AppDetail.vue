@@ -104,7 +104,7 @@ const manifestJson = computed(() => {
                   class="!bg-emerald-500/15 !text-emerald-400">已安装</NTag>
               </div>
               <div class="flex items-center gap-2 text-sm">
-                <NTag size="small" :bordered="false" class="!bg-white/[0.06] !text-slate-300">{{ pkg.version || 'unknown' }}</NTag>
+                <NTag size="small" :bordered="false" class="dark:!bg-white/[0.06] !bg-black/[0.04] dark:!text-slate-300 !text-gray-600">{{ pkg.version || 'unknown' }}</NTag>
                 <NTag v-if="pkg.bucket" size="small" :bordered="false"
                   class="!bg-violet-900/40 !text-violet-300">{{ pkg.bucket }}</NTag>
               </div>
@@ -133,7 +133,7 @@ const manifestJson = computed(() => {
           </p>
 
           <!-- Advanced Options -->
-          <div class="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 mb-4 space-y-3">
+          <div class="dark:bg-white/[0.03] bg-black/[0.02] border dark:border-white/[0.06] border-black/[0.06] rounded-xl p-4 mb-4 space-y-3">
             <h4 class="text-sm font-semibold text-white mb-3">高级安装选项</h4>
             <div class="flex items-center justify-between">
               <span class="text-sm text-slate-300">全局安装 (--global)</span>
@@ -150,7 +150,7 @@ const manifestJson = computed(() => {
           </div>
 
           <!-- Manifest preview -->
-          <div class="bg-[#090a0d] border border-white/[0.06] rounded-xl p-4 mb-4">
+          <div class="dark:bg-[#090a0d] bg-gray-100 border dark:border-white/[0.06] border-black/[0.08] rounded-xl p-4 mb-4">
             <h4 class="text-sm font-semibold text-white mb-2">Manifest 信息</h4>
             <pre class="text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed text-slate-300">{{ manifestJson }}</pre>
           </div>
@@ -159,7 +159,7 @@ const manifestJson = computed(() => {
     </div>
 
     <!-- Action Buttons: 行内安装时隐藏整个底部栏 -->
-    <div v-if="!isInstalling" class="p-4 border-t border-white/[0.06] flex gap-3">
+    <div v-if="!isInstalling" class="p-4 border-t dark:border-white/[0.06] border-black/[0.06] flex gap-3">
       <NButton
         v-if="!installed"
         type="primary"
@@ -201,7 +201,7 @@ const manifestJson = computed(() => {
     </div>
 
     <!-- 行内安装中：底部显示微型状态条 -->
-    <div v-else class="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2">
+    <div v-else class="px-4 py-3 border-t dark:border-white/[0.06] border-black/[0.06] flex items-center gap-2">
       <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
       <span class="text-xs text-slate-400 font-mono">正在行内安装 {{ pkg.name }}...</span>
     </div>

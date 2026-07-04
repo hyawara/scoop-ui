@@ -250,8 +250,8 @@ onMounted(() => {
     <NDrawerContent closable content-class="!p-0 flex flex-col h-full overflow-hidden">
       <template #header>
         <div class="flex items-center gap-2">
-          <span class="text-base font-semibold text-white/90">软件源管理</span>
-          <span class="px-1.5 py-0.5 text-[11px] bg-white/[0.06] text-gray-400 rounded font-mono leading-none">Bucket</span>
+          <span class="text-base font-semibold dark:text-white/90 text-gray-800">软件源管理</span>
+          <span class="px-1.5 py-0.5 text-[11px] dark:bg-white/[0.06] bg-black/[0.04] dark:text-gray-400 text-gray-500 rounded font-mono leading-none">Bucket</span>
         </div>
       </template>
 
@@ -259,7 +259,7 @@ onMounted(() => {
         <!-- ═══ VIEW A: LIST ═══ -->
         <Transition name="view-slide-left" mode="out-in">
           <div v-if="currentView === 'list'" key="list" class="h-full flex flex-col overflow-hidden">
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04] flex-shrink-0">
+            <div class="flex items-center justify-between px-4 py-2.5 border-b dark:border-white/[0.04] border-black/[0.06] flex-shrink-0">
               <span class="text-sm text-gray-500">已添加 {{ buckets.length }} 个源</span>
               <NButton size="tiny" secondary @click="addModal = true" class="!rounded-md">
                 <template #icon><NIcon :component="AddOutline" size="14" /></template>
@@ -284,11 +284,11 @@ onMounted(() => {
               <div
                 v-for="b in buckets"
                 :key="b.id"
-                class="group flex items-center h-[52px] px-4 transition-all duration-150 border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.03]"
+                class="group flex items-center h-[52px] px-4 transition-all duration-150 border-b dark:border-white/[0.04] border-black/[0.06] cursor-pointer dark:hover:bg-white/[0.03] hover:bg-black/[0.03]"
                 @click="openDetail(b)"
               >
                 <span class="w-2 h-2 rounded-full flex-shrink-0 mr-3" :class="statusColor(b.status)" />
-                <span class="font-medium text-[15px] text-white/90 truncate max-w-[160px] flex-shrink-0">{{ b.name }}</span>
+                <span class="font-medium text-[15px] dark:text-white/90 text-gray-800 truncate max-w-[160px] flex-shrink-0">{{ b.name }}</span>
                 <span class="ml-3 text-slate-500 text-xs truncate min-w-0 flex-1 hidden sm:block font-mono">{{ b.url }}</span>
                 <div class="ml-auto pl-2 flex items-center gap-1 flex-shrink-0">
                   <NIcon
@@ -306,7 +306,7 @@ onMounted(() => {
                         <template #icon><NIcon :component="CloseOutline" size="13" /></template>
                       </NButton>
                     </template>
-                    确认移除 <span class="font-medium text-white/90">{{ b.name }}</span>？
+                    确认移除 <span class="font-medium dark:text-white/90 text-gray-800">{{ b.name }}</span>？
                   </NPopconfirm>
                 </div>
               </div>
@@ -315,7 +315,7 @@ onMounted(() => {
 
           <!-- ═══ VIEW B: DETAIL / EDIT (full width) ═══ -->
           <div v-else key="detail" class="h-full flex flex-col overflow-hidden">
-            <div class="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.04] flex-shrink-0">
+            <div class="flex items-center gap-2 px-4 py-2.5 border-b dark:border-white/[0.04] border-black/[0.06] flex-shrink-0">
               <button
                 class="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
                 @click="goBack"
@@ -324,7 +324,7 @@ onMounted(() => {
                 返回
               </button>
               <span class="text-sm text-gray-600">/</span>
-              <span class="text-sm font-medium text-white/80 truncate">{{ selectedBucket?.name }}</span>
+              <span class="text-sm font-medium dark:text-white/80 text-gray-700 truncate">{{ selectedBucket?.name }}</span>
             </div>
 
             <div class="flex-1 overflow-y-auto custom-scrollbar">
@@ -337,7 +337,7 @@ onMounted(() => {
                       <!-- Header: name + status -->
                       <div class="flex items-center gap-3">
                         <span class="w-3 h-3 rounded-full flex-shrink-0" :class="statusColor(selectedBucket.status)" />
-                        <h2 class="text-xl font-bold text-white tracking-tight">{{ selectedBucket.name }}</h2>
+                        <h2 class="text-xl font-bold dark:text-white text-gray-800 tracking-tight">{{ selectedBucket.name }}</h2>
                         <span class="text-[11px] text-gray-500 ml-auto">{{ statusLabel(selectedBucket.status) }}</span>
                       </div>
 
@@ -345,12 +345,12 @@ onMounted(() => {
                       <div class="space-y-2">
                         <label class="text-xs text-gray-500 block">软件源地址</label>
                         <div class="relative group">
-                          <div class="bg-white/[0.03] border border-white/[0.06] rounded-lg px-4 py-3 pr-12 text-[13px] font-mono text-gray-300 leading-relaxed break-all select-all whitespace-pre-wrap">{{ selectedBucket.url }}</div>
+                          <div class="dark:bg-white/[0.03] bg-black/[0.02] border dark:border-white/[0.06] border-black/[0.08] rounded-lg px-4 py-3 pr-12 text-[13px] font-mono dark:text-gray-300 text-gray-700 leading-relaxed break-all select-all whitespace-pre-wrap">{{ selectedBucket.url }}</div>
                           <button
                             class="absolute top-2.5 right-2.5 w-7 h-7 flex items-center justify-center rounded-md transition-all duration-200"
                             :class="copied
                               ? 'text-emerald-400 bg-emerald-500/10'
-                              : 'text-gray-500 hover:text-cyan-400 hover:bg-white/[0.06] opacity-0 group-hover:opacity-100'"
+                              : 'dark:text-gray-500 dark:hover:text-cyan-400 dark:hover:bg-white/[0.06] text-gray-500 hover:text-cyan-600 hover:bg-black/[0.04] opacity-0 group-hover:opacity-100'"
                             title="复制链接"
                             @click="copyUrl(selectedBucket.url)"
                           >
@@ -360,7 +360,7 @@ onMounted(() => {
                       </div>
 
                       <!-- Metadata card group -->
-                      <div class="bg-white/[0.03] border border-white/[0.05] rounded-lg divide-y divide-white/[0.05]">
+                      <div class="dark:bg-white/[0.03] bg-black/[0.02] border dark:border-white/[0.05] border-black/[0.06] rounded-lg divide-y dark:divide-white/[0.05] divide-black/[0.06]">
                         <div class="flex items-center px-4 py-3 gap-4">
                           <span class="text-xs text-gray-500 w-16 flex-shrink-0">Manifests</span>
                           <span class="text-xs text-gray-300 font-mono">{{ selectedBucket.appCount.toLocaleString() }} 个</span>
@@ -373,7 +373,7 @@ onMounted(() => {
                     </div>
 
                     <!-- Bottom: sticky action button group -->
-                    <div class="flex-shrink-0 px-5 pt-4 pb-5 border-t border-white/[0.08]">
+                    <div class="flex-shrink-0 px-5 pt-4 pb-5 border-t dark:border-white/[0.08] border-black/[0.06]">
                       <div class="flex gap-3">
                         <NButton size="medium" secondary class="flex-1 !rounded-lg" :disabled="isMain" @click="startEdit">
                           <template #icon><NIcon :component="CreateOutline" size="16" /></template>
