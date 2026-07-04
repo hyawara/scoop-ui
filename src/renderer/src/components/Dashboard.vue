@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, type Ref } from 'vue'
 import {
   NCard,
   NTabs,
@@ -572,32 +572,49 @@ async function handleDiscoverInstall(manifestName: string) {
   }
 }
 
+/**
+ * 更新单个包的核心逻辑（单包/批量/全部更新共用）。
+ * 执行 scoop update → 清除图标缓存 → 零延迟原地改写版本号 → 移除更新态 → 追踪行内进度。
+ * @returns 更新是否成功
+ */
+async function updateSinglePackage(name: string): Promise<boolean> {
+  pkgProgress.startUpdate(name)
+  try {
+    await window.scoopAPI.update(name)
+    // 清除图标缓存，更新后重新提取（删除 key 以触发 fetchIcon 重新获取）
+    await window.scoopAPI.clearAppIcon(name)
+    const { [name]: _removed, ...restIcons } = iconMap.value
+    iconMap.value = restIcons
+    // 零延迟闪变：立即原地改写版本号 + 抹除更新态
+    const newVer = getNewVersion(name)
+    const pkgInList = packagesStore.installed.find((p) => p.name === name)
+    if (pkgInList && newVer) pkgInList.version = newVer
+    // 本地移除更新态（不等 reload）
+    packagesStore.updatable = packagesStore.updatable.filter((p) => p.name !== name)
+    pkgProgress.finishUpdate(name)
+    return true
+  } catch {
+    pkgProgress.failUpdate(name)
+    return false
+  }
+}
+
 async function handleUpdate(pkg: any) {
   if (updatingPackages.value.has(pkg.name)) return
   const s = new Set(updatingPackages.value)
   s.add(pkg.name)
   updatingPackages.value = s
-  pkgProgress.startUpdate(pkg.name)
   try {
-    await window.scoopAPI.update(pkg.name)
-    // 清除图标缓存，更新后重新提取
-    await window.scoopAPI.clearAppIcon(pkg.name)
-    iconMap.value = { ...iconMap.value, [pkg.name]: undefined }
-    // 零延迟闪变：立即原地改写版本号 + 抹除更新态
-    const newVer = getNewVersion(pkg.name)
-    const pkgInList = packagesStore.installed.find((p: any) => p.name === pkg.name)
-    if (pkgInList && newVer) pkgInList.version = newVer
-    // 本地移除更新态（不等 reload）
-    packagesStore.updatable = packagesStore.updatable.filter((p: any) => p.name !== pkg.name)
-    pkgProgress.finishUpdate(pkg.name)
+    const ok = await updateSinglePackage(pkg.name)
+    if (!ok) {
+      message.error(`更新 ${pkg.name} 失败`)
+      return
+    }
     // 后台静默刷新（不阻塞 UI 反馈）
     packagesStore.loadInstalled()
     packagesStore.loadUpdatable()
     // 异步重新获取图标
     fetchIcon(pkg.name)
-  } catch (e: any) {
-    pkgProgress.failUpdate(pkg.name)
-    message.error(e.message || `更新 ${pkg.name} 失败`)
   } finally {
     const s2 = new Set(updatingPackages.value)
     s2.delete(pkg.name)
@@ -633,37 +650,22 @@ async function handleUninstall(pkg: any) {
   }
 }
 
-async function handleBatchUpdate() {
-  const names = selectedPackageNames.value
-  if (names.length === 0) {
-    message.warning('请先勾选需要更新的软件')
-    return
-  }
-  batchUpdating.value = true
-  // 为每个选中包启动行内进度
+/**
+ * 批量更新一组包（勾选更新 / 全部更新共用）。
+ * 逐个更新以独立追踪每个包的行内进度，完成后清空勾选并后台刷新。
+ * @param names 待更新的包名列表
+ * @param flag 对应的加载态 ref（batchUpdating 或 updatingAll）
+ */
+async function runBatchUpdate(names: string[], flag: Ref<boolean>) {
+  if (names.length === 0) return
+  flag.value = true
+  // 为每个包启动行内进度并锁定
   const s = new Set(updatingPackages.value)
-  for (const n of names) {
-    s.add(n)
-    pkgProgress.startUpdate(n)
-  }
+  for (const n of names) s.add(n)
   updatingPackages.value = s
   try {
-    // 逐个更新，让每个包的进度独立追踪
     for (const name of names) {
-      try {
-        await window.scoopAPI.update(name)
-        // 清除图标缓存
-        await window.scoopAPI.clearAppIcon(name)
-        iconMap.value = { ...iconMap.value, [name]: undefined }
-        // 零延迟闪变
-        const newVer = getNewVersion(name)
-        const pkgInList = packagesStore.installed.find((p: any) => p.name === name)
-        if (pkgInList && newVer) pkgInList.version = newVer
-        packagesStore.updatable = packagesStore.updatable.filter((p: any) => p.name !== name)
-        pkgProgress.finishUpdate(name)
-      } catch {
-        pkgProgress.failUpdate(name)
-      }
+      await updateSinglePackage(name)
     }
     selectedPackages.value = new Set()
     saveSelectedToConfig()
@@ -675,9 +677,18 @@ async function handleBatchUpdate() {
       fetchIcon(name)
     }
   } finally {
-    batchUpdating.value = false
+    flag.value = false
     updatingPackages.value = new Set()
   }
+}
+
+function handleBatchUpdate() {
+  const names = selectedPackageNames.value
+  if (names.length === 0) {
+    message.warning('请先勾选需要更新的软件')
+    return
+  }
+  runBatchUpdate(names, batchUpdating)
 }
 
 function handleUpdateAllConfirm() {
@@ -688,46 +699,9 @@ function handleUpdateAllConfirm() {
     content: `是否确定更新全部 ${count} 个软件？这可能会消耗较多网络资源和时间。`,
     positiveText: '立即更新',
     negativeText: '取消',
-    onPositiveClick: async () => {
-      updatingAll.value = true
-      // 为所有可更新包启动行内进度
-      const names = packagesStore.updatable.map((p: any) => p.name)
-      const s = new Set(updatingPackages.value)
-      for (const n of names) {
-        s.add(n)
-        pkgProgress.startUpdate(n)
-      }
-      updatingPackages.value = s
-      try {
-        for (const name of names) {
-          try {
-            await window.scoopAPI.update(name)
-            // 清除图标缓存
-            await window.scoopAPI.clearAppIcon(name)
-            iconMap.value = { ...iconMap.value, [name]: undefined }
-            // 零延迟闪变
-            const newVer = getNewVersion(name)
-            const pkgInList = packagesStore.installed.find((p: any) => p.name === name)
-            if (pkgInList && newVer) pkgInList.version = newVer
-            packagesStore.updatable = packagesStore.updatable.filter((p: any) => p.name !== name)
-            pkgProgress.finishUpdate(name)
-          } catch {
-            pkgProgress.failUpdate(name)
-          }
-        }
-        selectedPackages.value = new Set()
-        saveSelectedToConfig()
-        // 后台静默刷新
-        packagesStore.loadUpdatable()
-        packagesStore.loadInstalled()
-        // 异步重新获取所有更新包的图标
-        for (const name of names) {
-          fetchIcon(name)
-        }
-      } finally {
-        updatingAll.value = false
-        updatingPackages.value = new Set()
-      }
+    onPositiveClick: () => {
+      const names = packagesStore.updatable.map((p) => p.name)
+      runBatchUpdate(names, updatingAll)
     },
   })
 }

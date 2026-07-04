@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, provide, nextTick } from 'vue'
 import {
   NConfigProvider,
   NMessageProvider,

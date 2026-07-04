@@ -23,7 +23,7 @@ interface Window {
   scoopAPI: {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
     installScoop: (options?: { scoopPath?: string; globalPath?: string }) => Promise<void>
-    search: (query: string) => Promise<any[]>
+    search: (query: string) => Promise<{ name: string; version: string; description: string; bucket: string }[]>
     searchRaw: (query: string) => Promise<string>
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
@@ -32,15 +32,15 @@ interface Window {
     cleanup: () => Promise<void>
     cache: () => Promise<{ size: number; files: number }>
     clearCache: () => Promise<void>
-    listInstalled: () => Promise<any[]>
-    listUpdatable: () => Promise<any[]>
-    updateAll: () => Promise<void>
+    listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>
+    listUpdatable: () => Promise<{ name: string; oldVersion: string; newVersion: string }[]>
     checkAria2: () => Promise<{ enabled: boolean }>
     openExternal: (url: string) => Promise<void>
+    openPath: (path: string) => Promise<void>
     getConfig: (path?: string) => Promise<any>
     setConfig: (path: string, value: any) => Promise<boolean>
     getAllConfig: () => Promise<any>
-    listBuckets: () => Promise<{ name: string; source: string }[]>
+    listBuckets: () => Promise<{ name: string; source: string; localPath: string; appCount: number; lastUpdated: string }[]>
     addBucket: (name: string, repo?: string) => Promise<void>
     removeBucket: (name: string) => Promise<void>
     getProxy: () => Promise<{ enabled: boolean; address: string; type: 'http' | 'socks5' }>

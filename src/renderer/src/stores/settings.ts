@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { CacheInfo, ScoopEnv, ProxyConfig } from '@/types'
+import { usePackagesStore } from '@/stores/packages'
 
 export const useSettingsStore = defineStore('settings', () => {
+  const packagesStore = usePackagesStore()
+
   const cacheInfo = ref<CacheInfo>({ size: 0, files: 0 })
   const scoopEnv = ref<ScoopEnv>({ scoop: '', global: '' })
   const proxy = ref<ProxyConfig>({ enabled: false, address: '', type: 'http' })
@@ -12,8 +15,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const proxyLoading = ref(false)
 
   const bucketCount = ref(0)
-  const installedCount = ref(0)
-  const globalCount = ref(0)
+  // 已安装数 / 全局安装数直接派生自 packages store，避免冗余 API 调用与数据不同步
+  const installedCount = computed(() => packagesStore.installed.length)
+  const globalCount = computed(() => packagesStore.installed.filter((p) => p.global).length)
 
   async function loadCacheInfo() {
     try {
@@ -61,16 +65,6 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function setProxy(address: string) {
-    proxyLoading.value = true
-    try {
-      await window.scoopAPI.setProxy(address)
-      proxy.value = { enabled: true, address, type: address.includes('socks5') ? 'socks5' : 'http' }
-    } finally {
-      proxyLoading.value = false
-    }
-  }
-
   async function setProxyConfig(protocol: 'http' | 'socks5', host: string, port: string) {
     const addr = protocol === 'socks5' ? `socks5://${host}:${port}` : `${host}:${port}`
     proxyLoading.value = true
@@ -108,14 +102,7 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {
       bucketCount.value = 0
     }
-    try {
-      const installed = await window.scoopAPI.listInstalled()
-      installedCount.value = installed.length
-      globalCount.value = installed.filter((p: any) => p.global).length
-    } catch {
-      installedCount.value = 0
-      globalCount.value = 0
-    }
+    // installedCount / globalCount 已改为派生自 packages store，无需在此加载
   }
 
   async function removeProxy() {
@@ -139,6 +126,6 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     cacheInfo, scoopEnv, proxy, diskSpace, aria2Enabled, loading, proxyLoading,
     bucketCount, installedCount, globalCount,
-    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, installAria2, migrateScoop, setProxy, setProxyConfig, removeProxy, loadProxy, loadEcoStats
+    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, installAria2, migrateScoop, setProxyConfig, removeProxy, loadProxy, loadEcoStats
   }
 })

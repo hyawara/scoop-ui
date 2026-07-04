@@ -156,11 +156,9 @@ async function copyMainCmd() {
                       ? '!bg-emerald-900/30 !text-emerald-400'
                       : '!bg-violet-900/40 !text-violet-300'"
                   >{{ ver.bucket }}</NTag>
-                  <span v-if="ver.size" class="text-[11px] text-gray-600 font-mono ml-auto hidden sm:inline">{{ ver.size }}</span>
                 </div>
                 <div class="flex items-center gap-2 mt-0.5">
                   <span class="text-[11px] text-gray-600 font-mono">{{ ver.manifestName }}</span>
-                  <span v-if="ver.size" class="text-[11px] text-gray-600 font-mono sm:hidden">· {{ ver.size }}</span>
                 </div>
               </div>
 

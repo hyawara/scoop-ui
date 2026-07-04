@@ -34,7 +34,6 @@ import {
   LayersOutline,
   EyeOutline,
   EyeOffOutline,
-  SaveOutline,
   LockClosedOutline,
   CheckmarkDoneOutline,
 } from '@vicons/ionicons5'
@@ -46,7 +45,6 @@ const emit = defineEmits<{ 'update:show': [value: boolean] }>()
 const message = useMessage()
 
 const isDark = inject<Ref<boolean>>('isDark')!
-const fontFamily = inject<Ref<string>>('fontFamily')!
 const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 const appDownloading = inject<any>('appDownloading')

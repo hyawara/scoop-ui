@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { PackageInfo, InstallOptions, ProgressData } from '@/types'
+import type { PackageInfo, UpdatableInfo, InstallOptions, ProgressData } from '@/types'
 
 export const usePackagesStore = defineStore('packages', () => {
   const installed = ref<PackageInfo[]>([])
-  const updatable = ref<PackageInfo[]>([])
+  const updatable = ref<UpdatableInfo[]>([])
   const searchResults = ref<PackageInfo[]>([])
   const loading = ref(false)
   const progress = ref<ProgressData | null>(null)
@@ -108,26 +108,8 @@ export const usePackagesStore = defineStore('packages', () => {
     }
   }
 
-  async function updateBatch(names: string[]) {
-    if (names.length === 0) return
-    loading.value = true
-    try {
-      window.scoopAPI.onProgress((data: ProgressData) => {
-        progress.value = data
-      })
-      for (const name of names) {
-        await window.scoopAPI.update(name)
-      }
-      await loadInstalled()
-      await loadUpdatable()
-    } finally {
-      loading.value = false
-      window.scoopAPI.removeProgressListener()
-    }
-  }
-
   return {
     installed, updatable, searchResults, loading, progress, descriptionsLoading,
-    loadInstalled, loadUpdatable, search, install, uninstall, update, updateBatch
+    loadInstalled, loadUpdatable, search, install, uninstall, update
   }
 })

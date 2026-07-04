@@ -3,14 +3,37 @@ import { execPowerShell, execGitBash, execScoop, execScoopJSON, BASH_EXE } from 
 import { homedir, tmpdir } from 'os'
 import { join, basename, dirname } from 'path'
 import { createWriteStream, existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
-import { pipeline } from 'stream/promises'
-import { execSync, spawn } from 'child_process'
+import { spawn } from 'child_process'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
     win.webContents.send('scoop:progress', data)
     win.webContents.send('scoop:log', data)
   }
+}
+
+/**
+ * 解析 Scoop 固定宽度表格输出（如 scoop list / scoop status）。
+ * 自动跳过分隔线之前的表头，按 2+ 空格切分列。
+ * @param stdout scoop 命令原始输出
+ * @param mapper 将单行的列数组映射为结果对象，返回 null 则跳过该行
+ */
+function parseFixedWidthTable<T>(
+  stdout: string,
+  mapper: (fields: string[]) => T | null
+): T[] {
+  const result: T[] = []
+  let pastHeader = false
+  for (const line of stdout.split('\n')) {
+    if (!pastHeader) {
+      if (/^-+\s+-+/.test(line)) pastHeader = true
+      continue
+    }
+    const fields = line.trim().split(/\s{2,}/)
+    const mapped = mapper(fields)
+    if (mapped !== null) result.push(mapped)
+  }
+  return result
 }
 
 function buildInstallScript(scoopPath: string, globalPath: string): string {
@@ -227,58 +250,24 @@ export function registerScoopIPC(): void {
   // List installed packages (scoop list outputs fixed-width table: Name, Version, Source, Updated, Info)
   ipcMain.handle('scoop:listInstalled', async () => {
     const { stdout } = await execScoop('list')
-    const lines = stdout.split('\n')
-    const result: { name: string; version: string; bucket: string; global: boolean }[] = []
-    let pastHeader = false
-
-    for (const line of lines) {
-      if (!pastHeader) {
-        if (/^-+\s+-+/.test(line)) { pastHeader = true }
-        continue
+    return parseFixedWidthTable(stdout, (fields) => {
+      if (fields.length < 2 || !fields[0] || !fields[1]) return null
+      const info = fields[3]?.trim() || ''
+      return {
+        name: fields[0].trim(),
+        version: fields[1].trim(),
+        bucket: fields[2]?.trim() || '',
+        global: info.toLowerCase().includes('global'),
       }
-      const fields = line.trim().split(/\s{2,}/)
-      if (fields.length >= 2 && fields[0] && fields[1]) {
-        const name = fields[0].trim()
-        const version = fields[1].trim()
-        const bucket = fields[2]?.trim() || ''
-        const info = fields[3]?.trim() || ''
-        result.push({
-          name,
-          version,
-          bucket,
-          global: info.toLowerCase().includes('global'),
-        })
-      }
-    }
-    return result
+    })
   })
 
   // List updatable packages (scoop status: Name, Installed Version, Latest Version, ...)
   ipcMain.handle('scoop:listUpdatable', async () => {
     const { stdout } = await execScoop('status')
-    const lines = stdout.split('\n')
-    const result: { name: string; oldVersion: string; newVersion: string }[] = []
-    let pastHeader = false
-    for (const line of lines) {
-      if (!pastHeader) {
-        if (/^-+\s+-+/.test(line)) { pastHeader = true }
-        continue
-      }
-      const fields = line.trim().split(/\s{2,}/)
-      if (fields.length >= 3 && fields[0] && fields[1] && fields[2]) {
-        result.push({ name: fields[0].trim(), oldVersion: fields[1].trim(), newVersion: fields[2].trim() })
-      }
-    }
-    return result
-  })
-
-  // Update all packages
-  ipcMain.handle('scoop:updateAll', async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    return execScoop('update --all', (data) => {
-        sendProgress(win, {
-          type: 'update', package: '*', message: data.trim(),
-        })
+    return parseFixedWidthTable(stdout, (fields) => {
+      if (fields.length < 3 || !fields[0] || !fields[1] || !fields[2]) return null
+      return { name: fields[0].trim(), oldVersion: fields[1].trim(), newVersion: fields[2].trim() }
     })
   })
 
@@ -609,6 +598,12 @@ export function registerScoopIPC(): void {
     if (/^https?:\/\/.+/.test(url)) {
       await shell.openExternal(url)
     }
+  })
+
+  // Open a local directory/file in the system file explorer
+  ipcMain.handle('scoop:openPath', async (_event, path: string) => {
+    if (!path) return
+    await shell.openPath(path)
   })
 
   // Get scoop config key-value pairs

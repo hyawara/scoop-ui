@@ -5,17 +5,17 @@ import {
   NIcon,
   NModal,
   NProgress,
+  useMessage,
 } from 'naive-ui'
 import {
   RocketOutline,
   CloseOutline,
   DocumentTextOutline,
   RefreshOutline,
-  CheckmarkCircleOutline,
 } from '@vicons/ionicons5'
 
+const message = useMessage()
 const updateInfo = inject<any>('updateInfo')
-const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
 const showSettings = inject<any>('showSettings')
 const appDownloading = inject<any>('appDownloading')
 
@@ -65,8 +65,9 @@ async function startDownload() {
     state.value = 'hidden'
     await new Promise(r => setTimeout(r, 1500))
     window.scoopAPI.startAppUpgrade()
-  } catch {
+  } catch (e: any) {
     state.value = 'hidden'
+    message.error(e?.message || '更新下载失败，请稍后重试')
   }
 }
 </script>

@@ -141,41 +141,6 @@ async function handleSyncAndRefresh(name: string) {
   }
 }
 
-/**
- * 解析 Scoop Bucket 原始文本列表
- */
-function parseScoopBuckets(rawText: string): BucketItem[] {
-  if (!rawText || typeof rawText !== 'string') return []
-
-  return rawText
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
-    .map((line, index) => {
-      const parts = line.split(/\s{2,}/)
-      if (parts.length < 2) return null
-
-      const name = parts[0]
-      const url = parts[1]
-      const lastUpdated = parts[2] ? parts[2].replace(/\s+/g, ' ') : ''
-      let appCount = 0
-      if (parts[3]) {
-        appCount = parseInt(parts[3], 10) || 0
-      }
-
-      return {
-        id: `${name}-${index}`,
-        name,
-        url,
-        status: 'success' as const,
-        appCount,
-        localPath: '',
-        lastUpdated,
-      }
-    })
-    .filter((item): item is BucketItem => item !== null)
-}
-
 async function fetchBuckets() {
   loading.value = true
   try {

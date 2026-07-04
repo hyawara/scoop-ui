@@ -1,14 +1,20 @@
 export interface PackageInfo {
   name: string
   version: string
-  description: string
+  description?: string
   website?: string
   license?: string
   bucket?: string
   global?: boolean
-  installed: boolean
+  installed?: boolean
   updatable?: boolean
   newVersion?: string
+}
+
+export interface UpdatableInfo {
+  name: string
+  oldVersion: string
+  newVersion: string
 }
 
 export interface InstallOptions {
@@ -51,7 +57,6 @@ export interface AppVersion {
   bucket: string
   manifestName: string
   isInstalled: boolean
-  size?: string
 }
 
 export interface DiscoverApp {
