@@ -4,9 +4,7 @@ import {
   NButton,
   NIcon,
   NModal,
-  NTag,
   NSpin,
-  NProgress,
   NAutoComplete,
   NInput,
   NSwitch,
@@ -36,6 +34,8 @@ import {
   EyeOffOutline,
   LockClosedOutline,
   CheckmarkDoneOutline,
+  InformationCircleOutline,
+  TimeOutline,
 } from '@vicons/ionicons5'
 import type { Ref } from 'vue'
 
@@ -48,28 +48,36 @@ const isDark = inject<Ref<boolean>>('isDark')!
 const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 
-// 共享自更新状态机（由 App.vue 提供，electron-updater 事件流驱动）
 const updateInfo = inject<any>('updateInfo')
 const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
-const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
+const quitAndInstallUpdate = inject<(isUpdate?: boolean) => void>('quitAndInstallUpdate')
 const autoCheckUpdate = inject<Ref<boolean>>('autoCheckUpdate')!
 
 const APP_VERSION = ref('')
-const activeSidebar = ref('theme')
+const platformInfo = ref('Windows')
 
 onMounted(async () => {
   APP_VERSION.value = (await window.scoopAPI.getAppVersion()) || '0.0.0'
+  platformInfo.value = navigator.platform || 'Windows'
+})
+const activeSidebar = ref('theme')
+
+const breadcrumbLabel = computed(() => {
+  const map: Record<string, string> = {
+    theme: '外观模式',
+    system: '系统设置',
+    scoopconfig: 'Scoop 配置',
+  }
+  return map[activeSidebar.value] || ''
 })
 
-// ═══ Sidebar nav items ═══
 const sidebarNav = [
   { key: 'theme', label: '外观模式', icon: ColorPaletteOutline },
   { key: 'system', label: '系统设置', icon: SettingsOutline },
   { key: 'scoopconfig', label: 'Scoop 配置', icon: TerminalOutline },
 ]
 
-// ═══ Color presets ═══
 const colorPresets: Record<string, { name: string; primary: string }> = {
   aurora: { name: '极光紫', primary: '#7B6FF0' },
   ocean: { name: '海洋蓝', primary: '#3B82F6' },
@@ -78,7 +86,6 @@ const colorPresets: Record<string, { name: string; primary: string }> = {
   rose: { name: '玫瑰红', primary: '#EC4899' },
 }
 
-// ═══ Font Config ═══
 const fontInput = ref('')
 const dragIndex = ref<number | null>(null)
 const hoverIndex = ref<number | null>(null)
@@ -145,17 +152,85 @@ function onDrop(e: DragEvent, index: number) {
 
 function onDragEnd() { dragIndex.value = null; hoverIndex.value = null }
 
-// ═══ System Tab ═══
-// 更新状态全部取自共享 updateInfo（App.vue 提供，electron-updater 事件流驱动）。
-// 本组件只负责触发动作 + 按 phase 渲染 UI，不再维护本地副本状态。
 const scoopVersion = ref('')
 const scoopVersionLoading = ref(false)
 
-// 派生视图状态：把共享 phase 映射为设置面板 UI 需要的状态
 const updatePhase = computed(() => updateInfo?.value?.phase ?? 'idle')
 const remoteVersion = computed(() => updateInfo?.value?.version ?? '')
 const releaseNotes = computed(() => updateInfo?.value?.notes ?? '')
 const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
+
+// ═══ 更新状态机：四态管理 ═══
+type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready'
+
+const simulating = ref(false)
+const simPercent = ref(0)
+const simTransferred = ref(0)
+const simTotal = ref(68 * 1024 * 1024)
+let simTimer: ReturnType<typeof setInterval> | null = null
+
+const effectivePhase = computed<UpdateStatus>(() => {
+  if (simulating.value) {
+    if (simPercent.value >= 100) return 'ready'
+    if (simPercent.value > 0) return 'downloading'
+    return 'checking'
+  }
+  const raw = updatePhase.value
+  if (raw === 'downloaded') return 'ready'
+  if (raw === 'downloading') return 'downloading'
+  if (raw === 'checking') return 'checking'
+  if (raw === 'available') return 'idle'
+  return 'idle'
+})
+
+const displayTransferred = computed(() => {
+  if (simulating.value) return simTransferred.value
+  return updateInfo?.value?.transferred ?? 0
+})
+
+const displayTotal = computed(() => {
+  if (simulating.value) return simTotal.value
+  return updateInfo?.value?.total ?? 0
+})
+
+const displayPercent = computed(() => {
+  if (simulating.value) return Math.round(simPercent.value)
+  return Math.round(downloadProgress.value)
+})
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i]
+}
+
+function handleUpdateTest() {
+  if (simulating.value) return
+  simulating.value = true
+  simPercent.value = 0
+  simTransferred.value = 0
+  simTotal.value = 68 * 1024 * 1024
+
+  simTimer = setInterval(() => {
+    const increment = Math.random() * 6 + 1.5
+    simPercent.value = Math.min(100, simPercent.value + increment)
+    simTransferred.value = Math.floor(simTotal.value * simPercent.value / 100)
+
+    if (simPercent.value >= 100) {
+      if (simTimer) { clearInterval(simTimer); simTimer = null }
+      simPercent.value = 100
+      simTransferred.value = simTotal.value
+    }
+  }, 180)
+}
+
+function resetSim() {
+  if (simTimer) { clearInterval(simTimer); simTimer = null }
+  simulating.value = false
+  simPercent.value = 0
+  simTransferred.value = 0
+}
 
 async function loadScoopVersion() {
   scoopVersionLoading.value = true
@@ -191,6 +266,15 @@ function installUpdate() {
   quitAndInstallUpdate?.(true)
 }
 
+function restartAndInstall() {
+  if (simulating.value) {
+    resetSim()
+    message.info('模拟完成 — 实际环境中将退出并安装')
+    return
+  }
+  quitAndInstallUpdate?.(true)
+}
+
 function selectPreset(key: string) {
   colorPreset.value = key
   window.scoopAPI.setConfig('theme.colorPreset', key)
@@ -203,10 +287,8 @@ function toggleAutoCheckUpdate(value: boolean) {
 
 function setTheme(dark: boolean) {
   isDark.value = dark
-  // persistence handled by watch(isDark) in App.vue
 }
 
-// ═══ Scoop 配置管理 - ConfigItem 接口（纯只读展示）═══
 interface ConfigItem {
   key: string
   label: string
@@ -218,7 +300,6 @@ interface ConfigItem {
 const scoopConfigRaw = ref<Record<string, string>>({})
 const configLoading = ref(false)
 
-// gh_token 不在只读列表中重复展示，单独由可配置区管理
 const configItems = computed<ConfigItem[]>(() =>
   Object.entries(scoopConfigRaw.value)
     .filter(([key]) => key !== 'gh_token')
@@ -231,7 +312,6 @@ const configItems = computed<ConfigItem[]>(() =>
     }))
 )
 
-// ═══ GitHub Token 可配置区（仿主界面网络代理）═══
 const ghToken = ref('')
 const ghTokenSaving = ref(false)
 const showGhToken = ref(false)
@@ -253,8 +333,6 @@ const configMetaInfo: Record<string, { icon: any; label: string; description: st
 }
 
 function getConfigIcon(key: string): any { return configMetaInfo[key]?.icon || SettingsOutline }
-function getConfigLabel(key: string): string { return configMetaInfo[key]?.label || key }
-function getConfigDesc(key: string): string { return configMetaInfo[key]?.description || '' }
 
 function formatConfigValue(key: string, val: string): string {
   if (!val) return ''
@@ -297,7 +375,6 @@ async function saveGhToken() {
   }
 }
 
-// ═══ Modal events ═══
 function handleClose() {
   emit('update:show', false)
 }
@@ -308,7 +385,6 @@ watch(() => props.show, (val) => {
     loadScoopVersion()
     loadScoopConfig()
   }
-  // 更新状态由共享 updateInfo 统一管理，设置面板开关不再重置本地副本
 })
 </script>
 
@@ -320,507 +396,1101 @@ watch(() => props.show, (val) => {
     :close-on-esc="true"
     transform-origin="center"
   >
-    <!-- ═══ 三层 Viewport 隔离骨架 ═══ -->
-    <!-- Layer 1: 弹窗外壳（固定且裁剪）overflow:hidden 一刀切断溢出 -->
-    <div class="settings-modal-card" style="width: 780px; height: 560px; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; position: relative; box-shadow: 0 12px 32px rgba(0,0,0,0.24);">
+    <div class="settings-shell">
 
-      <div class="modal-header" style="height: 50px; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-        <span class="modal-header-title">设置</span>
-        <div style="display: flex; align-items: center; gap: 12px;">
+      <div class="shell-header">
+        <span class="shell-title">设置</span>
+        <div class="shell-header-actions">
           <NButton text size="tiny" tag="a" href="https://github.com/hyawara/scoop-ui" target="_blank"
-            class="!text-slate-400 hover:!text-cyan-400">
-            <template #icon><NIcon :component="LogoGithub" size="12" /></template>GitHub
+            class="!text-zinc-500 hover:!text-zinc-300 transition-colors">
+            <template #icon><NIcon :component="LogoGithub" size="13" /></template>GitHub
           </NButton>
-          <NButton size="tiny" quaternary @click="handleClose" class="!rounded-lg">关闭</NButton>
+          <NButton size="tiny" quaternary @click="handleClose" class="!rounded-md">关闭</NButton>
         </div>
       </div>
 
-      <!-- Layer 2: 整体内容容器（分栏）min-height:0 保证 Flex 高度链不塌陷 -->
-      <div class="modal-body-wrapper" style="flex: 1; display: flex; flex-direction: row; min-height: 0; overflow: hidden;">
+      <div class="shell-body">
 
-        <!-- 左侧固定侧栏（不滚动） -->
-        <div class="modal-sidebar" style="width: 180px; height: 100%; padding: 16px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; box-sizing: border-box;">
+        <div class="shell-sidebar">
           <button
             v-for="item in sidebarNav"
             :key="item.key"
             @click="activeSidebar = item.key"
-            :class="['menu-item', activeSidebar === item.key ? 'active' : '']"
+            :class="['nav-item', activeSidebar === item.key ? 'nav-item--active' : '']"
           >
             <NIcon :component="item.icon" size="16" class="flex-shrink-0" />
             <span>{{ item.label }}</span>
           </button>
         </div>
 
-        <!-- Layer 3: 右侧独立视窗（滚动槽）overflow-y:auto + min-height:0 触发裁剪 -->
-        <div class="modal-main-content-viewport" style="flex: 1; height: 100%; overflow-y: auto; overflow-x: hidden; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;">
-
-          <div class="tab-panel-container" style="width: 100%; display: flex; flex-direction: column; gap: 20px;">
-
-        <!-- ═══ Tab: 外观模式 ═══ -->
-        <div v-if="activeSidebar === 'theme'" class="panel-fade-in">
-          <div>
-            <div class="flex items-center gap-2 mb-3">
-              <SunnyOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
-              <span class="text-sm font-semibold dark:text-white text-gray-800">外观模式</span>
-            </div>
-            <div class="flex gap-2">
-              <button @click="setTheme(true)"
-                class="flex-1 flex items-center gap-3 p-3 rounded-xl transition-all duration-200 border"
-                :class="isDark ? 'bg-emerald-500/10 border-emerald-500/30 dark:text-emerald-300 text-emerald-700' : 'dark:bg-white/[0.03] dark:border-white/[0.06] dark:text-slate-400 dark:hover:text-slate-300 bg-black/[0.02] border-black/[0.06] text-gray-600 hover:text-gray-800'">
-                <MoonOutline class="w-5 h-5" />
-                <div class="text-left">
-                  <div class="text-sm font-medium">深色模式</div>
-                  <div class="text-xs opacity-60">护眼，适合暗光环境</div>
-                </div>
-                <CheckmarkCircleOutline v-if="isDark" class="w-5 h-5 ml-auto text-emerald-400" />
-              </button>
-              <button @click="setTheme(false)"
-                class="flex-1 flex items-center gap-3 p-3 rounded-xl transition-all duration-200 border"
-                :class="!isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' : 'dark:bg-white/[0.03] dark:border-white/[0.06] dark:text-slate-400 dark:hover:text-slate-300 bg-black/[0.02] border-black/[0.06] text-gray-600 hover:text-gray-800'">
-                <SunnyOutline class="w-5 h-5" />
-                <div class="text-left">
-                  <div class="text-sm font-medium">浅色模式</div>
-                  <div class="text-xs opacity-60">明亮，适合白天使用</div>
-                </div>
-                <CheckmarkCircleOutline v-if="!isDark" class="w-5 h-5 ml-auto text-emerald-400" />
-              </button>
-            </div>
+        <div class="shell-content">
+          <div class="content-breadcrumb">
+            <span class="bc-root">设置</span>
+            <span class="bc-sep">/</span>
+            <span class="bc-current">{{ breadcrumbLabel }}</span>
           </div>
 
-          <div>
-            <div class="flex items-center gap-2 mb-3">
-              <ColorPaletteOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
-              <span class="text-sm font-semibold dark:text-white text-gray-800">UI 配色</span>
-            </div>
-            <div class="grid grid-cols-5 gap-2">
-              <button v-for="(preset, key) in colorPresets" :key="key" @click="selectPreset(key)"
-                class="flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 border"
-                :class="colorPreset === key ? 'dark:border-white/[0.15] dark:bg-white/[0.04] border-black/[0.15] bg-black/[0.04]' : 'border-transparent dark:bg-white/[0.02] dark:hover:bg-white/[0.04] bg-black/[0.02] hover:bg-black/[0.04]'">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center transition-transform"
-                  :style="{ background: preset.primary }"
-                  :class="{ 'scale-110 ring-2 ring-white/20': colorPreset === key }">
-                  <CheckmarkCircleOutline v-if="colorPreset === key" class="w-4 h-4 text-white" />
-                </div>
-                <span class="text-[10px] dark:text-slate-400 text-gray-500">{{ preset.name }}</span>
-              </button>
-            </div>
-          </div>
+          <div class="content-scroll">
 
-          <div>
-            <div class="flex items-center gap-2 mb-3">
-              <TextOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
-              <span class="text-sm font-semibold dark:text-white text-gray-800">字体配置</span>
-            </div>
-            <p class="text-xs dark:text-slate-500 text-gray-500 mb-3 leading-relaxed">列表中第一种字体将被应用。若该字体不存在于当前设备上，则顺延至存在于当前设备上的字体。</p>
-            <div class="flex gap-2 mb-4">
-              <NAutoComplete v-model:value="fontInput" :options="filteredSuggestions" placeholder="输入或选择自定义字体名称..." size="small" class="flex-1" clearable @keyup.enter="addFont" />
-              <NButton size="small" type="primary" @click="addFont" :disabled="!fontInput.trim()" class="!rounded-lg shrink-0">
-                <template #icon><NIcon :component="AddOutline" size="16" /></template>添加
-              </NButton>
-            </div>
-            <TransitionGroup name="font-stack" tag="div" class="flex flex-col gap-1">
-              <div v-for="(font, index) in fontList" :key="font" draggable="true"
-                @dragstart="onDragStart($event, index)" @dragover="onDragOver($event, index)"
-                @drop="onDrop($event, index)" @dragend="onDragEnd"
-                class="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-150 border cursor-default select-none"
-                :class="[hoverIndex === index && dragIndex !== null && dragIndex !== index ? 'border-indigo-500/40 bg-indigo-500/8' : 'dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:bg-white/[0.06] border-black/[0.06] bg-black/[0.02] hover:bg-black/[0.04]']">
-                <div class="cursor-grab active:cursor-grabbing dark:text-slate-500 text-gray-500 hover:text-slate-300 transition-colors touch-none">
-                  <NIcon :component="ReorderThreeOutline" size="16" />
+            <!-- ═══════════════ Tab: 外观模式 ═══════════════ -->
+            <div v-if="activeSidebar === 'theme'" class="tab-panel">
+
+              <div class="setting-row setting-row--clickable" @click="setTheme(true)">
+                <div class="setting-row__left">
+                  <NIcon :component="MoonOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">深色模式</span>
+                    <span class="setting-desc">护眼，适合暗光环境</span>
+                  </div>
                 </div>
-                <span class="flex-1 text-sm truncate" :style="{ fontFamily: font }">{{ font }}</span>
-                <button @click="removeFont(index)" class="opacity-0 group-hover:opacity-100 transition-all duration-150 text-red-400 hover:text-red-300 p-0.5 rounded">
-                  <NIcon :component="CloseOutline" size="14" />
+                <NIcon v-if="isDark" :component="CheckmarkCircleOutline" size="16" class="text-emerald-400" />
+              </div>
+
+              <div class="setting-divider" />
+
+              <div class="setting-row setting-row--clickable" @click="setTheme(false)">
+                <div class="setting-row__left">
+                  <NIcon :component="SunnyOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">浅色模式</span>
+                    <span class="setting-desc">明亮，适合白天使用</span>
+                  </div>
+                </div>
+                <NIcon v-if="!isDark" :component="CheckmarkCircleOutline" size="16" class="text-emerald-400" />
+              </div>
+
+              <div class="section-gap" />
+
+              <div class="setting-row">
+                <div class="setting-row__left">
+                  <NIcon :component="ColorPaletteOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">UI 配色</span>
+                    <span class="setting-desc">选择系统主色调</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="color-grid">
+                <button v-for="(preset, key) in colorPresets" :key="key" @click="selectPreset(key)"
+                  class="color-dot-wrapper"
+                  :class="{ 'color-dot-wrapper--active': colorPreset === key }">
+                  <div class="color-dot"
+                    :style="{ background: preset.primary }"
+                    :class="{ 'color-dot--active': colorPreset === key }">
+                    <NIcon v-if="colorPreset === key" :component="CheckmarkCircleOutline" size="12" class="text-white" />
+                  </div>
+                  <span class="color-dot-label">{{ preset.name }}</span>
                 </button>
               </div>
-            </TransitionGroup>
-            <div v-if="fontList.length === 0" class="text-center py-5 text-xs dark:text-slate-500 text-gray-500 dark:bg-white/[0.02] bg-black/[0.02] rounded-lg border border-dashed dark:border-white/[0.06] border-black/[0.06]">
-              尚未添加字体，请通过上方输入框添加至少一种字体
-            </div>
-          </div>
-        </div>
 
-        <!-- ═══ Tab: 系统设置 ═══ -->
-        <div v-if="activeSidebar === 'system'" class="panel-fade-in">
-          <div class="flex items-center justify-between p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06]">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center"><span class="text-white text-xs font-bold">S</span></div>
-              <div><span class="text-sm font-medium dark:text-white text-gray-800">Scoop UI</span><p class="text-xs dark:text-slate-400 text-gray-500">Scoop 包管理器图形界面</p></div>
-            </div>
-            <NTag size="small" :bordered="false" class="dark:!bg-white/[0.06] !bg-black/[0.04] dark:!text-slate-400 !text-gray-500 font-mono">v{{ APP_VERSION }}</NTag>
-          </div>
-          <div class="flex items-center justify-between p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06]">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center"><NIcon :component="TerminalOutline" size="18" class="text-white" /></div>
-              <div><span class="text-sm font-medium dark:text-white text-gray-800">Scoop Core</span><p class="text-xs dark:text-slate-400 text-gray-500">底层包管理器引擎</p></div>
-            </div>
-            <template v-if="scoopVersionLoading"><NSpin :size="14" /></template>
-            <template v-else><NTag size="small" :bordered="false" class="dark:!bg-white/[0.06] !bg-black/[0.04] dark:!text-slate-400 !text-gray-500 font-mono">{{ scoopVersion }}</NTag></template>
-          </div>
-          <div class="flex items-center justify-between p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06]">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center"><NIcon :component="RefreshOutline" size="18" class="text-white" /></div>
-              <div><span class="text-sm font-medium dark:text-white text-gray-800">检查更新</span><p class="text-xs dark:text-slate-400 text-gray-500">获取最新 Scoop UI 版本</p></div>
-            </div>
-            <NButton v-if="updatePhase === 'idle' || updatePhase === 'not-available' || updatePhase === 'error'" size="small" secondary type="warning" @click="handleCheckUpdate" class="!rounded-lg">
-              <template #icon><NIcon :component="RefreshOutline" size="14" /></template>检查更新
-            </NButton>
-            <NButton v-else-if="updatePhase === 'checking'" size="small" loading disabled class="!rounded-lg">正在检查...</NButton>
-            <div v-else-if="updatePhase === 'available'" class="flex flex-col items-end gap-1">
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded font-mono">New v{{ remoteVersion }}</span>
-                <NButton size="small" type="primary" @click="triggerAppUpgrade" class="!rounded-lg"><template #icon><NIcon :component="RocketOutline" size="14" /></template>立即更新</NButton>
-              </div>
-              <span v-if="releaseNotes" class="text-[11px] dark:text-slate-500 text-gray-500">更新日志：{{ releaseNotes }}</span>
-            </div>
-            <div v-else-if="updatePhase === 'downloading'" class="flex items-center gap-3">
-              <div class="w-3.5 h-3.5 border-2 border-t-transparent border-blue-400 rounded-full animate-spin flex-shrink-0" />
-              <span class="text-xs text-blue-300 font-mono min-w-[8em] whitespace-nowrap">{{ downloadProgress > 0 ? `正在下载 ${downloadProgress}%` : '准备下载...' }}</span>
-              <NProgress type="line" :percentage="downloadProgress" :height="4" :border-radius="2" :show-indicator="false" status="info" style="width: 100px" />
-            </div>
-            <div v-else-if="updatePhase === 'downloaded'" class="flex items-center gap-2">
-              <NButton size="small" type="primary" @click="installUpdate" class="!rounded-lg"><template #icon><NIcon :component="RocketOutline" size="14" /></template>重启并安装</NButton>
-            </div>
-          </div>
-          <!-- 自动检查更新开关 -->
-          <div class="flex items-center justify-between p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06]">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center"><NIcon :component="RefreshOutline" size="18" class="text-white" /></div>
-              <div><span class="text-sm font-medium dark:text-white text-gray-800">自动检查更新</span><p class="text-xs dark:text-slate-400 text-gray-500">启动时自动检查新版本</p></div>
-            </div>
-            <NSwitch
-              :value="autoCheckUpdate"
-              @update:value="toggleAutoCheckUpdate"
-              size="medium"
-            />
-          </div>
-          <!-- ═══ 底部版权 (仅显示在系统设置中) ═══ -->
-          <div class="mt-4 pt-3 text-center border-t dark:border-white/[0.06] border-black/[0.06]">
-            <span class="text-xs dark:text-slate-500 text-gray-500">Scoop UI &copy; 2026</span>
-          </div>
-        </div>
+              <div class="section-gap" />
 
-        <!-- ═══ Tab: Scoop 配置 ═══ -->
-        <div v-if="activeSidebar === 'scoopconfig'" class="panel-fade-in">
-          <div v-if="configLoading" class="flex justify-center py-8">
-            <div class="flex flex-col items-center gap-2">
-              <div class="w-5 h-5 border-2 border-t-transparent border-emerald-500 rounded-full animate-spin" />
-              <span class="text-xs dark:text-slate-400 text-gray-500">加载中...</span>
-            </div>
-          </div>
-
-          <template v-else>
-            <!-- ═══ GitHub Token 可配置区（仿主界面网络代理）═══ -->
-            <div>
-              <div class="flex items-center gap-2 mb-3">
-                <LockClosedOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
-                <span class="text-sm font-semibold dark:text-white text-gray-800">GitHub Token</span>
-                <span v-if="ghTokenConfigured"
-                  class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-[10px] text-emerald-500 font-medium">
-                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />已配置
-                </span>
-                <span v-else
-                  class="px-1.5 py-0.5 rounded dark:bg-white/[0.06] bg-black/[0.04] text-[10px] dark:text-slate-400 text-gray-500 font-medium">未配置</span>
-              </div>
-              <p class="text-xs dark:text-slate-500 text-gray-500 mb-3 leading-relaxed">GitHub 个人访问令牌，用于提高 API 速率限制，避免频繁检查更新时被限流。留空并保存即可清除。</p>
-              <div class="flex items-center gap-2 p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06] border">
-                <div class="relative flex-1">
-                  <NInput
-                    v-model:value="ghToken"
-                    size="small"
-                    :type="showGhToken ? 'text' : 'password'"
-                    placeholder="ghp_xxxxxxxxxxxxxxxx"
-                    class="!w-full"
-                    @keyup.enter="saveGhToken"
-                  />
-                  <button
-                    @click="showGhToken = !showGhToken"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded dark:text-slate-400 text-gray-500 dark:hover:bg-white/[0.08] hover:bg-black/[0.06] z-10"
-                  >
-                    <NIcon :component="showGhToken ? EyeOffOutline : EyeOutline" size="15" />
-                  </button>
+              <div class="setting-row">
+                <div class="setting-row__left">
+                  <NIcon :component="TextOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">字体配置</span>
+                    <span class="setting-desc">列表中第一种可用字体将被应用，不存在则顺延</span>
+                  </div>
                 </div>
-                <NButton size="small" type="primary" @click="saveGhToken" :loading="ghTokenSaving" class="!rounded-lg shrink-0">
-                  <template #icon><NIcon :component="CheckmarkDoneOutline" size="15" /></template>保存
+              </div>
+
+              <div class="font-input-row">
+                <NAutoComplete v-model:value="fontInput" :options="filteredSuggestions"
+                  placeholder="输入或选择字体名称..." size="small" class="flex-1" clearable
+                  @keyup.enter="addFont" />
+                <NButton size="small" type="primary" @click="addFont" :disabled="!fontInput.trim()" class="!rounded-md shrink-0">
+                  <template #icon><NIcon :component="AddOutline" size="15" /></template>添加
                 </NButton>
               </div>
+
+              <TransitionGroup name="font-stack" tag="div" class="font-list">
+                <div v-for="(font, index) in fontList" :key="font" draggable="true"
+                  @dragstart="onDragStart($event, index)" @dragover="onDragOver($event, index)"
+                  @drop="onDrop($event, index)" @dragend="onDragEnd"
+                  class="font-row"
+                  :class="{ 'font-row--drag-over': hoverIndex === index && dragIndex !== null && dragIndex !== index }">
+                  <div class="font-row__handle">
+                    <NIcon :component="ReorderThreeOutline" size="15" />
+                  </div>
+                  <span class="font-row__name" :style="{ fontFamily: font }">{{ font }}</span>
+                  <button @click="removeFont(index)" class="font-row__remove">
+                    <NIcon :component="CloseOutline" size="14" />
+                  </button>
+                </div>
+              </TransitionGroup>
+
+              <div v-if="fontList.length === 0" class="font-empty">
+                尚未添加字体，请通过上方输入框添加
+              </div>
             </div>
 
-            <!-- ═══ 其余配置项（纯只读展示）═══ -->
-            <div v-if="configItems.length > 0" class="flex flex-col gap-1">
-              <div class="flex items-center gap-2 mb-1">
-                <SettingsOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
-                <span class="text-sm font-semibold dark:text-white text-gray-800">Scoop 配置</span>
-                <span class="text-[10px] dark:text-slate-500 text-gray-400">只读</span>
+            <!-- ═══════════════ Tab: 系统设置 ═══════════════ -->
+            <div v-if="activeSidebar === 'system'" class="tab-panel">
+
+              <!-- 区块 A：状态与版本信息 -->
+              <div class="setting-row">
+                <div class="setting-row__left">
+                  <NIcon :component="InformationCircleOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">Scoop UI</span>
+                    <span class="setting-desc">Scoop 包管理器图形界面</span>
+                  </div>
+                </div>
+                <span class="version-badge">v{{ APP_VERSION }}</span>
               </div>
-              <div v-for="item in configItems" :key="item.key"
-                class="config-item-row"
-              >
-                <!-- Left: Icon + Label (no truncation) -->
-                <div class="config-item-label">
-                  <NIcon :component="getConfigIcon(item.key)" size="15" class="dark:text-slate-400 text-gray-500 flex-shrink-0 mt-0.5" />
-                  <div class="flex flex-col min-w-0 flex-1">
-                    <span class="text-xs font-medium dark:text-white text-gray-800">{{ item.label }}</span>
-                    <span v-if="item.desc" class="text-[10px] dark:text-slate-500 text-gray-400 leading-tight mt-0.5">{{ item.desc }}</span>
+
+              <div class="setting-divider" />
+
+              <div class="setting-row">
+                <div class="setting-row__left">
+                  <NIcon :component="TerminalOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">Scoop Core</span>
+                    <span class="setting-desc">底层包管理器引擎</span>
+                  </div>
+                </div>
+                <template v-if="scoopVersionLoading">
+                  <NSpin :size="14" />
+                </template>
+                <template v-else>
+                  <span class="version-badge">{{ scoopVersion }}</span>
+                </template>
+              </div>
+
+              <div class="section-gap" />
+
+              <!-- 区块 B：交互与操作项 — 检查更新（四态状态机） -->
+              <div class="update-row-wrapper">
+                <div class="setting-row">
+                  <div class="setting-row__left">
+                    <NIcon :component="RefreshOutline" size="16" class="setting-icon" />
+                    <div class="setting-text">
+                      <span class="setting-title">检查更新</span>
+                      <span v-if="effectivePhase === 'ready'" class="setting-desc setting-desc--ready">新版本已准备就绪，重启应用即可完成升级</span>
+                      <span v-else class="setting-desc">获取最新 Scoop UI 版本</span>
+                    </div>
+                  </div>
+
+                  <!-- idle -->
+                  <div v-if="effectivePhase === 'idle'" class="flex items-center gap-2">
+                    <NButton size="small" quaternary @click="handleCheckUpdate" class="!rounded-md">
+                      <template #icon><NIcon :component="RefreshOutline" size="14" /></template>检查更新
+                    </NButton>
+                    <NButton size="tiny" text @click="handleUpdateTest" class="!text-zinc-400 hover:!text-zinc-200 !rounded-md">
+                      模拟测试
+                    </NButton>
+                  </div>
+
+                  <!-- checking -->
+                  <div v-else-if="effectivePhase === 'checking'" class="flex items-center gap-2">
+                    <NButton size="small" quaternary loading disabled class="!rounded-md">检查中...</NButton>
+                    <NButton v-if="simulating" size="tiny" text @click="resetSim" class="!text-zinc-400 hover:!text-zinc-200 !rounded-md">
+                      取消
+                    </NButton>
+                  </div>
+
+                  <!-- downloading -->
+                  <div v-else-if="effectivePhase === 'downloading'" class="flex items-center gap-2">
+                    <div class="update-spinner" />
+                    <span class="update-percent">{{ displayPercent }}%</span>
+                    <NButton size="small" quaternary disabled class="!rounded-md">正在下载...</NButton>
+                    <NButton v-if="simulating" size="tiny" text @click="resetSim" class="!text-zinc-400 hover:!text-zinc-200 !rounded-md">
+                      取消
+                    </NButton>
+                  </div>
+
+                  <!-- ready -->
+                  <div v-else-if="effectivePhase === 'ready'" class="flex items-center gap-2">
+                    <NButton size="small" type="primary" @click="restartAndInstall" class="!rounded-md update-ready-btn">
+                      <template #icon><NIcon :component="RocketOutline" size="14" /></template>重启并更新
+                    </NButton>
                   </div>
                 </div>
 
-                <!-- Right: Value (纯只读, no truncation, word-break) -->
-                <div class="config-item-value">
-                  <span class="config-item-display-value">{{ displayValue(item) }}</span>
+                <!-- 进度条区域：downloading 时展开 -->
+                <Transition name="progress-slide">
+                  <div v-if="effectivePhase === 'downloading'" class="update-progress-track">
+                    <div class="progress-bar-shell">
+                      <div class="progress-bar-fill" :style="{ width: displayPercent + '%' }" />
+                    </div>
+                    <span class="progress-meta">
+                      {{ formatBytes(displayTransferred) }} / {{ formatBytes(displayTotal) }}
+                    </span>
+                  </div>
+                </Transition>
+              </div>
+
+              <div class="setting-divider" />
+
+              <div class="setting-row">
+                <div class="setting-row__left">
+                  <NIcon :component="TimeOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">自动检查更新</span>
+                    <span class="setting-desc">启动时自动检查新版本</span>
+                  </div>
                 </div>
+                <NSwitch :value="autoCheckUpdate" @update:value="toggleAutoCheckUpdate" size="medium" />
               </div>
             </div>
 
-            <div v-else class="flex flex-col items-center py-8 dark:text-slate-500 text-gray-400">
-              <SettingsOutline class="w-8 h-8 mb-2 opacity-40" />
-              <p class="text-xs">Scoop 未安装或无法获取其余配置</p>
+            <!-- ═══════════════ Tab: Scoop 配置 ═══════════════ -->
+            <div v-if="activeSidebar === 'scoopconfig'" class="tab-panel">
+
+              <div v-if="configLoading" class="config-loading">
+                <div class="config-loading-spinner" />
+                <span class="config-loading-text">加载中...</span>
+              </div>
+
+              <template v-else>
+
+                <div class="setting-row">
+                  <div class="setting-row__left">
+                    <NIcon :component="LockClosedOutline" size="16" class="setting-icon" />
+                    <div class="setting-text">
+                      <span class="setting-title">GitHub Token</span>
+                      <span class="setting-desc">GitHub 个人访问令牌，用于提高 API 速率限制</span>
+                    </div>
+                  </div>
+                  <span v-if="ghTokenConfigured" class="token-badge token-badge--active">
+                    <span class="token-badge-dot" />已配置
+                  </span>
+                  <span v-else class="token-badge">未配置</span>
+                </div>
+
+                <div class="token-input-row">
+                  <div class="token-input-wrapper">
+                    <NInput v-model:value="ghToken" size="small"
+                      :type="showGhToken ? 'text' : 'password'"
+                      placeholder="ghp_xxxxxxxxxxxxxxxx"
+                      class="!w-full"
+                      @keyup.enter="saveGhToken" />
+                    <button @click="showGhToken = !showGhToken" class="token-eye-btn">
+                      <NIcon :component="showGhToken ? EyeOffOutline : EyeOutline" size="15" />
+                    </button>
+                  </div>
+                  <NButton size="small" type="primary" @click="saveGhToken" :loading="ghTokenSaving"
+                    class="!rounded-md shrink-0">
+                    <template #icon><NIcon :component="CheckmarkDoneOutline" size="15" /></template>保存
+                  </NButton>
+                </div>
+
+                <div v-if="configItems.length > 0" class="config-list">
+                  <div v-for="item in configItems" :key="item.key" class="setting-row">
+                    <div class="setting-row__left">
+                      <NIcon :component="getConfigIcon(item.key)" size="15" class="setting-icon" />
+                      <div class="setting-text">
+                        <span class="setting-title">{{ item.label }}</span>
+                        <span v-if="item.desc" class="setting-desc">{{ item.desc }}</span>
+                      </div>
+                    </div>
+                    <span class="config-value">{{ displayValue(item) }}</span>
+                  </div>
+                </div>
+
+                <div v-else class="config-empty">
+                  <NIcon :component="SettingsOutline" size="28" class="opacity-30" />
+                  <p>Scoop 未安装或无法获取其余配置</p>
+                </div>
+              </template>
             </div>
-          </template>
-        </div>
-        <!-- /scoopconfig tab -->
 
-          </div><!-- /tab-panel-container -->
-        </div><!-- /modal-main-content-viewport (Layer 3 滚动槽) -->
-      </div><!-- /modal-body-wrapper (Layer 2 分栏) -->
-    </div><!-- /settings-modal-card (Layer 1 外壳) -->
+            <!-- 环境脚标 -->
+            <div class="content-footer">
+              <span>Scoop UI © 2026</span>
+              <span class="footer-sep">·</span>
+              <span>{{ platformInfo }}</span>
+            </div>
 
+          </div><!-- /content-scroll -->
+        </div><!-- /shell-content -->
+      </div><!-- /shell-body -->
+    </div><!-- /settings-shell -->
   </NModal>
 </template>
 
 <style scoped>
-/* ─── Layer 1 外壳：明暗自适应背景 ─── */
-.settings-modal-card {
-  background-color: #ffffff;
+/* ═══════════════════════════════════════════════
+   1. Shell 骨架
+   ═══════════════════════════════════════════════ */
+.settings-shell {
+  width: 780px;
+  height: 560px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  background: #ffffff;
+}
+.dark .settings-shell {
+  background: #181c25;
 }
 
-.dark .settings-modal-card {
-  background-color: #1e222b;
+/* ═══════════════════════════════════════════════
+   2. Header
+   ═══════════════════════════════════════════════ */
+.shell-header {
+  height: 48px;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
-
-/* ─── Header：明暗自适应分割线 + 标题色 ─── */
-.modal-header {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.dark .modal-header {
+.dark .shell-header {
   border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
-.modal-header-title {
-  font-size: 16px;
+.shell-title {
+  font-size: 14px;
   font-weight: 600;
   color: rgb(31, 41, 55);
 }
-
-.dark .modal-header-title {
-  color: #ffffff;
+.dark .shell-title {
+  color: rgba(255, 255, 255, 0.92);
 }
 
-/* ─── 侧栏：明暗自适应分割线 + 背景 ─── */
-.modal-sidebar {
+.shell-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ═══════════════════════════════════════════════
+   3. Body (Sidebar + Content)
+   ═══════════════════════════════════════════════ */
+.shell-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════
+   4. Sidebar
+   ═══════════════════════════════════════════════ */
+.shell-sidebar {
+  width: 176px;
+  height: 100%;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
   border-right: 1px solid rgba(0, 0, 0, 0.06);
-  background-color: rgba(0, 0, 0, 0.02);
+  background: rgba(0, 0, 0, 0.015);
+  box-sizing: border-box;
+}
+.dark .shell-sidebar {
+  border-right-color: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.12);
 }
 
-.dark .modal-sidebar {
-  border-right-color: rgba(255, 255, 255, 0.04);
-  background-color: rgba(0, 0, 0, 0.1);
-}
-
-/* ─── 侧栏菜单项 ─── */
-.menu-item {
+.nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: rgba(0, 0, 0, 0.6);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.55);
   cursor: pointer;
   border: none;
   background: transparent;
   text-align: left;
   width: 100%;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  position: relative;
+}
+.dark .nav-item {
+  color: rgba(255, 255, 255, 0.5);
 }
 
-.dark .menu-item {
-  color: rgba(255, 255, 255, 0.6);
+.nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.8);
 }
-
-.menu-item:hover {
-  background-color: rgba(0, 0, 0, 0.04);
-  color: rgba(0, 0, 0, 0.85);
-}
-
-.dark .menu-item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+.dark .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.85);
 }
 
-.menu-item.active {
-  background-color: rgba(16, 185, 129, 0.12);
+.nav-item--active {
+  background: rgba(16, 185, 129, 0.1);
   color: rgb(5, 150, 105);
   font-weight: 500;
 }
-
-.dark .menu-item.active {
+.dark .nav-item--active {
   color: rgb(52, 211, 153);
 }
 
-/* ─── Tab 面板：垂直堆叠 + 淡入 ─── */
-.panel-fade-in {
+/* ═══════════════════════════════════════════════
+   5. Content Area
+   ═══════════════════════════════════════════════ */
+.shell-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  animation: panelFadeIn 0.25s ease;
+  min-height: 0;
+  overflow: hidden;
 }
 
-@keyframes panelFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ─── 配置项样式：去除截断，允许自然换行 ─── */
-.config-item-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background-color: rgba(0,0,0,0.02);
-  transition: background-color 0.15s;
-}
-
-.dark .config-item-row {
-  background-color: rgba(255,255,255,0.02);
-}
-
-.config-item-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-  padding-top: 2px;
-}
-
-.config-item-value {
-  flex-shrink: 0;
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  max-width: 55%;
-}
-
-.config-item-edit {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  width: 100%;
-}
-
-.config-item-edit-actions {
-  display: flex;
-  gap: 2px;
-  padding-top: 2px;
-}
-
-.config-item-btn-save {
+.content-breadcrumb {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background-color: rgba(16,185,129,0.2);
-  color: rgb(16,185,129);
-  transition: background-color 0.15s;
-}
-
-.config-item-btn-save:hover {
-  background-color: rgba(16,185,129,0.3);
-}
-
-.config-item-btn-cancel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  color: rgb(156,163,175);
-  transition: background-color 0.15s;
-}
-
-.config-item-btn-cancel:hover {
-  background-color: rgba(0,0,0,0.04);
-}
-
-.dark .config-item-btn-cancel:hover {
-  background-color: rgba(255,255,255,0.06);
-}
-
-.config-item-display-value {
+  gap: 6px;
   font-size: 12px;
-  color: rgb(107,114,128);
-  font-family: monospace;
-  text-align: right;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-  line-height: 1.4;
+  padding: 14px 28px 0;
+  flex-shrink: 0;
+}
+.bc-root {
+  color: rgba(0, 0, 0, 0.22);
+}
+.dark .bc-root {
+  color: rgba(255, 255, 255, 0.22);
+}
+.bc-sep {
+  color: rgba(0, 0, 0, 0.12);
+}
+.dark .bc-sep {
+  color: rgba(255, 255, 255, 0.12);
+}
+.bc-current {
+  color: rgba(0, 0, 0, 0.4);
+  font-weight: 500;
+}
+.dark .bc-current {
+  color: rgba(255, 255, 255, 0.38);
 }
 
-.dark .config-item-display-value {
-  color: rgb(156,163,175);
+.content-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 28px 0;
+  min-height: 0;
 }
 
-.config-item-edit-btn {
+.content-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.content-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.content-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+.content-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.18);
+}
+.dark .content-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+.dark .content-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ═══════════════════════════════════════════════
+   6. Tab Panel 动画
+   ═══════════════════════════════════════════════ */
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  animation: tabFadeIn 0.2s ease;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════
+   7. Setting Row — VS Code 聚焦逻辑
+   ═══════════════════════════════════════════════ */
+.setting-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
+  justify-content: space-between;
+  padding: 10px 12px;
   border-radius: 6px;
-  flex-shrink: 0;
-  opacity: 0;
-  color: rgb(156,163,175);
-  transition: all 0.15s;
+  position: relative;
+  transition: background-color 0.12s ease;
+  gap: 12px;
 }
 
-.config-item-row:hover .config-item-edit-btn {
+.setting-row--clickable {
+  cursor: pointer;
+}
+
+.setting-row:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+.dark .setting-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* 左侧翡翠绿指示线 */
+.setting-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: #10B981;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.setting-row:hover::before {
   opacity: 1;
 }
 
-.config-item-edit-btn:hover {
-  background-color: rgba(0,0,0,0.04);
+.setting-row__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
-.dark .config-item-edit-btn:hover {
-  background-color: rgba(255,255,255,0.06);
+.setting-icon {
+  color: rgba(0, 0, 0, 0.32);
+  flex-shrink: 0;
+}
+.dark .setting-icon {
+  color: rgba(255, 255, 255, 0.28);
 }
 
-/* ─── Font stack animations ─── */
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.setting-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(24, 24, 27);
+  line-height: 1.3;
+}
+.dark .setting-title {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.setting-desc {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
+  line-height: 1.3;
+}
+.dark .setting-desc {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* ═══════════════════════════════════════════════
+   8. Divider — 极其克制的分割线
+   ═══════════════════════════════════════════════ */
+.setting-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.05);
+  margin: 0 12px;
+}
+.dark .setting-divider {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.section-gap {
+  height: 12px;
+}
+
+/* ═══════════════════════════════════════════════
+   9. Version Badge — 等宽字体标签
+   ═══════════════════════════════════════════════ */
+.version-badge {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.06);
+  color: rgba(16, 185, 129, 0.75);
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+.dark .version-badge {
+  background: rgba(52, 211, 153, 0.08);
+  color: rgba(52, 211, 153, 0.85);
+}
+
+/* ═══════════════════════════════════════════════
+   10b. 更新行：进度条 & 就绪状态
+   ═══════════════════════════════════════════════ */
+.update-row-wrapper {
+  border-radius: 6px;
+}
+
+.update-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(16, 185, 129, 0.18);
+  border-top-color: rgba(16, 185, 129, 0.75);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.update-percent {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: rgba(16, 185, 129, 0.85);
+  min-width: 2.5em;
+  white-space: nowrap;
+}
+.dark .update-percent {
+  color: rgba(52, 211, 153, 0.9);
+}
+
+/* — 进度条轨道 — */
+.update-progress-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 10px 38px;
+  overflow: hidden;
+}
+
+.progress-bar-shell {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(16, 185, 129, 0.1);
+  overflow: hidden;
+}
+.dark .progress-bar-shell {
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #10B981, #34D399);
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
+}
+.dark .progress-bar-fill {
+  background: linear-gradient(90deg, #10B981, #6EE7B7);
+}
+
+.progress-meta {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dark .progress-meta {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* — 进度条 slide-fade 过渡 — */
+.progress-slide-enter-active {
+  transition: opacity 0.25s ease, max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 60px;
+  opacity: 1;
+}
+.progress-slide-leave-active {
+  transition: opacity 0.2s ease, max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 60px;
+  opacity: 1;
+}
+.progress-slide-enter-from {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.progress-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* — Ready 呼吸灯按钮 — */
+.update-ready-btn {
+  animation: readyPulse 2s ease-in-out infinite;
+}
+
+@keyframes readyPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+}
+.dark .update-ready-btn {
+  animation-name: readyPulseDark;
+}
+@keyframes readyPulseDark {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+}
+
+/* — Ready 绿色描述文案 — */
+.setting-desc--ready {
+  color: rgb(16, 185, 129) !important;
+}
+.dark .setting-desc--ready {
+  color: rgb(52, 211, 153) !important;
+}
+
+/* ═══════════════════════════════════════════════
+   11. Color Grid
+   ═══════════════════════════════════════════════ */
+.color-grid {
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px 4px;
+}
+
+.color-dot-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 2px solid transparent;
+}
+.color-dot:hover {
+  transform: scale(1.12);
+}
+.color-dot--active {
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+}
+.dark .color-dot--active {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
+}
+
+.color-dot-label {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.35);
+}
+.dark .color-dot-label {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* ═══════════════════════════════════════════════
+   12. Font Input & List
+   ═══════════════════════════════════════════════ */
+.font-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px 0;
+}
+
+.font-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 0;
+}
+
+.font-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  transition: background-color 0.12s ease;
+  border: 1px solid transparent;
+}
+.font-row:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+.dark .font-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.font-row--drag-over {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.font-row__handle {
+  color: rgba(0, 0, 0, 0.2);
+  cursor: grab;
+  flex-shrink: 0;
+  transition: color 0.12s ease;
+}
+.dark .font-row__handle {
+  color: rgba(255, 255, 255, 0.18);
+}
+.font-row:hover .font-row__handle {
+  color: rgba(0, 0, 0, 0.4);
+}
+.dark .font-row:hover .font-row__handle {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.font-row__name {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dark .font-row__name {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.font-row__remove {
+  opacity: 0;
+  color: rgba(239, 68, 68, 0.6);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+.font-row:hover .font-row__remove {
+  opacity: 1;
+}
+.font-row__remove:hover {
+  color: rgb(239, 68, 68);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.font-empty {
+  text-align: center;
+  padding: 20px 12px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.3);
+  border: 1px dashed rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  margin: 8px 12px 0;
+}
+.dark .font-empty {
+  color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ═══════════════════════════════════════════════
+   13. Scoop Config — Token & Config List
+   ═══════════════════════════════════════════════ */
+.token-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.dark .token-badge {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.token-badge--active {
+  background: rgba(16, 185, 129, 0.08);
+  color: rgba(16, 185, 129, 0.85);
+}
+.dark .token-badge--active {
+  background: rgba(52, 211, 153, 0.1);
+  color: rgba(52, 211, 153, 0.9);
+}
+
+.token-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.token-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 0;
+}
+
+.token-input-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.token-eye-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 3px;
+  border-radius: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  z-index: 1;
+}
+.dark .token-eye-btn {
+  color: rgba(255, 255, 255, 0.3);
+}
+.token-eye-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.dark .token-eye-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 12px;
+}
+
+.config-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
+  text-align: right;
+  word-break: break-all;
+  line-height: 1.4;
+  flex-shrink: 0;
+  max-width: 50%;
+}
+.dark .config-value {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.config-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 0;
+}
+
+.config-loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(16, 185, 129, 0.15);
+  border-top-color: rgba(16, 185, 129, 0.7);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.config-loading-text {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.3);
+}
+.dark .config-loading-text {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.config-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 0;
+  color: rgba(0, 0, 0, 0.25);
+  gap: 8px;
+}
+.dark .config-empty {
+  color: rgba(255, 255, 255, 0.2);
+}
+.config-empty p {
+  font-size: 11px;
+}
+
+/* ═══════════════════════════════════════════════
+   14. Footer — 极客环境脚标
+   ═══════════════════════════════════════════════ */
+.content-footer {
+  padding: 16px 0 20px;
+  margin-top: 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+}
+.dark .content-footer {
+  border-top-color: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.15);
+}
+
+.footer-sep {
+  opacity: 0.5;
+}
+
+/* ═══════════════════════════════════════════════
+   15. Font Stack Transition
+   ═══════════════════════════════════════════════ */
 .font-stack-move,
 .font-stack-enter-active,
 .font-stack-leave-active {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .font-stack-enter-from,
 .font-stack-leave-to {
   opacity: 0;
-  transform: translateX(-16px);
+  transform: translateX(-12px);
 }
 .font-stack-leave-active {
   position: absolute;
+}
+
+/* ═══════════════════════════════════════════════
+   16. Spin Animation
+   ═══════════════════════════════════════════════ */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 </style>
