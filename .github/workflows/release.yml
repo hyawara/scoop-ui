@@ -34,26 +34,11 @@ jobs:
       - name: Build source
         run: pnpm run build
 
-      - name: Package installer
-        run: pnpm electron-builder --win --x64
+      # electron-builder 打包 NSIS 安装包，并生成差分更新所需的
+      # latest.yml + *.blockmap，再通过 publish 配置(github)自动
+      # 创建 Release 并上传全部产物。electron-updater 依赖这些文件工作。
+      - name: Package & Publish
+        run: pnpm electron-builder --win --x64 --publish always
         env:
           GH_TOKEN: ${{ github.token }}
           LOCALAPPDATA: ${{ runner.temp }}/local-app-data
-
-      - name: Cleanup release files
-        run: node scripts/cleanup-release.mjs
-
-      - name: Generate update manifest
-        run: node scripts/generate-update-json.mjs
-
-      - name: Create Release & Upload Assets
-        shell: bash
-        run: |
-          gh release create "${{ github.ref_name }}" \
-            release/update.json \
-            release/Scoop*.exe \
-            --title "Scoop UI ${{ github.ref_name }}" \
-            --notes "${{ github.event.release.body }}" \
-            --generate-notes
-        env:
-          GH_TOKEN: ${{ github.token }}

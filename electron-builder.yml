@@ -9,9 +9,6 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: zip
-      arch:
-        - x64
   icon: resources/icon.ico
   compression: maximum
 nsis:
@@ -20,5 +17,11 @@ nsis:
   createDesktopShortcut: false
   installDir: $PROGRAMFILES\Scoop-UI
   include: build/installer.nsh
+  differentialPackage: true
+publish:
+  - provider: github
+    owner: hyawara
+    repo: scoop-ui
+    releaseType: release
 files:
   - dist/**/*

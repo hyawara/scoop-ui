@@ -64,14 +64,14 @@ contextBridge.exposeInMainWorld('scoopAPI', {
 
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
 
-  // Self-Update APIs
-  checkForUpdate: (url: string) => ipcRenderer.invoke('app:checkForUpdate', url),
-  downloadUpdate: (url: string) => ipcRenderer.invoke('app:downloadUpdate', url),
-  startAppUpgrade: () => ipcRenderer.invoke('app:startAppUpgrade'),
-  onUpdateProgress: (callback: (data: { percent: number }) => void) => {
-    ipcRenderer.on('app:updateProgress', (_event, data) => callback(data))
+  // Self-Update APIs (electron-updater)
+  checkForUpdate: () => ipcRenderer.invoke('app:checkForUpdate'),
+  downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
+  quitAndInstall: () => ipcRenderer.invoke('app:quitAndInstall'),
+  onUpdateEvent: (callback: (data: any) => void) => {
+    ipcRenderer.on('app:updateEvent', (_event, data) => callback(data))
   },
-  removeUpdateProgressListener: () => {
-    ipcRenderer.removeAllListeners('app:updateProgress')
+  removeUpdateEventListener: () => {
+    ipcRenderer.removeAllListeners('app:updateEvent')
   },
 })

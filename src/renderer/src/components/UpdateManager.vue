@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
+import { ref, computed, inject, watch } from 'vue'
 import {
   NButton,
   NIcon,
@@ -17,58 +17,48 @@ import {
 const message = useMessage()
 const updateInfo = inject<any>('updateInfo')
 const showSettings = inject<any>('showSettings')
-const appDownloading = inject<any>('appDownloading')
+const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
+const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
 
-type BannerState = 'hidden' | 'notified' | 'updating'
-const state = ref<BannerState>('hidden')
-const downloadProgress = ref(0)
+type BannerState = 'hidden' | 'notified' | 'updating' | 'downloaded'
 const showNotesModal = ref(false)
 const dismissed = ref(false)
 
 const BANNER_HEIGHT = 'h-10'
 
+// 下载进度直接取自共享状态机
+const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
+
 function shouldShow(): BannerState {
-  if (dismissed.value && !appDownloading?.value) return 'hidden'
-  if (showSettings?.value && !appDownloading?.value) return 'hidden'
-  if (appDownloading?.value) return 'updating'
-  if (state.value === 'updating') return 'updating'
+  const phase = updateInfo?.value?.phase
+  // 下载完成 → 常驻提示重启，不受 dismiss / 设置面板影响
+  if (phase === 'downloaded') return 'downloaded'
+  if (phase === 'downloading') return 'updating'
+  if (dismissed.value) return 'hidden'
+  if (showSettings?.value) return 'hidden'
   if (updateInfo?.value?.hasUpdate) return 'notified'
   return 'hidden'
 }
 
 function dismissBanner() {
   dismissed.value = true
-  state.value = 'hidden'
 }
 
 watch(() => updateInfo?.value?.hasUpdate, (newVal) => {
   if (newVal) dismissed.value = false
 })
 
-onMounted(() => {
-  window.scoopAPI.onUpdateProgress((data: { percent: number }) => {
-    downloadProgress.value = data.percent
-  })
-})
-
-onUnmounted(() => {
-  window.scoopAPI.removeUpdateProgressListener()
-})
-
 async function startDownload() {
-  const dlUrl = updateInfo?.value?.zipUrl || updateInfo?.value?.downloadUrl
-  if (!dlUrl) return
-  state.value = 'updating'
-  downloadProgress.value = 0
+  if (!updateInfo?.value?.hasUpdate) return
   try {
-    await window.scoopAPI.downloadUpdate(dlUrl)
-    state.value = 'hidden'
-    await new Promise(r => setTimeout(r, 1500))
-    window.scoopAPI.startAppUpgrade()
+    await startDownloadUpdate?.()
   } catch (e: any) {
-    state.value = 'hidden'
     message.error(e?.message || '更新下载失败，请稍后重试')
   }
+}
+
+function installNow() {
+  quitAndInstallUpdate?.()
 }
 </script>
 
@@ -130,6 +120,23 @@ async function startDownload() {
         />
       </div>
     </div>
+
+    <!-- Downloaded state：下载完成，提示重启安装 -->
+    <div
+      v-else-if="shouldShow() === 'downloaded'"
+      key="downloaded"
+      class="w-full rounded-lg flex items-center gap-3 px-3 bg-emerald-950/40 border border-emerald-500/30"
+      :class="BANNER_HEIGHT"
+    >
+      <NIcon :component="RocketOutline" size="16" class="text-emerald-400 flex-shrink-0" />
+      <span class="text-xs text-emerald-200 flex-1 truncate">
+        新版本 <strong class="font-mono">v{{ updateInfo.version }}</strong> 已下载完成
+      </span>
+      <NButton size="tiny" type="primary" secondary @click="installNow" class="!rounded-md">
+        <template #icon><NIcon :component="RefreshOutline" size="12" /></template>
+        重启并安装
+      </NButton>
+    </div>
   </Transition>
 
   <!-- Release Notes Modal -->
@@ -148,8 +155,8 @@ async function startDownload() {
           <NIcon :component="RocketOutline" size="18" class="text-indigo-400" />
           <span class="text-base font-bold text-white">v{{ updateInfo.version }}</span>
         </div>
-        <span v-if="updateInfo.pubDate" class="text-xs text-slate-500">
-          {{ new Date(updateInfo.pubDate).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) }}
+        <span v-if="updateInfo.releaseDate" class="text-xs text-slate-500">
+          {{ new Date(updateInfo.releaseDate).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) }}
         </span>
       </div>
       <div class="dark:bg-[#0b0c10] bg-gray-100 rounded-xl p-4 border dark:border-white/[0.06] border-black/[0.08] max-h-[320px] overflow-y-auto custom-scrollbar">
@@ -160,7 +167,17 @@ async function startDownload() {
       <div class="flex justify-end gap-2">
         <NButton size="small" quaternary @click="showNotesModal = false" class="!rounded-lg">关闭</NButton>
         <NButton
-          v-if="state !== 'updating'"
+          v-if="updateInfo.phase === 'downloaded'"
+          size="small"
+          type="primary"
+          @click="showNotesModal = false; installNow()"
+          class="!rounded-lg"
+        >
+          <template #icon><NIcon :component="RocketOutline" size="14" /></template>
+          立即重启安装
+        </NButton>
+        <NButton
+          v-else-if="updateInfo.phase !== 'downloading'"
           size="small"
           type="primary"
           @click="showNotesModal = false; startDownload()"

@@ -19,6 +19,15 @@ interface ProgressData {
   message: string
 }
 
+// 主进程 electron-updater 统一推送的更新事件（与 src/main/ipc/updater.ts 保持一致）
+type UpdateEvent =
+  | { status: 'checking' }
+  | { status: 'available'; version: string; notes: string; releaseDate: string }
+  | { status: 'not-available'; version: string }
+  | { status: 'progress'; percent: number; transferred: number; total: number; bytesPerSecond: number }
+  | { status: 'downloaded'; version: string; notes: string; releaseDate: string }
+  | { status: 'error'; message: string }
+
 interface Window {
   scoopAPI: {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
@@ -66,19 +75,18 @@ interface Window {
 
     getAppVersion: () => Promise<string>
 
-    // Self-Update APIs
-    checkForUpdate: (url: string) => Promise<{
+    // Self-Update APIs (electron-updater)
+    checkForUpdate: () => Promise<{
       hasUpdate: boolean
       version?: string
       notes?: string
-      pubDate?: string
-      downloadUrl?: string
-      zipUrl?: string
+      releaseDate?: string
       error?: string
+      devMode?: boolean
     }>
-    downloadUpdate: (url: string) => Promise<{ success: boolean; path: string }>
-    startAppUpgrade: () => void
-    onUpdateProgress: (callback: (data: { percent: number }) => void) => void
-    removeUpdateProgressListener: () => void
+    downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+    quitAndInstall: () => Promise<void>
+    onUpdateEvent: (callback: (data: UpdateEvent) => void) => void
+    removeUpdateEventListener: () => void
   }
 }

@@ -47,7 +47,12 @@ const message = useMessage()
 const isDark = inject<Ref<boolean>>('isDark')!
 const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
-const appDownloading = inject<any>('appDownloading')
+
+// 共享自更新状态机（由 App.vue 提供，electron-updater 事件流驱动）
+const updateInfo = inject<any>('updateInfo')
+const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
+const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
+const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
 
 const APP_VERSION = ref('')
 const activeSidebar = ref('theme')
@@ -140,16 +145,16 @@ function onDrop(e: DragEvent, index: number) {
 function onDragEnd() { dragIndex.value = null; hoverIndex.value = null }
 
 // ═══ System Tab ═══
-const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
-type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'restarting'
-const updateStatus = ref<UpdateStatus>('idle')
-const remoteVersion = ref('')
-const releaseNotes = ref('')
-const downloadUrl = ref('')
-const zipUrl = ref('')
-const downloadProgress = ref(0)
+// 更新状态全部取自共享 updateInfo（App.vue 提供，electron-updater 事件流驱动）。
+// 本组件只负责触发动作 + 按 phase 渲染 UI，不再维护本地副本状态。
 const scoopVersion = ref('')
 const scoopVersionLoading = ref(false)
+
+// 派生视图状态：把共享 phase 映射为设置面板 UI 需要的状态
+const updatePhase = computed(() => updateInfo?.value?.phase ?? 'idle')
+const remoteVersion = computed(() => updateInfo?.value?.version ?? '')
+const releaseNotes = computed(() => updateInfo?.value?.notes ?? '')
+const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
 
 async function loadScoopVersion() {
   scoopVersionLoading.value = true
@@ -162,49 +167,27 @@ async function loadScoopVersion() {
 }
 
 async function handleCheckUpdate() {
-  updateStatus.value = 'checking'
-  try {
-    const result = await window.scoopAPI.checkForUpdate(UPDATE_CHECK_URL)
-    if (result.error) {
-      message.error(`检查更新失败: ${result.error}`)
-      updateStatus.value = 'idle'
-    } else if (result.hasUpdate) {
-      remoteVersion.value = result.version || ''
-      releaseNotes.value = result.notes || ''
-      downloadUrl.value = result.downloadUrl || ''
-      zipUrl.value = result.zipUrl || ''
-      updateStatus.value = 'available'
-      message.success(`发现新版本 v${result.version}`)
-    } else {
-      updateStatus.value = 'latest'
-      message.info('当前已是最新版本')
-    }
-  } catch (e) {
-    message.error(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`)
-    updateStatus.value = 'idle'
+  await checkForUpdate?.()
+  const phase = updateInfo?.value?.phase
+  if (phase === 'not-available') {
+    message.info('当前已是最新版本')
+  } else if (phase === 'available') {
+    message.success(`发现新版本 v${updateInfo?.value?.version}`)
+  } else if (phase === 'error') {
+    message.error(`检查更新失败: ${updateInfo?.value?.error || '未知错误'}`)
   }
 }
 
 async function triggerAppUpgrade() {
-  if (!downloadUrl.value) return
-  updateStatus.value = 'downloading'
-  downloadProgress.value = 0
-  if (appDownloading) appDownloading.value = true
-  window.scoopAPI.onUpdateProgress((data: { percent: number }) => { downloadProgress.value = data.percent })
   try {
-    const targetUrl = zipUrl.value || downloadUrl.value
-    await window.scoopAPI.downloadUpdate(targetUrl)
-    updateStatus.value = 'restarting'
-    downloadProgress.value = 100
-    message.success('下载完成，正在重启应用...')
-    await new Promise(r => setTimeout(r, 1500))
-    window.scoopAPI.startAppUpgrade()
+    await startDownloadUpdate?.()
   } catch (e) {
     message.error(`更新失败: ${e instanceof Error ? e.message : String(e)}`)
-    if (appDownloading) appDownloading.value = false
-    window.scoopAPI.removeUpdateProgressListener()
-    updateStatus.value = 'available'
   }
+}
+
+function installUpdate() {
+  quitAndInstallUpdate?.()
 }
 
 function selectPreset(key: string) {
@@ -341,14 +324,8 @@ watch(() => props.show, (val) => {
     activeSidebar.value = 'theme'
     loadScoopVersion()
     loadScoopConfig()
-  } else {
-    updateStatus.value = 'idle'
-    remoteVersion.value = ''
-    releaseNotes.value = ''
-    downloadUrl.value = ''
-    zipUrl.value = ''
-    downloadProgress.value = 0
   }
+  // 更新状态由共享 updateInfo 统一管理，设置面板开关不再重置本地副本
 })
 </script>
 
@@ -501,28 +478,24 @@ watch(() => props.show, (val) => {
               <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center"><NIcon :component="RefreshOutline" size="18" class="text-white" /></div>
               <div><span class="text-sm font-medium dark:text-white text-gray-800">检查更新</span><p class="text-xs dark:text-slate-400 text-gray-500">获取最新 Scoop UI 版本</p></div>
             </div>
-            <NButton v-if="updateStatus === 'idle'" size="small" secondary type="warning" @click="handleCheckUpdate" class="!rounded-lg">
+            <NButton v-if="updatePhase === 'idle' || updatePhase === 'not-available' || updatePhase === 'error'" size="small" secondary type="warning" @click="handleCheckUpdate" class="!rounded-lg">
               <template #icon><NIcon :component="RefreshOutline" size="14" /></template>检查更新
             </NButton>
-            <NButton v-else-if="updateStatus === 'checking'" size="small" loading disabled class="!rounded-lg">正在检查...</NButton>
-            <div v-else-if="updateStatus === 'latest'" class="flex items-center gap-1.5 text-green-500 text-sm font-medium">
-              <NIcon :component="CheckmarkCircleOutline" size="16" />已是最新版本 (v{{ APP_VERSION }})
-            </div>
-            <div v-else-if="updateStatus === 'available'" class="flex flex-col items-end gap-1">
+            <NButton v-else-if="updatePhase === 'checking'" size="small" loading disabled class="!rounded-lg">正在检查...</NButton>
+            <div v-else-if="updatePhase === 'available'" class="flex flex-col items-end gap-1">
               <div class="flex items-center gap-2">
                 <span class="text-xs text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded font-mono">New v{{ remoteVersion }}</span>
                 <NButton size="small" type="primary" @click="triggerAppUpgrade" class="!rounded-lg"><template #icon><NIcon :component="RocketOutline" size="14" /></template>立即更新</NButton>
               </div>
               <span v-if="releaseNotes" class="text-[11px] dark:text-slate-500 text-gray-500">更新日志：{{ releaseNotes }}</span>
             </div>
-            <div v-else-if="updateStatus === 'downloading'" class="flex items-center gap-3">
+            <div v-else-if="updatePhase === 'downloading'" class="flex items-center gap-3">
               <div class="w-3.5 h-3.5 border-2 border-t-transparent border-blue-400 rounded-full animate-spin flex-shrink-0" />
               <span class="text-xs text-blue-300 font-mono min-w-[8em] whitespace-nowrap">{{ downloadProgress > 0 ? `正在下载 ${downloadProgress}%` : '准备下载...' }}</span>
               <NProgress type="line" :percentage="downloadProgress" :height="4" :border-radius="2" :show-indicator="false" status="info" style="width: 100px" />
             </div>
-            <div v-else-if="updateStatus === 'restarting'" class="flex items-center gap-2">
-              <div class="w-3.5 h-3.5 border-2 border-t-transparent border-green-400 rounded-full animate-spin flex-shrink-0" />
-              <span class="text-xs text-green-400 font-mono animate-pulse">正在重启应用...</span>
+            <div v-else-if="updatePhase === 'downloaded'" class="flex items-center gap-2">
+              <NButton size="small" type="primary" @click="installUpdate" class="!rounded-lg"><template #icon><NIcon :component="RocketOutline" size="14" /></template>重启并安装</NButton>
             </div>
           </div>
           <!-- ═══ 底部版权 (仅显示在系统设置中) ═══ -->

@@ -1,7 +1,7 @@
 {
   "name": "scoop-ui",
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A modern GUI for Scoop package manager on Windows, built with Electron and Vue 3",
   "main": "dist/main/index.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "build": "npm run build:icons && npm run build:main && npm run build:renderer",
     "preview": "vite preview",
     "electron:dev": "npm run build && electron .",
-    "electron:build": "npm run build && electron-builder && node scripts/cleanup-release.mjs && node scripts/generate-update-json.mjs"
+    "electron:build": "npm run build && electron-builder --publish never && node scripts/cleanup-release.mjs",
+    "release": "npm run build && electron-builder --publish always"
   },
   "build": {
     "appId": "com.scoop-ui.app",
@@ -51,12 +52,14 @@
   "license": "MIT",
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
+    "electron-updater": "^6.8.9",
     "iconv-lite": "^0.7.2",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",
     "vue": "^3.5.39"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^26.1.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "autoprefixer": "^10.5.2",
@@ -65,7 +68,6 @@
     "png-to-ico": "^3.0.1",
     "postcss": "^8.5.16",
     "sharp": "^0.35.3",
-    "@tailwindcss/postcss": "^4.3.2",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",

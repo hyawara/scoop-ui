@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { registerScoopIPC } from './ipc/scoop.js'
 import { registerConfigIPC } from './ipc/config.js'
+import { registerUpdaterIPC } from './ipc/updater.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -91,6 +92,7 @@ app.whenReady().then(() => {
   registerWindowIPC()
   registerConfigIPC()
   registerScoopIPC()
+  registerUpdaterIPC(() => mainWindow)
   createWindow()
 
   app.on('activate', () => {

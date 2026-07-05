@@ -33,52 +33,115 @@ const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
 
-// Shared update check state for UpdateManager + SettingsPanel
+// Shared update state for UpdateManager + SettingsPanel.
+// 由 electron-updater 事件流（app:updateEvent）驱动，不再手动轮询 URL。
+type UpdatePhase = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
 const updateInfo = ref<{
+  phase: UpdatePhase
   hasUpdate: boolean
   version: string
   notes: string
-  pubDate: string
-  downloadUrl: string
+  releaseDate: string
   checking: boolean
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
   error: string
 }>({
+  phase: 'idle',
   hasUpdate: false,
   version: '',
   notes: '',
-  pubDate: '',
-  downloadUrl: '',
+  releaseDate: '',
   checking: false,
+  percent: 0,
+  bytesPerSecond: 0,
+  transferred: 0,
+  total: 0,
   error: '',
 })
 
-const appDownloading = ref(false)
+// downloading 或 downloaded 时视为"更新占用中"，供 UpdateManager banner 常驻判断
+const appDownloading = computed(() =>
+  updateInfo.value.phase === 'downloading' || updateInfo.value.phase === 'downloaded'
+)
 
-const UPDATE_CHECK_URL = 'https://github.com/hyawara/scoop-ui/releases/latest/download/update.json'
-
+// 静默检查更新：结果由 app:updateEvent 事件流回填，这里只负责触发 + 兜底错误
 async function checkForUpdate() {
   if (updateInfo.value.checking) return
   updateInfo.value.checking = true
+  updateInfo.value.error = ''
   try {
-    const result = await window.scoopAPI.checkForUpdate(UPDATE_CHECK_URL)
+    const result = await window.scoopAPI.checkForUpdate()
+    if (result.devMode) {
+      // 开发模式无 latest.yml，静默跳过
+      updateInfo.value.checking = false
+      return
+    }
     if (result.error) {
-      updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false, error: result.error }
-    } else if (result.hasUpdate) {
-      updateInfo.value = {
-        hasUpdate: true,
-        version: result.version || '',
-        notes: result.notes || '',
-        pubDate: result.pubDate || '',
-        downloadUrl: result.downloadUrl || '',
-        checking: false,
-        error: '',
-      }
-    } else {
-      updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false, error: '' }
+      updateInfo.value.error = result.error
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    updateInfo.value = { ...updateInfo.value, hasUpdate: false, checking: false, error: msg }
+    updateInfo.value.error = e instanceof Error ? e.message : String(e)
+  } finally {
+    updateInfo.value.checking = false
+  }
+}
+
+// 触发差分下载（由用户点击"立即更新"驱动）
+async function startDownloadUpdate() {
+  const result = await window.scoopAPI.downloadUpdate()
+  if (!result.success && result.error) {
+    updateInfo.value.error = result.error
+  }
+}
+
+// 下载完成后退出并安装（自动重启）
+function quitAndInstallUpdate() {
+  window.scoopAPI.quitAndInstall()
+}
+
+// 事件流状态机：统一消费主进程推送的 app:updateEvent
+function handleUpdateEvent(evt: UpdateEvent) {
+  switch (evt.status) {
+    case 'checking':
+      updateInfo.value.phase = 'checking'
+      updateInfo.value.checking = true
+      break
+    case 'available':
+      updateInfo.value.phase = 'available'
+      updateInfo.value.hasUpdate = true
+      updateInfo.value.version = evt.version
+      updateInfo.value.notes = evt.notes
+      updateInfo.value.releaseDate = evt.releaseDate
+      updateInfo.value.checking = false
+      break
+    case 'not-available':
+      updateInfo.value.phase = 'not-available'
+      updateInfo.value.hasUpdate = false
+      updateInfo.value.version = evt.version
+      updateInfo.value.checking = false
+      break
+    case 'progress':
+      updateInfo.value.phase = 'downloading'
+      updateInfo.value.percent = evt.percent
+      updateInfo.value.bytesPerSecond = evt.bytesPerSecond
+      updateInfo.value.transferred = evt.transferred
+      updateInfo.value.total = evt.total
+      break
+    case 'downloaded':
+      updateInfo.value.phase = 'downloaded'
+      updateInfo.value.percent = 100
+      updateInfo.value.version = evt.version
+      updateInfo.value.notes = evt.notes
+      updateInfo.value.releaseDate = evt.releaseDate
+      break
+    case 'error':
+      updateInfo.value.phase = 'error'
+      updateInfo.value.checking = false
+      updateInfo.value.error = evt.message
+      break
   }
 }
 
@@ -269,6 +332,8 @@ const themeOverrides = computed(() => {
 provide('searchQuery', searchQuery)
 provide('updateInfo', updateInfo)
 provide('checkForUpdate', checkForUpdate)
+provide('startDownloadUpdate', startDownloadUpdate)
+provide('quitAndInstallUpdate', quitAndInstallUpdate)
 provide('isDark', isDark)
 provide('fontFamily', fontFamily)
 provide('fontList', fontList)
@@ -347,6 +412,9 @@ onMounted(async () => {
       pkgProgress.handleLog(data.package, data.message)
     }
   })
+
+  // electron-updater 事件流：统一驱动更新状态机（App 生命周期内常驻）
+  window.scoopAPI.onUpdateEvent(handleUpdateEvent)
 
   await appStore.checkScoop()
   if (appStore.scoopStatus.installed) {
