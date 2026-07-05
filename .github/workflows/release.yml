@@ -34,16 +34,25 @@ jobs:
       - name: Build source
         run: pnpm run build
 
-      # electron-builder 打包 NSIS 安装包，并生成差分更新所需的
-      # latest.yml + *.blockmap，再通过 publish 配置(github)自动
-      # 创建 Release 并上传全部产物。electron-updater 依赖这些文件工作。
+      # 关键：打包前原子预创建 draft Release。
+      # 这样 electron-builder 发现 Release 已存在，只做「上传」不做「创建」，
+      # 从根上消除多个上传任务并发抢着创建 Release 的竞态
+      # （历史故障：并发创建导致 latest.yml 搭在冲突失败的请求上没传上去）。
+      - name: Pre-create draft Release
+        run: gh release create ${{ github.ref_name }} --draft --title "${{ github.ref_name }}" --notes "Automated release ${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # electron-builder 打包 NSIS 安装包，生成差分更新所需的
+      # latest.yml + *.blockmap，并上传全部产物到已存在的 draft Release。
+      # electron-updater 依赖 latest.yml + blockmap 做差分更新。
       - name: Package & Publish
         run: pnpm electron-builder --win --x64 --publish always
         env:
           GH_TOKEN: ${{ github.token }}
           LOCALAPPDATA: ${{ runner.temp }}/local-app-data
 
-      # electron-builder 默认创建 Draft Release，此处将其发布为正式 Release
+      # 全部产物上传完毕后再转正，保证正式 Release 一出现就带齐所有文件
       - name: Publish Release
         run: gh release edit ${{ github.ref_name }} --draft=false
         env:

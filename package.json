@@ -1,7 +1,7 @@
 {
   "name": "scoop-ui",
   "type": "module",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "A modern GUI for Scoop package manager on Windows, built with Electron and Vue 3",
   "main": "dist/main/index.js",
   "scripts": {
@@ -14,32 +14,6 @@
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder --publish never && node scripts/cleanup-release.mjs",
     "release": "npm run build && electron-builder --publish always"
-  },
-  "build": {
-    "appId": "com.scoop-ui.app",
-    "productName": "Scoop-UI",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "build/icons/icon.ico",
-      "compression": "maximum"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icons/icon.ico",
-      "uninstallerIcon": "build/icons/icon.ico",
-      "installerHeaderIcon": "build/icons/icon.ico",
-      "shortcutName": "Scoop-UI"
-    }
   },
   "keywords": [
     "scoop",
