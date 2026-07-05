@@ -163,18 +163,7 @@ const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
 // ═══ 更新状态机：四态管理 ═══
 type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready'
 
-const simulating = ref(false)
-const simPercent = ref(0)
-const simTransferred = ref(0)
-const simTotal = ref(68 * 1024 * 1024)
-let simTimer: ReturnType<typeof setInterval> | null = null
-
 const effectivePhase = computed<UpdateStatus>(() => {
-  if (simulating.value) {
-    if (simPercent.value >= 100) return 'ready'
-    if (simPercent.value > 0) return 'downloading'
-    return 'checking'
-  }
   const raw = updatePhase.value
   if (raw === 'downloaded') return 'ready'
   if (raw === 'downloading') return 'downloading'
@@ -183,53 +172,15 @@ const effectivePhase = computed<UpdateStatus>(() => {
   return 'idle'
 })
 
-const displayTransferred = computed(() => {
-  if (simulating.value) return simTransferred.value
-  return updateInfo?.value?.transferred ?? 0
-})
-
-const displayTotal = computed(() => {
-  if (simulating.value) return simTotal.value
-  return updateInfo?.value?.total ?? 0
-})
-
-const displayPercent = computed(() => {
-  if (simulating.value) return Math.round(simPercent.value)
-  return Math.round(downloadProgress.value)
-})
+const displayTransferred = computed(() => updateInfo?.value?.transferred ?? 0)
+const displayTotal = computed(() => updateInfo?.value?.total ?? 0)
+const displayPercent = computed(() => Math.round(downloadProgress.value))
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i]
-}
-
-function handleUpdateTest() {
-  if (simulating.value) return
-  simulating.value = true
-  simPercent.value = 0
-  simTransferred.value = 0
-  simTotal.value = 68 * 1024 * 1024
-
-  simTimer = setInterval(() => {
-    const increment = Math.random() * 6 + 1.5
-    simPercent.value = Math.min(100, simPercent.value + increment)
-    simTransferred.value = Math.floor(simTotal.value * simPercent.value / 100)
-
-    if (simPercent.value >= 100) {
-      if (simTimer) { clearInterval(simTimer); simTimer = null }
-      simPercent.value = 100
-      simTransferred.value = simTotal.value
-    }
-  }, 180)
-}
-
-function resetSim() {
-  if (simTimer) { clearInterval(simTimer); simTimer = null }
-  simulating.value = false
-  simPercent.value = 0
-  simTransferred.value = 0
 }
 
 async function loadScoopVersion() {
@@ -578,17 +529,11 @@ watch(() => props.show, (val) => {
                     <NButton size="small" quaternary @click="handleCheckUpdate" class="!rounded-md">
                       <template #icon><NIcon :component="RefreshOutline" size="14" /></template>检查更新
                     </NButton>
-                    <NButton size="tiny" text @click="handleUpdateTest" class="!text-zinc-400 hover:!text-zinc-200 !rounded-md">
-                      模拟测试
-                    </NButton>
                   </div>
 
                   <!-- checking -->
                   <div v-else-if="effectivePhase === 'checking'" class="flex items-center gap-2">
                     <NButton size="small" quaternary loading disabled class="!rounded-md">检查中...</NButton>
-                    <NButton v-if="simulating" size="tiny" text @click="resetSim" class="!text-zinc-400 hover:!text-zinc-200 !rounded-md">
-                      取消
-                    </NButton>
                   </div>
 
                   <!-- downloading -->
@@ -596,9 +541,6 @@ watch(() => props.show, (val) => {
                     <div class="update-spinner" />
                     <span class="update-percent">{{ displayPercent }}%</span>
                     <NButton size="small" quaternary disabled class="!rounded-md">正在下载...</NButton>
-                    <NButton v-if="simulating" size="tiny" text @click="resetSim" class="!text-zinc-400 hover:!text-zinc-200 !rounded-md">
-                      取消
-                    </NButton>
                   </div>
 
                   <!-- ready -->
