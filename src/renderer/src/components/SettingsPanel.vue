@@ -22,7 +22,6 @@ import {
   LogoGithub,
   AddOutline,
   CloseOutline,
-  CreateOutline,
   ReorderThreeOutline,
   RocketOutline,
   SettingsOutline,
@@ -200,35 +199,36 @@ function setTheme(dark: boolean) {
   // persistence handled by watch(isDark) in App.vue
 }
 
-// ═══ Scoop 配置管理 - ConfigItem 接口 ═══
+// ═══ Scoop 配置管理 - ConfigItem 接口（纯只读展示）═══
 interface ConfigItem {
   key: string
   label: string
   desc: string
   value: string
-  isEditing: boolean
-  editValue: string
   isSensitive: boolean
-  saving: boolean
 }
 
 const scoopConfigRaw = ref<Record<string, string>>({})
 const configLoading = ref(false)
 
+// gh_token 不在只读列表中重复展示，单独由可配置区管理
 const configItems = computed<ConfigItem[]>(() =>
-  Object.entries(scoopConfigRaw.value).map(([key, value]) => ({
-    key,
-    label: configMetaInfo[key]?.label || key,
-    desc: configMetaInfo[key]?.description || '',
-    value,
-    isEditing: false,
-    editValue: value,
-    isSensitive: key === 'gh_token',
-    saving: false,
-  }))
+  Object.entries(scoopConfigRaw.value)
+    .filter(([key]) => key !== 'gh_token')
+    .map(([key, value]) => ({
+      key,
+      label: configMetaInfo[key]?.label || key,
+      desc: configMetaInfo[key]?.description || '',
+      value,
+      isSensitive: false,
+    }))
 )
 
-const showTokenMap = ref<Record<string, boolean>>({})
+// ═══ GitHub Token 可配置区（仿主界面网络代理）═══
+const ghToken = ref('')
+const ghTokenSaving = ref(false)
+const showGhToken = ref(false)
+const ghTokenConfigured = computed(() => !!ghToken.value)
 
 const configMetaInfo: Record<string, { icon: any; label: string; description: string }> = {
   'aria2-enabled': { icon: FlashOutline, label: 'Aria2 加速', description: '启用 Aria2 多线程下载加速' },
@@ -249,11 +249,6 @@ function getConfigIcon(key: string): any { return configMetaInfo[key]?.icon || S
 function getConfigLabel(key: string): string { return configMetaInfo[key]?.label || key }
 function getConfigDesc(key: string): string { return configMetaInfo[key]?.description || '' }
 
-function maskToken(val: string): string {
-  if (!val || val.length <= 8) return val
-  return val.slice(0, 4) + '*'.repeat(val.length - 8) + val.slice(-4)
-}
-
 function formatConfigValue(key: string, val: string): string {
   if (!val) return ''
   if (key === 'last_update') {
@@ -267,9 +262,7 @@ function formatConfigValue(key: string, val: string): string {
 
 function displayValue(item: ConfigItem): string {
   if (!item.value) return ''
-  const formatted = formatConfigValue(item.key, item.value)
-  if (item.isSensitive && !showTokenMap.value[item.key]) return maskToken(formatted)
-  return formatted
+  return formatConfigValue(item.key, item.value)
 }
 
 async function loadScoopConfig() {
@@ -277,41 +270,24 @@ async function loadScoopConfig() {
   try {
     const cfg = await window.scoopAPI.getScoopConfig()
     scoopConfigRaw.value = cfg
+    ghToken.value = cfg['gh_token'] || ''
   } catch { /* scoop not available */ }
   configLoading.value = false
 }
 
-function startEdit(item: ConfigItem) {
-  item.isEditing = true
-  item.editValue = item.value
-}
-
-function cancelEdit(item: ConfigItem) {
-  item.isEditing = false
-  item.editValue = item.value
-}
-
-async function saveConfig(item: ConfigItem) {
-  item.saving = true
+async function saveGhToken() {
+  ghTokenSaving.value = true
   try {
-    const newVal = item.editValue
-    const oldVal = item.value
-    if (newVal !== oldVal) {
-      await window.scoopAPI.setScoopConfig(item.key, newVal)
-      const cfg = await window.scoopAPI.getScoopConfig()
-      scoopConfigRaw.value = cfg
-      message.success(`「${item.label}」已更新并生效`)
-    }
-    item.isEditing = false
+    await window.scoopAPI.setScoopConfig('gh_token', ghToken.value.trim())
+    const cfg = await window.scoopAPI.getScoopConfig()
+    scoopConfigRaw.value = cfg
+    ghToken.value = cfg['gh_token'] || ''
+    message.success(ghToken.value ? 'GitHub Token 已保存并生效' : 'GitHub Token 已清除')
   } catch (e: any) {
     message.error('保存失败: ' + (e.message || String(e)))
   } finally {
-    item.saving = false
+    ghTokenSaving.value = false
   }
-}
-
-function toggleTokenShow(item: ConfigItem) {
-  showTokenMap.value[item.key] = !showTokenMap.value[item.key]
 }
 
 // ═══ Modal events ═══
@@ -513,71 +489,74 @@ watch(() => props.show, (val) => {
             </div>
           </div>
 
-          <div v-else-if="configItems.length > 0" class="flex flex-col gap-1">
-            <div v-for="item in configItems" :key="item.key"
-              class="config-item-row"
-            >
-              <!-- Left: Icon + Label (no truncation) -->
-              <div class="config-item-label">
-                <NIcon :component="getConfigIcon(item.key)" size="15" class="dark:text-slate-400 text-gray-500 flex-shrink-0 mt-0.5" />
-                <div class="flex flex-col min-w-0 flex-1">
-                  <span class="text-xs font-medium dark:text-white text-gray-800">{{ item.label }}</span>
-                  <span v-if="item.desc" class="text-[10px] dark:text-slate-500 text-gray-400 leading-tight mt-0.5">{{ item.desc }}</span>
-                </div>
+          <template v-else>
+            <!-- ═══ GitHub Token 可配置区（仿主界面网络代理）═══ -->
+            <div>
+              <div class="flex items-center gap-2 mb-3">
+                <LockClosedOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
+                <span class="text-sm font-semibold dark:text-white text-gray-800">GitHub Token</span>
+                <span v-if="ghTokenConfigured"
+                  class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-[10px] text-emerald-500 font-medium">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />已配置
+                </span>
+                <span v-else
+                  class="px-1.5 py-0.5 rounded dark:bg-white/[0.06] bg-black/[0.04] text-[10px] dark:text-slate-400 text-gray-500 font-medium">未配置</span>
               </div>
-
-              <!-- Right: Value + Actions (no truncation, word-break) -->
-              <div class="config-item-value">
-                <!-- ═══ 编辑态 ═══ -->
-                <template v-if="item.isEditing">
-                  <div class="config-item-edit">
-                    <div class="relative flex-1">
-                      <NInput
-                        v-model:value="item.editValue"
-                        size="tiny"
-                        :type="item.isSensitive && !showTokenMap[item.key] ? 'password' : 'text'"
-                        :placeholder="item.value || ''"
-                        class="!w-full"
-                        style="--n-color: #EAEFEA; --n-border: transparent;"
-                      />
-                      <button
-                        v-if="item.isSensitive"
-                        @click="toggleTokenShow(item)"
-                        class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded dark:text-slate-400 text-gray-500 hover:bg-white/[0.08]"
-                      >
-                        <NIcon :component="showTokenMap[item.key] ? EyeOffOutline : EyeOutline" size="13" />
-                      </button>
-                    </div>
-                    <div class="config-item-edit-actions">
-                      <button @click="saveConfig(item)" :disabled="item.saving"
-                        class="config-item-btn-save">
-                        <div v-if="item.saving" class="w-3 h-3 border-2 border-t-transparent border-emerald-500 rounded-full animate-spin" />
-                        <NIcon v-else :component="CheckmarkDoneOutline" size="14" />
-                      </button>
-                      <button @click="cancelEdit(item)"
-                        class="config-item-btn-cancel">
-                        <CloseOutline class="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </template>
-
-                <!-- ═══ 阅读态 (no truncation!) ═══ -->
-                <template v-else>
-                  <span class="config-item-display-value">{{ displayValue(item) }}</span>
-                  <button @click="startEdit(item)"
-                    class="config-item-edit-btn">
-                    <CreateOutline class="w-3 h-3" />
+              <p class="text-xs dark:text-slate-500 text-gray-500 mb-3 leading-relaxed">GitHub 个人访问令牌，用于提高 API 速率限制，避免频繁检查更新时被限流。留空并保存即可清除。</p>
+              <div class="flex items-center gap-2 p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06] border">
+                <div class="relative flex-1">
+                  <NInput
+                    v-model:value="ghToken"
+                    size="small"
+                    :type="showGhToken ? 'text' : 'password'"
+                    placeholder="ghp_xxxxxxxxxxxxxxxx"
+                    class="!w-full"
+                    @keyup.enter="saveGhToken"
+                  />
+                  <button
+                    @click="showGhToken = !showGhToken"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded dark:text-slate-400 text-gray-500 dark:hover:bg-white/[0.08] hover:bg-black/[0.06] z-10"
+                  >
+                    <NIcon :component="showGhToken ? EyeOffOutline : EyeOutline" size="15" />
                   </button>
-                </template>
+                </div>
+                <NButton size="small" type="primary" @click="saveGhToken" :loading="ghTokenSaving" class="!rounded-lg shrink-0">
+                  <template #icon><NIcon :component="CheckmarkDoneOutline" size="15" /></template>保存
+                </NButton>
               </div>
             </div>
-          </div>
 
-          <div v-else class="flex flex-col items-center py-8 dark:text-slate-500 text-gray-400">
-            <SettingsOutline class="w-8 h-8 mb-2 opacity-40" />
-            <p class="text-xs">Scoop 未安装或无法获取配置</p>
-          </div>
+            <!-- ═══ 其余配置项（纯只读展示）═══ -->
+            <div v-if="configItems.length > 0" class="flex flex-col gap-1">
+              <div class="flex items-center gap-2 mb-1">
+                <SettingsOutline class="w-4 h-4 dark:text-slate-400 text-gray-500" />
+                <span class="text-sm font-semibold dark:text-white text-gray-800">Scoop 配置</span>
+                <span class="text-[10px] dark:text-slate-500 text-gray-400">只读</span>
+              </div>
+              <div v-for="item in configItems" :key="item.key"
+                class="config-item-row"
+              >
+                <!-- Left: Icon + Label (no truncation) -->
+                <div class="config-item-label">
+                  <NIcon :component="getConfigIcon(item.key)" size="15" class="dark:text-slate-400 text-gray-500 flex-shrink-0 mt-0.5" />
+                  <div class="flex flex-col min-w-0 flex-1">
+                    <span class="text-xs font-medium dark:text-white text-gray-800">{{ item.label }}</span>
+                    <span v-if="item.desc" class="text-[10px] dark:text-slate-500 text-gray-400 leading-tight mt-0.5">{{ item.desc }}</span>
+                  </div>
+                </div>
+
+                <!-- Right: Value (纯只读, no truncation, word-break) -->
+                <div class="config-item-value">
+                  <span class="config-item-display-value">{{ displayValue(item) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="flex flex-col items-center py-8 dark:text-slate-500 text-gray-400">
+              <SettingsOutline class="w-8 h-8 mb-2 opacity-40" />
+              <p class="text-xs">Scoop 未安装或无法获取其余配置</p>
+            </div>
+          </template>
         </div>
         <!-- /scoopconfig tab -->
 
