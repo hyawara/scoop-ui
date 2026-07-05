@@ -23,5 +23,6 @@ publish:
     owner: hyawara
     repo: scoop-ui
     releaseType: release
+    draft: false
 files:
   - dist/**/*
