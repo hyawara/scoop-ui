@@ -125,8 +125,11 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── IPC：退出并安装（触发重启）──
-  ipcMain.handle('app:quitAndInstall', () => {
-    // isSilent=false 显示安装进度；isForceRunAfter=true 安装后自动拉起应用
-    setImmediate(() => autoUpdater.quitAndInstall(false, true))
+  ipcMain.handle('app:quitAndInstall', (_, options?: { isUpdate?: boolean }) => {
+    // isSilent: true=静默安装（跳过确认），false=显示安装进度
+    // isForceRunAfter: true=安装后自动拉起应用
+    // 如果是更新场景（isUpdate=true），使用静默安装，跳过"是否为所有人安装"等确认步骤
+    const isSilent = options?.isUpdate ?? false
+    setImmediate(() => autoUpdater.quitAndInstall(isSilent, true))
   })
 }

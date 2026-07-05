@@ -18,6 +18,7 @@ import Dashboard from '@/components/Dashboard.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import Onboarding from '@/components/Onboarding.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import UpdateManager from '@/components/UpdateManager.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 
 const appStore = useAppStore()
@@ -32,6 +33,7 @@ const colorPreset = ref('aurora')
 const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
+const autoCheckUpdate = ref(true)
 
 // Shared update state for UpdateManager + SettingsPanel.
 // 由 electron-updater 事件流（app:updateEvent）驱动，不再手动轮询 URL。
@@ -98,8 +100,9 @@ async function startDownloadUpdate() {
 }
 
 // 下载完成后退出并安装（自动重启）
-function quitAndInstallUpdate() {
-  window.scoopAPI.quitAndInstall()
+// isUpdate=true 表示是更新场景，使用静默安装跳过确认步骤
+function quitAndInstallUpdate(isUpdate = true) {
+  window.scoopAPI.quitAndInstall({ isUpdate })
 }
 
 // 事件流状态机：统一消费主进程推送的 app:updateEvent
@@ -340,6 +343,7 @@ provide('fontList', fontList)
 provide('colorPreset', colorPreset)
 provide('showSettings', showSettings)
 provide('appDownloading', appDownloading)
+provide('autoCheckUpdate', autoCheckUpdate)
 
 function parseFontFamilyToArray(cssStr: string): string[] {
   if (!cssStr) return []
@@ -397,6 +401,14 @@ onMounted(async () => {
     }
   } catch { /* use defaults */ }
 
+  // 从 config.json 加载自动检查更新配置
+  try {
+    const updateConfig = await window.scoopAPI.getConfig('update')
+    if (updateConfig && typeof updateConfig.autoCheck === 'boolean') {
+      autoCheckUpdate.value = updateConfig.autoCheck
+    }
+  } catch { /* use defaults */ }
+
   // 同步 .dark 类到 <html> (Tailwind dark: variant 的开关)
   syncHtmlDarkClass(isDark.value)
 
@@ -427,8 +439,10 @@ onMounted(async () => {
       settingsStore.loadProxy(),
     ])
 
-    // Silently check for app updates
-    checkForUpdate()
+    // 根据配置决定是否自动检查应用更新
+    if (autoCheckUpdate.value) {
+      checkForUpdate()
+    }
   }
 })
 
@@ -498,6 +512,9 @@ function openSettings() {
             </div>
           </div>
         </NLoadingBarProvider>
+
+        <!-- 全局更新通知弹窗 - 固定右下角 -->
+        <UpdateManager />
 
         <SettingsPanel v-model:show="showSettings" />
       </NDialogProvider>

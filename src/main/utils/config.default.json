@@ -15,5 +15,8 @@
         "dark": true,
         "fontFamily": "'Segoe UI','Microsoft YaHei','Maple Mono NF','sans-serif'",
         "colorPreset": "aurora"
+    },
+    "update": {
+        "autoCheck": true
     }
 }

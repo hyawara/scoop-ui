@@ -21,6 +21,9 @@ export interface AppConfig {
     fontFamily: string
     colorPreset: string
   }
+  update: {
+    autoCheck: boolean
+  }
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -34,6 +37,9 @@ const DEFAULT_CONFIG: AppConfig = {
     dark: true,
     fontFamily: "'Segoe UI','Microsoft YaHei','Maple Mono NF','sans-serif'",
     colorPreset: 'aurora',
+  },
+  update: {
+    autoCheck: true,
   },
 }
 

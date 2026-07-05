@@ -30,7 +30,7 @@ import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
 import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import ProxyCard from '@/components/ProxyCard.vue'
-import UpdateManager from '@/components/UpdateManager.vue'
+
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
 import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
@@ -849,9 +849,6 @@ function openBucketDrawer() {
 
             <!-- 已安装列表（常驻显示，永不消失） -->
             <NScrollbar v-else class="h-full custom-scrollbar">
-              <!-- 自我更新通知条 -->
-              <UpdateManager class="mx-4 mt-3" />
-
               <!-- 批量操作工具栏（Raycast 风格，与列表行全等对齐） -->
               <div
                 class="sticky top-0 z-20 py-2 backdrop-blur-md border-b dark:border-white/[0.03] border-black/[0.04]"

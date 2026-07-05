@@ -67,7 +67,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   // Self-Update APIs (electron-updater)
   checkForUpdate: () => ipcRenderer.invoke('app:checkForUpdate'),
   downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
-  quitAndInstall: () => ipcRenderer.invoke('app:quitAndInstall'),
+  quitAndInstall: (options?: { isUpdate?: boolean }) => ipcRenderer.invoke('app:quitAndInstall', options),
   onUpdateEvent: (callback: (data: any) => void) => {
     ipcRenderer.on('app:updateEvent', (_event, data) => callback(data))
   },

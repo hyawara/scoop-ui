@@ -85,7 +85,7 @@ interface Window {
       devMode?: boolean
     }>
     downloadUpdate: () => Promise<{ success: boolean; error?: string }>
-    quitAndInstall: () => Promise<void>
+    quitAndInstall: (options?: { isUpdate?: boolean }) => Promise<void>
     onUpdateEvent: (callback: (data: UpdateEvent) => void) => void
     removeUpdateEventListener: () => void
   }

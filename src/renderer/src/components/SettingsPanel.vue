@@ -9,6 +9,7 @@ import {
   NProgress,
   NAutoComplete,
   NInput,
+  NSwitch,
   useMessage,
 } from 'naive-ui'
 import {
@@ -52,6 +53,7 @@ const updateInfo = inject<any>('updateInfo')
 const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
 const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
+const autoCheckUpdate = inject<Ref<boolean>>('autoCheckUpdate')!
 
 const APP_VERSION = ref('')
 const activeSidebar = ref('theme')
@@ -186,12 +188,17 @@ async function triggerAppUpgrade() {
 }
 
 function installUpdate() {
-  quitAndInstallUpdate?.()
+  quitAndInstallUpdate?.(true)
 }
 
 function selectPreset(key: string) {
   colorPreset.value = key
   window.scoopAPI.setConfig('theme.colorPreset', key)
+}
+
+function toggleAutoCheckUpdate(value: boolean) {
+  autoCheckUpdate.value = value
+  window.scoopAPI.setConfig('update.autoCheck', value)
 }
 
 function setTheme(dark: boolean) {
@@ -473,6 +480,18 @@ watch(() => props.show, (val) => {
             <div v-else-if="updatePhase === 'downloaded'" class="flex items-center gap-2">
               <NButton size="small" type="primary" @click="installUpdate" class="!rounded-lg"><template #icon><NIcon :component="RocketOutline" size="14" /></template>重启并安装</NButton>
             </div>
+          </div>
+          <!-- 自动检查更新开关 -->
+          <div class="flex items-center justify-between p-3 rounded-xl dark:bg-white/[0.03] dark:border-white/[0.06] bg-black/[0.02] border-black/[0.06]">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center"><NIcon :component="RefreshOutline" size="18" class="text-white" /></div>
+              <div><span class="text-sm font-medium dark:text-white text-gray-800">自动检查更新</span><p class="text-xs dark:text-slate-400 text-gray-500">启动时自动检查新版本</p></div>
+            </div>
+            <NSwitch
+              :value="autoCheckUpdate"
+              @update:value="toggleAutoCheckUpdate"
+              size="medium"
+            />
           </div>
           <!-- ═══ 底部版权 (仅显示在系统设置中) ═══ -->
           <div class="mt-4 pt-3 text-center border-t dark:border-white/[0.06] border-black/[0.06]">
