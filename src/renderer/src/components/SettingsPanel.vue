@@ -36,6 +36,7 @@ import {
   CheckmarkDoneOutline,
   InformationCircleOutline,
   TimeOutline,
+  DownloadOutline,
 } from '@vicons/ionicons5'
 import type { Ref } from 'vue'
 
@@ -49,7 +50,7 @@ const fontList = inject<Ref<string[]>>('fontList')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 
 const updateInfo = inject<any>('updateInfo')
-const checkForUpdate = inject<() => Promise<void>>('checkForUpdate')
+const checkForUpdate = inject<(manual?: boolean) => Promise<void>>('checkForUpdate')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
 const quitAndInstallUpdate = inject<(isUpdate?: boolean) => void>('quitAndInstallUpdate')
 const autoCheckUpdate = inject<Ref<boolean>>('autoCheckUpdate')!
@@ -160,15 +161,16 @@ const remoteVersion = computed(() => updateInfo?.value?.version ?? '')
 const releaseNotes = computed(() => updateInfo?.value?.notes ?? '')
 const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
 
-// ═══ 更新状态机：四态管理 ═══
-type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready'
+// ═══ 更新状态机：五态管理 ═══
+// available 独立成态：发现新版本后按钮就地蜕变为"立即下载"，反馈闭环在设置窗口
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready'
 
 const effectivePhase = computed<UpdateStatus>(() => {
   const raw = updatePhase.value
   if (raw === 'downloaded') return 'ready'
   if (raw === 'downloading') return 'downloading'
   if (raw === 'checking') return 'checking'
-  if (raw === 'available') return 'idle'
+  if (raw === 'available') return 'available'
   return 'idle'
 })
 
@@ -176,12 +178,23 @@ const displayTransferred = computed(() => updateInfo?.value?.transferred ?? 0)
 const displayTotal = computed(() => updateInfo?.value?.total ?? 0)
 const displayPercent = computed(() => Math.round(downloadProgress.value))
 
+// 安装包体积（字节），由主进程从 UpdateInfo.files 取真值
+const packageSize = computed(() => updateInfo?.value?.size ?? 0)
+
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i]
 }
+
+// 发现新版本时的副标题：动态渐变为"发现新版本 vX.X.X，大小约 XXMB"
+const newVersionSubtitle = computed(() => {
+  const v = remoteVersion.value
+  const size = packageSize.value
+  const sizeText = size > 0 ? `，大小约 ${formatBytes(size)}` : ''
+  return `发现新版本 v${v}${sizeText}`
+})
 
 async function loadScoopVersion() {
   scoopVersionLoading.value = true
@@ -194,12 +207,12 @@ async function loadScoopVersion() {
 }
 
 async function handleCheckUpdate() {
-  await checkForUpdate?.()
+  // manual=true：抑制右下角全局 toast，反馈就地闭环在设置窗口
+  await checkForUpdate?.(true)
   const phase = updateInfo?.value?.phase
+  // 发现新版本时按钮就地蜕变为"立即下载"，无需再弹 toast；仅在无更新/出错时给轻提示
   if (phase === 'not-available') {
     message.info('当前已是最新版本')
-  } else if (phase === 'available') {
-    message.success(`发现新版本 v${updateInfo?.value?.version}`)
   } else if (phase === 'error') {
     message.error(`检查更新失败: ${updateInfo?.value?.error || '未知错误'}`)
   }
@@ -484,7 +497,19 @@ watch(() => props.show, (val) => {
                     <span class="setting-desc">Scoop 包管理器图形界面</span>
                   </div>
                 </div>
-                <span class="version-badge">v{{ APP_VERSION }}</span>
+                <div class="version-badge-group">
+                  <span class="version-badge">v{{ APP_VERSION }}</span>
+                  <!-- 发现新版本时：滑出目标版本可用标签，带呼吸灯 -->
+                  <Transition name="version-hint">
+                    <span
+                      v-if="(effectivePhase === 'available' || effectivePhase === 'ready') && remoteVersion"
+                      class="version-badge-next"
+                    >
+                      <span class="version-next-arrow">➔</span>
+                      v{{ remoteVersion }} 可用
+                    </span>
+                  </Transition>
+                </div>
               </div>
 
               <div class="setting-divider" />
@@ -514,36 +539,50 @@ watch(() => props.show, (val) => {
                     <NIcon :component="RefreshOutline" size="16" class="setting-icon" />
                     <div class="setting-text">
                       <span class="setting-title">检查更新</span>
-                      <span v-if="effectivePhase === 'ready'" class="setting-desc setting-desc--ready">新版本已准备就绪，重启应用即可完成升级</span>
-                      <span v-else class="setting-desc">获取最新 Scoop UI 版本</span>
+                      <Transition name="desc-swap" mode="out-in">
+                        <span v-if="effectivePhase === 'ready'" key="ready" class="setting-desc setting-desc--ready">新版本已准备就绪，重启应用即可完成升级</span>
+                        <span v-else-if="effectivePhase === 'available'" key="available" class="setting-desc setting-desc--available">{{ newVersionSubtitle }}</span>
+                        <span v-else-if="effectivePhase === 'downloading'" key="downloading" class="setting-desc setting-desc--available">正在下载新版本，请稍候…</span>
+                        <span v-else key="idle" class="setting-desc">获取最新 Scoop UI 版本</span>
+                      </Transition>
                     </div>
                   </div>
 
-                  <!-- idle -->
-                  <div v-if="effectivePhase === 'idle'" class="flex items-center gap-2">
-                    <NButton size="small" quaternary @click="handleCheckUpdate" class="!rounded-md">
-                      <template #icon><NIcon :component="RefreshOutline" size="14" /></template>检查更新
-                    </NButton>
-                  </div>
+                  <!-- 右侧操作区：状态平滑切换，杜绝布局跳动 -->
+                  <Transition name="action-morph" mode="out-in">
+                    <!-- idle -->
+                    <div v-if="effectivePhase === 'idle'" key="idle" class="flex items-center gap-2">
+                      <NButton size="small" quaternary @click="handleCheckUpdate" class="!rounded-md">
+                        <template #icon><NIcon :component="RefreshOutline" size="14" /></template>检查更新
+                      </NButton>
+                    </div>
 
-                  <!-- checking -->
-                  <div v-else-if="effectivePhase === 'checking'" class="flex items-center gap-2">
-                    <NButton size="small" quaternary loading disabled class="!rounded-md">检查中...</NButton>
-                  </div>
+                    <!-- checking -->
+                    <div v-else-if="effectivePhase === 'checking'" key="checking" class="flex items-center gap-2">
+                      <NButton size="small" quaternary loading disabled class="!rounded-md">检查中...</NButton>
+                    </div>
 
-                  <!-- downloading -->
-                  <div v-else-if="effectivePhase === 'downloading'" class="flex items-center gap-2">
-                    <div class="update-spinner" />
-                    <span class="update-percent">{{ displayPercent }}%</span>
-                    <NButton size="small" quaternary disabled class="!rounded-md">正在下载...</NButton>
-                  </div>
+                    <!-- available：发现新版本，按钮就地蜕变为翡翠绿"立即下载" -->
+                    <div v-else-if="effectivePhase === 'available'" key="available" class="flex items-center gap-2">
+                      <NButton size="small" type="primary" @click="triggerAppUpgrade" class="!rounded-md update-download-btn">
+                        <template #icon><NIcon :component="DownloadOutline" size="14" /></template>立即下载
+                      </NButton>
+                    </div>
 
-                  <!-- ready -->
-                  <div v-else-if="effectivePhase === 'ready'" class="flex items-center gap-2">
-                    <NButton size="small" type="primary" @click="restartAndInstall" class="!rounded-md update-ready-btn">
-                      <template #icon><NIcon :component="RocketOutline" size="14" /></template>重启并更新
-                    </NButton>
-                  </div>
+                    <!-- downloading -->
+                    <div v-else-if="effectivePhase === 'downloading'" key="downloading" class="flex items-center gap-2">
+                      <div class="update-spinner" />
+                      <span class="update-percent">{{ displayPercent }}%</span>
+                      <NButton size="small" quaternary disabled class="!rounded-md">正在下载...</NButton>
+                    </div>
+
+                    <!-- ready -->
+                    <div v-else-if="effectivePhase === 'ready'" key="ready" class="flex items-center gap-2">
+                      <NButton size="small" type="primary" @click="restartAndInstall" class="!rounded-md update-ready-btn">
+                        <template #icon><NIcon :component="RocketOutline" size="14" /></template>重启并更新
+                      </NButton>
+                    </div>
+                  </Transition>
                 </div>
 
                 <!-- 进度条区域：downloading 时展开 -->
@@ -855,9 +894,9 @@ watch(() => props.show, (val) => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   position: relative;
-  transition: background-color 0.12s ease;
+  transition: background-color 0.16s ease;
   gap: 12px;
 }
 
@@ -964,6 +1003,120 @@ watch(() => props.show, (val) => {
 .dark .version-badge {
   background: rgba(52, 211, 153, 0.08);
   color: rgba(52, 211, 153, 0.85);
+}
+
+/* — 版本徽标组：当前版本 + 目标版本可用标签 — */
+.version-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 目标版本可用标签：翡翠绿 + 呼吸灯 */
+.version-badge-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.12);
+  color: rgb(16, 185, 129);
+  white-space: nowrap;
+  line-height: 1.4;
+  animation: versionNextPulse 2.4s ease-in-out infinite;
+}
+.dark .version-badge-next {
+  background: rgba(52, 211, 153, 0.16);
+  color: rgb(52, 211, 153);
+  animation-name: versionNextPulseDark;
+}
+
+.version-next-arrow {
+  font-size: 10px;
+  opacity: 0.8;
+  transform: translateY(0.5px);
+}
+
+@keyframes versionNextPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);
+  }
+}
+@keyframes versionNextPulseDark {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0);
+  }
+}
+
+/* — 版本标签滑入过渡 — */
+.version-hint-enter-active {
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.version-hint-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.version-hint-enter-from,
+.version-hint-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
+}
+
+/* — available 态副标题：亮色翡翠绿 — */
+.setting-desc--available {
+  color: rgb(16, 185, 129) !important;
+  font-weight: 500;
+}
+.dark .setting-desc--available {
+  color: rgb(52, 211, 153) !important;
+}
+
+/* — 副标题文案切换过渡 — */
+.desc-swap-enter-active,
+.desc-swap-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.desc-swap-enter-from {
+  opacity: 0;
+  transform: translateY(3px);
+}
+.desc-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+
+/* — 右侧操作区蜕变过渡：杜绝布局跳动 — */
+.action-morph-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.action-morph-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  right: 12px;
+}
+.action-morph-enter-from {
+  opacity: 0;
+  transform: scale(0.92) translateX(6px);
+}
+.action-morph-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* — available 态"立即下载"按钮：翡翠绿呼吸灯 — */
+.update-download-btn {
+  animation: readyPulse 2s ease-in-out infinite;
+}
+.dark .update-download-btn {
+  animation-name: readyPulseDark;
 }
 
 /* ═══════════════════════════════════════════════

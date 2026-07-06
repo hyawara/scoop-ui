@@ -11,11 +11,25 @@ const { autoUpdater } = electronUpdater
  */
 type UpdateEvent =
   | { status: 'checking' }
-  | { status: 'available'; version: string; notes: string; releaseDate: string }
+  | { status: 'available'; version: string; notes: string; releaseDate: string; size: number }
   | { status: 'not-available'; version: string }
   | { status: 'progress'; percent: number; transferred: number; total: number; bytesPerSecond: number }
-  | { status: 'downloaded'; version: string; notes: string; releaseDate: string }
+  | { status: 'downloaded'; version: string; notes: string; releaseDate: string; size: number }
   | { status: 'error'; message: string }
+
+/**
+ * 从 UpdateInfo.files 中取安装包的真实字节数。
+ * electron-updater 的 files 数组通常首项即主安装包，取其 size。
+ * 拿不到时回退 0，交给渲染端决定是否展示体积。
+ */
+function pickPackageSize(info: UpdateInfo): number {
+  const files = info.files
+  if (Array.isArray(files) && files.length > 0) {
+    const primary = files.find(f => typeof f.size === 'number' && f.size > 0) || files[0]
+    if (primary && typeof primary.size === 'number') return primary.size
+  }
+  return 0
+}
 
 /**
  * 注册 electron-updater 及其 IPC。
@@ -55,6 +69,7 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
       version: info.version,
       notes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
       releaseDate: info.releaseDate || '',
+      size: pickPackageSize(info),
     })
   })
 
@@ -78,6 +93,7 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
       version: info.version,
       notes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
       releaseDate: info.releaseDate || '',
+      size: pickPackageSize(info),
     })
   })
 

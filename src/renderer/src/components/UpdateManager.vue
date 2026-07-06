@@ -17,6 +17,7 @@ import {
 const message = useMessage()
 const updateInfo = inject<any>('updateInfo')
 const showSettings = inject<any>('showSettings')
+const suppressUpdateToast = inject<any>('suppressUpdateToast')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
 const quitAndInstallUpdate = inject<(isUpdate?: boolean) => void>('quitAndInstallUpdate')
 
@@ -34,6 +35,8 @@ function shouldShow(): BannerState {
   if (phase === 'downloading') return 'updating'
   if (dismissed.value) return 'hidden'
   if (showSettings?.value) return 'hidden'
+  // 用户在设置页主动检查更新时，抑制"发现新版本"toast，反馈就地闭环在设置窗口
+  if (suppressUpdateToast?.value) return 'hidden'
   if (updateInfo?.value?.hasUpdate) return 'notified'
   return 'hidden'
 }

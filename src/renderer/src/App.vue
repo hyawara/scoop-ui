@@ -49,6 +49,7 @@ const updateInfo = ref<{
   bytesPerSecond: number
   transferred: number
   total: number
+  size: number
   error: string
 }>({
   phase: 'idle',
@@ -61,8 +62,12 @@ const updateInfo = ref<{
   bytesPerSecond: 0,
   transferred: 0,
   total: 0,
+  size: 0,
   error: '',
 })
+
+// 手动检查更新时抑制右下角全局 toast：把反馈战场交回设置窗口
+const suppressUpdateToast = ref(false)
 
 // downloading 或 downloaded 时视为"更新占用中"，供 UpdateManager banner 常驻判断
 const appDownloading = computed(() =>
@@ -70,8 +75,10 @@ const appDownloading = computed(() =>
 )
 
 // 静默检查更新：结果由 app:updateEvent 事件流回填，这里只负责触发 + 兜底错误
-async function checkForUpdate() {
+// manual=true 表示用户在设置页主动点击，此时抑制右下角全局 toast，反馈就地闭环在设置窗口
+async function checkForUpdate(manual = false) {
   if (updateInfo.value.checking) return
+  suppressUpdateToast.value = manual
   updateInfo.value.checking = true
   updateInfo.value.error = ''
   try {
@@ -120,6 +127,7 @@ function handleUpdateEvent(evt: UpdateEvent) {
       updateInfo.value.version = evt.version
       updateInfo.value.notes = evt.notes
       updateInfo.value.releaseDate = evt.releaseDate
+      updateInfo.value.size = evt.size
       updateInfo.value.checking = false
       break
     case 'not-available':
@@ -141,6 +149,7 @@ function handleUpdateEvent(evt: UpdateEvent) {
       updateInfo.value.version = evt.version
       updateInfo.value.notes = evt.notes
       updateInfo.value.releaseDate = evt.releaseDate
+      updateInfo.value.size = evt.size
       break
     case 'error':
       updateInfo.value.phase = 'error'
@@ -346,6 +355,7 @@ provide('colorPreset', colorPreset)
 provide('showSettings', showSettings)
 provide('appDownloading', appDownloading)
 provide('autoCheckUpdate', autoCheckUpdate)
+provide('suppressUpdateToast', suppressUpdateToast)
 
 function parseFontFamilyToArray(cssStr: string): string[] {
   if (!cssStr) return []

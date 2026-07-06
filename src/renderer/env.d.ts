@@ -22,10 +22,10 @@ interface ProgressData {
 // 主进程 electron-updater 统一推送的更新事件（与 src/main/ipc/updater.ts 保持一致）
 type UpdateEvent =
   | { status: 'checking' }
-  | { status: 'available'; version: string; notes: string; releaseDate: string }
+  | { status: 'available'; version: string; notes: string; releaseDate: string; size: number }
   | { status: 'not-available'; version: string }
   | { status: 'progress'; percent: number; transferred: number; total: number; bytesPerSecond: number }
-  | { status: 'downloaded'; version: string; notes: string; releaseDate: string }
+  | { status: 'downloaded'; version: string; notes: string; releaseDate: string; size: number }
   | { status: 'error'; message: string }
 
 interface Window {
