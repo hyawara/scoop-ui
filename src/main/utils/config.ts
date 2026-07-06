@@ -19,6 +19,7 @@ export interface AppConfig {
   theme: {
     dark: boolean
     fontFamily: string
+    fontSize: number
     colorPreset: string
   }
   update: {
@@ -36,6 +37,7 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: {
     dark: true,
     fontFamily: "'Segoe UI','Microsoft YaHei','Maple Mono NF','sans-serif'",
+    fontSize: 14,
     colorPreset: 'aurora',
   },
   update: {

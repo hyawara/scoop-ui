@@ -14,6 +14,7 @@
     "theme": {
         "dark": true,
         "fontFamily": "'Segoe UI','Microsoft YaHei','Maple Mono NF','sans-serif'",
+        "fontSize": 14,
         "colorPreset": "aurora"
     },
     "update": {

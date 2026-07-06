@@ -29,6 +29,7 @@ const pkgProgress = usePackageProgress()
 const isDark = ref(true)
 const fontFamily = ref('')
 const fontList = ref<string[]>([])
+const fontSize = ref(14)
 const colorPreset = ref('aurora')
 const searchQuery = ref('')
 const committedSearch = ref('')
@@ -351,6 +352,7 @@ provide('quitAndInstallUpdate', quitAndInstallUpdate)
 provide('isDark', isDark)
 provide('fontFamily', fontFamily)
 provide('fontList', fontList)
+provide('fontSize', fontSize)
 provide('colorPreset', colorPreset)
 provide('showSettings', showSettings)
 provide('appDownloading', appDownloading)
@@ -410,6 +412,7 @@ onMounted(async () => {
         fontList.value = parseFontFamilyToArray(theme.fontFamily)
       }
       if (typeof theme.colorPreset === 'string') colorPreset.value = theme.colorPreset
+      if (typeof theme.fontSize === 'number' && theme.fontSize > 0) fontSize.value = theme.fontSize
     }
   } catch { /* use defaults */ }
 
@@ -473,6 +476,15 @@ watch(fontFamily, (val) => {
   })
 }, { immediate: true })
 
+// 全局正文字号变化时写入 CSS 变量 --app-font-size 并持久化
+// 不用 immediate：初始值由 main.css 的 --app-font-size 兜底，onMounted 回显赋值时自然触发，
+// 避免首次用默认值抢先写回磁盘、与异步 getConfig 回显竞态
+watch(fontSize, (val) => {
+  const px = Math.max(11, Math.min(20, Number(val) || 14))
+  document.documentElement.style.setProperty('--app-font-size', `${px}px`)
+  window.scoopAPI.setConfig('theme.fontSize', px)
+})
+
 function toggleTheme() {
   isDark.value = !isDark.value
   // syncHtmlDarkClass + persistence handled by watch(isDark)
@@ -507,7 +519,7 @@ function openSettings() {
                 @open-settings="openSettings"
               />
 
-              <div class="h-[calc(100vh-70px)] overflow-hidden mx-auto max-w-[1280px] w-full px-6 py-4 relative">
+              <div class="h-[calc(100vh-70px)] overflow-hidden w-full px-6 py-4 relative">
                 <Transition name="fade" mode="out-in">
                   <Dashboard v-if="!committedSearch.trim()" />
                   <SearchPanel v-else :query="committedSearch" />

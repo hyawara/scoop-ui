@@ -18,6 +18,8 @@
     --radius-xl: 14px;     /* 外壳：Window / Modal 大外壳 */
     /* ── 真·等宽字体：技术参数/版本号专用（修正原先误配为非等宽） ── */
     --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    /* ── 全局正文字号：由 App.vue 依据 theme.fontSize 动态注入，默认 14px ── */
+    --app-font-size: 14px;
 
     /* Scrollbar — light */
     --scrollbar-thumb: rgba(0, 0, 0, 0.08);
@@ -73,8 +75,37 @@
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Microsoft YaHei UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    /* 全局字重下限：暗色背景下抗锯齿字体偏细发虚，统一提到 600 让文字锐利厚重 */
+    font-weight: 600;
     background: transparent;
     overflow: hidden;
+  }
+
+  /* ── 字重提升补丁：把细字重（400/500）统一顶到 600，含中文与用户自定义字体 ── */
+  /* semibold(600) / bold(700) 保持原样，只拉高细字重下限，杜绝暗底发虚 */
+  .font-thin,
+  .font-extralight,
+  .font-light,
+  .font-normal,
+  .font-medium {
+    font-weight: 600 !important;
+  }
+
+  /* ── 正文字号统一：所有正文级字号类收敛到 --app-font-size（用户可调） ── */
+  /* 保留 text-lg/xl/2xl 不覆盖：那是图标字母与抽屉大标题的尺寸层级 */
+  .text-xs,
+  .text-sm,
+  .text-base,
+  .text-\[10px\],
+  .text-\[11px\],
+  .text-\[12px\],
+  .text-\[13px\],
+  .text-\[14px\],
+  .text-\[15px\],
+  .text-\[16px\],
+  .text-\[18px\] {
+    font-size: var(--app-font-size) !important;
+    line-height: 1.5 !important;
   }
 
   #app {

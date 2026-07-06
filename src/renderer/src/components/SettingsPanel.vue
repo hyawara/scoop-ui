@@ -8,6 +8,7 @@ import {
   NAutoComplete,
   NInput,
   NSwitch,
+  NSlider,
   useMessage,
 } from 'naive-ui'
 import {
@@ -15,6 +16,7 @@ import {
   TerminalOutline,
   ColorPaletteOutline,
   TextOutline,
+  ExpandOutline,
   CheckmarkCircleOutline,
   SunnyOutline,
   MoonOutline,
@@ -47,6 +49,7 @@ const message = useMessage()
 
 const isDark = inject<Ref<boolean>>('isDark')!
 const fontList = inject<Ref<string[]>>('fontList')!
+const fontSize = inject<Ref<number>>('fontSize')!
 const colorPreset = inject<Ref<string>>('colorPreset')!
 
 const updateInfo = inject<any>('updateInfo')
@@ -237,6 +240,21 @@ function restartAndInstall() {
 function selectPreset(key: string) {
   colorPreset.value = key
   window.scoopAPI.setConfig('theme.colorPreset', key)
+}
+
+// ── 全局正文字号调节：持久化 + CSS 变量写入由 App.vue 的 watch(fontSize) 统一处理 ──
+const FONT_SIZE_MIN = 11
+const FONT_SIZE_MAX = 20
+
+const fontSizePresets = [
+  { label: '紧凑', value: 12 },
+  { label: '标准', value: 14 },
+  { label: '舒适', value: 16 },
+  { label: '特大', value: 18 },
+]
+
+function setFontSize(px: number) {
+  fontSize.value = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, Math.round(px)))
 }
 
 function toggleAutoCheckUpdate(value: boolean) {
@@ -482,6 +500,43 @@ watch(() => props.show, (val) => {
 
               <div v-if="fontList.length === 0" class="font-empty">
                 尚未添加字体，请通过上方输入框添加
+              </div>
+
+              <div class="section-gap" />
+
+              <!-- 全局字号调节 -->
+              <div class="setting-row">
+                <div class="setting-row__left">
+                  <NIcon :component="ExpandOutline" size="16" class="setting-icon" />
+                  <div class="setting-text">
+                    <span class="setting-title">字体大小</span>
+                    <span class="setting-desc">统一调节全局正文字号，当前 {{ fontSize }}px</span>
+                  </div>
+                </div>
+                <div class="font-size-presets">
+                  <button
+                    v-for="preset in fontSizePresets"
+                    :key="preset.value"
+                    class="font-size-preset-btn"
+                    :class="{ 'font-size-preset-btn--active': fontSize === preset.value }"
+                    @click="setFontSize(preset.value)"
+                  >{{ preset.label }}</button>
+                </div>
+              </div>
+
+              <div class="font-size-slider-row">
+                <span class="font-size-slider-label" style="font-size: 12px;">A</span>
+                <NSlider
+                  :value="fontSize"
+                  :min="FONT_SIZE_MIN"
+                  :max="FONT_SIZE_MAX"
+                  :step="1"
+                  :tooltip="false"
+                  class="flex-1"
+                  @update:value="setFontSize"
+                />
+                <span class="font-size-slider-label" style="font-size: 20px;">A</span>
+                <span class="font-size-value">{{ fontSize }}px</span>
               </div>
             </div>
 
@@ -1414,6 +1469,70 @@ watch(() => props.show, (val) => {
 .dark .font-empty {
   color: rgba(255, 255, 255, 0.25);
   border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ── 全局字号调节器 ── */
+.font-size-presets {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.font-size-preset-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
+  color: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.font-size-preset-btn:hover {
+  background: rgba(0, 0, 0, 0.03);
+  color: rgba(0, 0, 0, 0.75);
+}
+.font-size-preset-btn--active {
+  border-color: var(--n-primary-color, #7B6FF0);
+  color: var(--n-primary-color, #7B6FF0);
+  background: rgba(123, 111, 240, 0.08);
+}
+.dark .font-size-preset-btn {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+}
+.dark .font-size-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.font-size-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px 0;
+  margin-top: 4px;
+}
+.font-size-slider-label {
+  color: rgba(0, 0, 0, 0.4);
+  font-weight: 700;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.dark .font-size-slider-label {
+  color: rgba(255, 255, 255, 0.4);
+}
+.font-size-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  min-width: 3em;
+  text-align: right;
+  flex-shrink: 0;
+}
+.dark .font-size-value {
+  color: rgba(255, 255, 255, 0.45);
 }
 
 /* ═══════════════════════════════════════════════
