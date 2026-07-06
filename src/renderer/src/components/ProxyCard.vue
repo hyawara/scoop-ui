@@ -113,7 +113,7 @@ async function applyProxy() {
       <button
         v-if="!proxyEnabled"
         @click="applyProxy"
-        class="flex items-center justify-center w-8 h-8 rounded-md dark:bg-white/[0.06] bg-black/[0.04] dark:hover:bg-white/[0.12] hover:bg-black/[0.08] border dark:border-white/[0.08] border-black/[0.1] transition-all duration-200 flex-shrink-0"
+        class="flex items-center justify-center w-8 h-8 rounded-lg dark:bg-white/[0.06] bg-black/[0.04] dark:hover:bg-white/[0.12] hover:bg-black/[0.08] border dark:border-white/[0.08] border-black/[0.1] transition-all duration-200 flex-shrink-0"
       >
         <svg class="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -123,7 +123,7 @@ async function applyProxy() {
       <!-- 状态指示（已启用时） -->
       <div
         v-else
-        class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 flex-shrink-0"
+        class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 flex-shrink-0"
       >
         <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span class="text-xs text-emerald-400 font-medium whitespace-nowrap">已连接</span>

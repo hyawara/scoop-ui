@@ -1029,8 +1029,8 @@ function openBucketDrawer() {
       </NCard>
     </div>
 
-    <!-- === 右侧列：固定宽度 380~420px，仪表盘质感 === -->
-    <div class="w-[400px] min-w-[380px] max-w-[420px] flex-shrink-0 flex flex-col gap-5 h-full">
+    <!-- === 右侧列：宽屏自适应撑宽，紧凑时保底 360px，宽屏最多撑到 460px === -->
+    <div class="flex-1 w-full min-w-[360px] max-w-[460px] flex flex-col gap-5 h-full">
       <StorageEnvCard />
       <ProxyCard />
     </div>

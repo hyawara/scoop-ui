@@ -189,7 +189,7 @@ const lightMatchaOverrides = computed(() => {
   const MATCHA_GREEN = '#4E8A64'
   const MATCHA_GREEN_HOVER = '#5D9E74'
   const base: Record<string, any> = {
-    borderRadius: '6px',
+    borderRadius: '8px',
     primaryColor: MATCHA_GREEN,
     primaryColorHover: MATCHA_GREEN_HOVER,
     bodyColor: 'transparent',
@@ -297,7 +297,7 @@ const lightMatchaOverrides = computed(() => {
 const darkDefaultOverrides = computed(() => {
   const colors = presetColors[colorPreset.value] || presetColors.aurora
   const base: Record<string, any> = {
-    borderRadius: '6px',
+    borderRadius: '8px',
     primaryColor: colors.primary,
     primaryColorHover: colors.primaryHover,
     bodyColor: 'transparent',

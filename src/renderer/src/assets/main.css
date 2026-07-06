@@ -10,12 +10,12 @@
   :root {
     --app-bg: #F4F7F4;
     --app-bg-gradient: radial-gradient(ellipse at 50% 0%, rgba(78, 138, 100, 0.05) 0%, transparent 60%);
-    /* ── 圆角嵌套系统：外壳 > 主卡 > 中卡 > 微件 ── */
-    --radius-micro: 6px;   /* 微件：输入框/按钮/Badge/列表项 */
-    --radius-sm: 6px;      /* = micro，兼容旧类名 */
+    /* ── 圆角统一系统：全程序一档 8px，向窗口外壳看齐 ── */
+    --radius-micro: 8px;   /* 微件：输入框/按钮/Badge/列表项 */
+    --radius-sm: 8px;      /* = micro，兼容旧类名 */
     --radius-md: 8px;      /* 中卡：应用卡片/代理面板/包裹项 */
-    --radius-lg: 12px;     /* 主卡：glass-card 主容器 */
-    --radius-xl: 14px;     /* 外壳：Window / Modal 大外壳 */
+    --radius-lg: 8px;      /* 主卡：glass-card 主容器 */
+    --radius-xl: 8px;      /* 外壳：Window / Modal 大外壳 */
     /* ── 真·等宽字体：技术参数/版本号专用（修正原先误配为非等宽） ── */
     --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     /* ── 全局正文字号：由 App.vue 依据 theme.fontSize 动态注入，默认 14px ── */

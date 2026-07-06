@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { NButton, NIcon, useMessage } from 'naive-ui'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
+import appIcon from '../../scoop-ui.svg'
 import {
   SearchOutline,
   SettingsOutline,
@@ -72,13 +73,13 @@ async function refreshAll() {
     <!-- Left: Logo & Status -->
     <div class="flex items-center gap-3 no-drag flex-shrink-0">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
-          <span class="text-white text-xs font-bold">S</span>
+        <div class="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-sm">
+          <img :src="appIcon" alt="Scoop UI" class="w-full h-full object-cover scale-125" />
         </div>
         <span class="font-semibold text-sm text-gray-700 dark:text-gray-200">Scoop UI</span>
       </div>
       <div class="h-5 w-px bg-gray-200 dark:bg-gray-700" />
-      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full dark:bg-green-900/40 dark:border-green-700/30 bg-green-100 border border-green-200">
+      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg dark:bg-green-900/40 dark:border-green-700/30 bg-green-100 border border-green-200">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
         <span class="text-xs dark:text-emerald-300 text-emerald-700 font-medium">Scoop 正常</span>
       </div>
@@ -87,7 +88,7 @@ async function refreshAll() {
     <!-- Center: Search Box -->
     <div class="flex-1 flex justify-center no-drag">
       <div class="search-glow w-full max-w-md">
-        <div class="search-wrapper flex items-center gap-2 px-4 py-2 dark:bg-white/[0.06] dark:border-white/[0.1] bg-[#EFF2EF] border-transparent rounded-full transition-all duration-300">
+        <div class="search-wrapper flex items-center gap-2 px-4 py-2 dark:bg-white/[0.06] dark:border-white/[0.1] bg-[#EFF2EF] border-transparent rounded-lg transition-all duration-300">
           <SearchOutline class="w-4 h-4 text-gray-400 flex-shrink-0" />
           <input
             ref="searchInputRef"

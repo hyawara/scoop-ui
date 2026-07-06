@@ -138,7 +138,7 @@ async function handleInstallAria2() {
                     <NButton
                       quaternary
                       size="small"
-                      class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
+                      class="!w-6 !h-6 !p-0 !rounded-lg flex items-center justify-center"
                       @click="openFolder(settingsStore.scoopEnv.scoop)"
                     >
                       <FolderOpenOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 group-hover:text-cyan-400 transition-colors" />
@@ -165,7 +165,7 @@ async function handleInstallAria2() {
                     <NButton
                       quaternary
                       size="small"
-                      class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
+                      class="!w-6 !h-6 !p-0 !rounded-lg flex items-center justify-center"
                       @click="openFolder(settingsStore.scoopEnv.global)"
                     >
                       <FolderOpenOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 group-hover:text-cyan-400 transition-colors" />
@@ -195,7 +195,7 @@ async function handleInstallAria2() {
                 size="small"
                 :loading="settingsStore.loading"
                 @click="handleInstallAria2"
-                class="!text-xs !h-7 !rounded-md"
+                class="!text-xs !h-7 !rounded-lg"
                 style="color: rgba(148,163,184,0.8); border: 1px dashed rgba(148,163,184,0.3);"
               >
                 <template #icon><SparklesOutline class="w-3 h-3" /></template>
@@ -213,7 +213,7 @@ async function handleInstallAria2() {
           :loading="settingsStore.loading"
           @click="clearCache"
           :disabled="settingsStore.cacheInfo.files === 0"
-          class="!rounded-lg btn-hover-scale"
+          class="!rounded-lg btn-hover-scale w-full"
           style="background: rgba(78,138,100,0.15); color: #4E8A64; border: 1px solid rgba(78,138,100,0.3);"
         >
           <template #icon><TrashOutline class="w-3.5 h-3.5" /></template>
@@ -223,7 +223,7 @@ async function handleInstallAria2() {
           size="small"
           dashed
           @click="showMigrate = true"
-          class="!rounded-lg btn-hover-scale"
+          class="!rounded-lg btn-hover-scale w-full"
         >
           <template #icon><SwapHorizontalOutline class="w-3.5 h-3.5" /></template>
           迁移目录
