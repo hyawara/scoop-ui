@@ -26,17 +26,18 @@
     --scrollbar-thumb-hover: rgba(0, 0, 0, 0.15);
     --scrollbar-thumb-visible: rgba(0, 0, 0, 0.12);
 
-    /* Glass card — light */
-    --glass-bg: #ffffff;
-    --glass-border: rgba(0, 0, 0, 0.06);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
-    --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+    /* Glass card — light（无障碍重构：淡灰底 #F9F9FB + zinc-200 极细边框，把卡片从背景剥离） */
+    --glass-bg: #F9F9FB;
+    --glass-border: #E4E4E7;
+    --glass-border-hover: #D4D4D8;
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.05);
+    --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.06);
 
-    /* Subtle overlays — light (black with low opacity) */
-    --subtle-bg: rgba(0, 0, 0, 0.03);
-    --subtle-bg-hover: rgba(0, 0, 0, 0.05);
-    --subtle-border: rgba(0, 0, 0, 0.06);
-    --subtle-border-hover: rgba(0, 0, 0, 0.10);
+    /* Subtle overlays — light（加深一档，让内部小方块/分隔线裸眼可见轮廓） */
+    --subtle-bg: rgba(0, 0, 0, 0.04);
+    --subtle-bg-hover: rgba(0, 0, 0, 0.06);
+    --subtle-border: rgba(0, 0, 0, 0.10);
+    --subtle-border-hover: rgba(0, 0, 0, 0.14);
   }
 
   /* ══════════════════════════════════════════════
@@ -52,6 +53,7 @@
 
     --glass-bg: #13151a;
     --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-border-hover: rgba(255, 255, 255, 0.10);
     --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
     --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.35);
 

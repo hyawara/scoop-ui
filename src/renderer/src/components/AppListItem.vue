@@ -49,10 +49,10 @@ const ringDashoffset = computed(() => {
 
 <template>
   <div
-    class="group flex items-center h-12 px-4 transition-colors duration-150 border-b dark:border-white/[0.04] border-black/[0.06] dark:hover:bg-white/[0.02] hover:bg-black/[0.02]"
+    class="group flex items-center h-12 px-4 transition-colors duration-150 border-b dark:border-white/[0.04] border-zinc-200 dark:hover:bg-white/[0.02] hover:bg-zinc-100"
     :class="{
       'opacity-40': disabled,
-      'dark:bg-white/[0.04] bg-black/[0.04]': isSelected,
+      'dark:bg-white/[0.04] bg-zinc-100': isSelected,
       'cursor-pointer': mode === 'search',
     }"
     @click="mode === 'search' && emit('select', pkg)"
@@ -67,24 +67,24 @@ const ringDashoffset = computed(() => {
     </div>
 
     <!-- 软件图标 -->
-    <div class="w-9 h-9 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] flex items-center justify-center flex-shrink-0 overflow-hidden">
+    <div class="w-9 h-9 rounded-lg dark:bg-white/[0.04] bg-zinc-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
       <img
         v-if="icon"
         :src="icon"
         :alt="pkg.name"
         class="w-full h-full object-contain"
       />
-      <span v-else class="text-gray-400 text-sm font-medium font-mono">{{ pkg.name[0].toUpperCase() }}</span>
+      <span v-else class="text-zinc-500 text-sm font-medium font-mono">{{ pkg.name[0].toUpperCase() }}</span>
     </div>
 
     <!-- 信息区：名称 + 版本 + 标签，永不换行，弹性自适应 -->
     <div class="flex-1 min-w-0 flex items-center flex-nowrap ml-2.5 overflow-hidden">
-      <span class="font-semibold text-sm dark:text-zinc-50 text-gray-800 truncate flex-shrink-0">{{ pkg.name }}</span>
+      <span class="font-semibold text-sm dark:text-zinc-50 text-zinc-900 truncate flex-shrink-0">{{ pkg.name }}</span>
       <span class="text-zinc-400 text-[12px] font-medium font-mono ml-3 flex-shrink-0">{{ pkg.version }}</span>
-      <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-[11px] font-normal border dark:border-white/[0.06] border-black/[0.08] dark:text-zinc-400 text-gray-500 rounded-md font-mono flex-shrink-0">{{ pkg.bucket }}</span>
-      <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-[11px] font-normal border dark:border-white/[0.06] border-black/[0.08] dark:text-zinc-400 text-gray-500 rounded-md font-mono flex-shrink-0">Global</span>
+      <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-[11px] font-medium border dark:border-white/[0.06] border-zinc-200 dark:text-zinc-400 text-zinc-600 rounded-md font-mono flex-shrink-0 bg-zinc-100">{{ pkg.bucket }}</span>
+      <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-[11px] font-medium border dark:border-white/[0.06] border-zinc-200 dark:text-zinc-400 text-zinc-600 rounded-md font-mono flex-shrink-0 bg-zinc-100">Global</span>
       <span v-if="newVersion && !progress" class="ml-3 text-amber-400 text-[12px] font-semibold font-mono flex-shrink-0">→ {{ newVersion }}</span>
-      <span v-if="mode === 'search' && isInstalled" class="ml-3 px-2 py-0.5 text-[11px] font-normal dark:text-zinc-500 text-gray-500 font-mono flex-shrink-0 rounded-md dark:bg-white/[0.04] bg-black/[0.03]">已安装</span>
+      <span v-if="mode === 'search' && isInstalled" class="ml-3 px-2 py-0.5 text-[11px] font-medium dark:text-zinc-500 text-zinc-600 font-mono flex-shrink-0 rounded-md dark:bg-white/[0.04] bg-zinc-100">已安装</span>
     </div>
 
     <!-- 右侧操作区：固定宽度，绝对垂直居中 -->
@@ -134,7 +134,7 @@ const ringDashoffset = computed(() => {
           />
           <!-- SVG 环形进度 -->
           <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 20 20">
-            <circle cx="10" cy="10" :r="RING_RADIUS" fill="none" stroke-width="2" class="stroke-white/[0.06]" />
+            <circle cx="10" cy="10" :r="RING_RADIUS" fill="none" stroke-width="2" class="dark:stroke-white/[0.06] stroke-zinc-200" />
             <circle
               cx="10" cy="10" :r="RING_RADIUS" fill="none" stroke-width="2" stroke-linecap="round"
               :stroke-dasharray="RING_CIRCUMFERENCE"
@@ -156,7 +156,7 @@ const ringDashoffset = computed(() => {
         </div>
         <!-- 日志入口 -->
         <button
-          class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0"
+          class="flex items-center justify-center w-6 h-6 rounded dark:text-gray-600 dark:hover:text-gray-300 text-zinc-500 hover:text-zinc-700 transition-colors flex-shrink-0"
           title="查看终端日志"
           @click.stop="emit('show-logs', pkg.name)"
         >
