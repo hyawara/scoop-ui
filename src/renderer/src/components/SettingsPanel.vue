@@ -784,7 +784,7 @@ watch(() => props.show, (val) => {
   color: rgb(31, 41, 55);
 }
 .dark .shell-title {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .shell-header-actions {
@@ -830,6 +830,7 @@ watch(() => props.show, (val) => {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;
+  font-weight: 500;
   color: rgba(0, 0, 0, 0.55);
   cursor: pointer;
   border: none;
@@ -855,7 +856,7 @@ watch(() => props.show, (val) => {
 .nav-item--active {
   background: rgba(16, 185, 129, 0.1);
   color: rgb(5, 150, 105);
-  font-weight: 500;
+  font-weight: 600;
 }
 .dark .nav-item--active {
   color: rgb(52, 211, 153);
@@ -1014,7 +1015,7 @@ watch(() => props.show, (val) => {
   line-height: 1.3;
 }
 .dark .setting-title {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .setting-desc {
@@ -1629,7 +1630,7 @@ watch(() => props.show, (val) => {
   max-width: 50%;
 }
 .dark .config-value {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .config-loading {

@@ -100,7 +100,7 @@ async function handleInstallAria2() {
     <!-- 卡片标题 -->
     <div class="flex items-center gap-2.5 mb-4 w-full min-w-0">
       <ServerOutline class="w-5 h-5 dark:text-zinc-400 text-slate-300 flex-shrink-0" />
-      <span class="font-medium text-[14px] dark:text-zinc-50 text-white whitespace-nowrap flex-shrink-0">存储与环境管理</span>
+      <span class="font-semibold text-[14px] dark:text-zinc-50 text-white whitespace-nowrap flex-shrink-0">存储与环境管理</span>
     </div>
 
     <!-- 主体：紧凑垂直布局 -->
@@ -117,7 +117,7 @@ async function handleInstallAria2() {
             :gap-degree="60"
             :stroke-width="6"
           >
-            <span class="text-[13px] font-mono font-bold dark:text-zinc-100 text-white/80">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
+            <span class="text-[13px] font-mono font-medium dark:text-zinc-300 text-white/80">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
           </NProgress>
           <span class="text-[11px] font-normal dark:text-zinc-500 text-slate-400">{{ settingsStore.cacheInfo.files || 0 }} 个缓存文件</span>
         </div>
@@ -128,7 +128,7 @@ async function handleInstallAria2() {
           <div class="flex items-center justify-between group">
             <div class="flex items-center gap-2 min-w-0">
               <FolderOpenOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 flex-shrink-0" />
-              <span class="text-[12px] font-normal dark:text-zinc-400 text-slate-300 flex-shrink-0">Root</span>
+              <span class="text-[12px] font-medium dark:text-zinc-300 text-slate-300 flex-shrink-0">Root</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
               <template v-if="settingsStore.scoopEnv.scoop">
@@ -155,7 +155,7 @@ async function handleInstallAria2() {
           <div class="flex items-center justify-between group">
             <div class="flex items-center gap-2 min-w-0">
               <GlobeOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 flex-shrink-0" />
-              <span class="text-[12px] font-normal dark:text-zinc-400 text-slate-300 flex-shrink-0">Global</span>
+              <span class="text-[12px] font-medium dark:text-zinc-300 text-slate-300 flex-shrink-0">Global</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
               <template v-if="settingsStore.scoopEnv.global">
@@ -182,7 +182,7 @@ async function handleInstallAria2() {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <RocketOutline class="w-3.5 h-3.5 flex-shrink-0" :class="settingsStore.aria2Enabled ? 'text-emerald-400' : 'dark:text-zinc-500 text-slate-400'" />
-              <span class="text-[12px] font-normal dark:text-zinc-400 text-slate-300">Aria2 加速</span>
+              <span class="text-[12px] font-medium dark:text-zinc-300 text-slate-300">Aria2 加速</span>
             </div>
             <div class="flex items-center gap-1.5">
               <template v-if="settingsStore.aria2Enabled">

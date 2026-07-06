@@ -779,11 +779,11 @@ function openBucketDrawer() {
           type="line"
           size="large"
           :default-value="'installed'"
-          class="flex-1 flex flex-col overflow-hidden"
+          class="flex-1 flex flex-col overflow-hidden dashboard-tabs"
           :pane-style="{ padding: '0', height: '100%' }"
         >
           <template #prefix>
-            <span class="font-medium text-[14px] dark:text-zinc-50 text-gray-800 ml-5">应用管理</span>
+            <span class="font-semibold text-[14px] dark:text-zinc-50 text-gray-800 ml-5">应用管理</span>
           </template>
           <template #suffix>
             <div class="flex items-center gap-1 mr-3">
@@ -796,7 +796,7 @@ function openBucketDrawer() {
 
           <NTabPane name="installed" class="flex-1 overflow-hidden">
             <template #tab>
-              <span class="text-[13px] font-medium">已安装</span>
+              <span class="text-[13px]">已安装</span>
               <span v-if="updatableNames.size > 0"
                 class="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-mono font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
               >{{ updatableNames.size }}</span>
@@ -835,7 +835,7 @@ function openBucketDrawer() {
                       <div class="w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform" :class="pkg.color">
                         <span class="text-white text-sm font-bold">{{ pkg.icon }}</span>
                       </div>
-                      <span class="text-[12px] font-medium dark:text-zinc-300 text-slate-700 text-slate-300">{{ pkg.name }}</span>
+                      <span class="text-[12px] font-semibold dark:text-zinc-50 text-slate-800">{{ pkg.name }}</span>
                       <span class="text-[10px] font-normal dark:text-zinc-500 text-slate-400 -mt-1">{{ pkg.desc }}</span>
                       <NButton size="tiny" secondary :disabled="installedNames.has(pkg.name)"
                         :loading="packagesStore.loading && packagesStore.progress?.package === pkg.name"
@@ -943,8 +943,8 @@ function openBucketDrawer() {
                   :key="cat.id"
                   class="flex items-center gap-2 px-3 py-2 mx-1 rounded-md cursor-pointer transition-colors duration-150 text-[12px]"
                   :class="activeCategoryId === cat.id
-                    ? 'dark:bg-white/[0.06] dark:text-zinc-50 bg-black/[0.06] text-gray-800'
-                    : 'dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-white/[0.02] text-gray-600 hover:text-gray-800 hover:bg-black/[0.03]'"
+                    ? 'font-semibold dark:bg-white/[0.06] dark:text-zinc-50 bg-black/[0.06] text-gray-800'
+                    : 'font-medium dark:text-zinc-400 dark:hover:text-zinc-300 dark:hover:bg-white/[0.02] text-gray-600 hover:text-gray-800 hover:bg-black/[0.03]'"
                   @click="activeCategoryId = cat.id"
                 >
                   <NIcon :component="cat.icon" :size="14" class="flex-shrink-0" />
@@ -957,7 +957,7 @@ function openBucketDrawer() {
                 <!-- 分类标题 -->
                 <div class="flex items-center gap-2 mb-3">
                   <NIcon :component="activeCategory.icon" :size="15" class="dark:text-zinc-400 text-gray-500" />
-                  <span class="text-[13px] font-medium dark:text-zinc-300 text-gray-700">{{ activeCategory.name }}</span>
+                  <span class="text-[13px] font-semibold dark:text-zinc-50 text-gray-800">{{ activeCategory.name }}</span>
                   <span class="px-1.5 py-0.5 text-[10px] font-normal dark:bg-white/[0.04] bg-black/[0.04] dark:text-zinc-500 text-gray-500 rounded font-mono">{{ activeCategory.apps.length }}</span>
                 </div>
 
@@ -984,7 +984,7 @@ function openBucketDrawer() {
                         <span v-if="installedNames.has(app.name)" class="text-[10px] font-normal dark:text-zinc-500 text-gray-500 font-mono flex-shrink-0">已安装</span>
                         <span v-else-if="getMVEnabled(app)" class="text-[10px] font-normal text-violet-500/60 font-mono flex-shrink-0">多版</span>
                       </div>
-                      <p class="text-[11px] font-normal dark:text-zinc-500 text-gray-500 truncate mt-0.5">{{ app.desc }}</p>
+                      <p class="text-[11px] font-medium dark:text-zinc-300 text-gray-600 truncate mt-0.5">{{ app.desc }}</p>
                     </div>
                     <!-- 右侧操作区 -->
                     <div class="flex-shrink-0 flex items-center self-center gap-1">
@@ -1106,5 +1106,26 @@ function openBucketDrawer() {
 .list-enter-from {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+/* ═══ 顶部 Tab 栏字重/色彩三层秩序接管 ═══ */
+/* 未选中：二级视觉 —— font-medium(500) + 暗淡色，主动让出焦点 */
+.dashboard-tabs :deep(.n-tabs-tab .n-tabs-tab__label) {
+  font-weight: 500;
+  transition: color 0.2s ease, font-weight 0.2s ease;
+}
+.dashboard-tabs :deep(.n-tabs-tab:not(.n-tabs-tab--active) .n-tabs-tab__label) {
+  color: #9ca3af; /* 亮色未选中：text-gray-400 */
+}
+:where(.dark) .dashboard-tabs :deep(.n-tabs-tab:not(.n-tabs-tab--active) .n-tabs-tab__label) {
+  color: #a1a1aa; /* 暗色未选中：text-zinc-400 */
+}
+/* 选中：一级视觉 —— font-semibold(600) + 最亮纯白/深色 */
+.dashboard-tabs :deep(.n-tabs-tab--active .n-tabs-tab__label) {
+  font-weight: 600;
+  color: #1f2937; /* 亮色选中：text-gray-800 */
+}
+:where(.dark) .dashboard-tabs :deep(.n-tabs-tab--active .n-tabs-tab__label) {
+  color: #fafafa; /* 暗色选中：text-zinc-50 */
 }
 </style>
