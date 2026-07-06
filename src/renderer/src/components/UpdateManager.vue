@@ -18,7 +18,7 @@ const message = useMessage()
 const updateInfo = inject<any>('updateInfo')
 const showSettings = inject<any>('showSettings')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
-const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
+const quitAndInstallUpdate = inject<(isUpdate?: boolean) => void>('quitAndInstallUpdate')
 
 type BannerState = 'hidden' | 'notified' | 'updating' | 'downloaded'
 const showNotesModal = ref(false)

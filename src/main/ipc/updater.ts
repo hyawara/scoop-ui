@@ -91,8 +91,9 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
   // 事件流（checking/available/...）同时会通过 app:updateEvent 推送。
   ipcMain.handle('app:checkForUpdate', async () => {
     if (!app.isPackaged) {
-      // 开发模式没有 latest.yml，直接短路，避免报错刷屏
-      return { hasUpdate: false, devMode: true }
+      // 开发模式没有 latest.yml，但通过正常事件流反馈给 UI
+      send({ status: 'not-available', version: app.getVersion() })
+      return { hasUpdate: false, devMode: true, version: app.getVersion() }
     }
     try {
       const result = await autoUpdater.checkForUpdates()

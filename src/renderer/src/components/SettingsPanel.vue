@@ -218,11 +218,6 @@ function installUpdate() {
 }
 
 function restartAndInstall() {
-  if (simulating.value) {
-    resetSim()
-    message.info('模拟完成 — 实际环境中将退出并安装')
-    return
-  }
   quitAndInstallUpdate?.(true)
 }
 

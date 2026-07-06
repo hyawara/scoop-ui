@@ -77,7 +77,9 @@ async function checkForUpdate() {
   try {
     const result = await window.scoopAPI.checkForUpdate()
     if (result.devMode) {
-      // 开发模式无 latest.yml，静默跳过
+      // 开发模式无 latest.yml，通过 not-available 反馈给 UI
+      updateInfo.value.phase = 'not-available'
+      updateInfo.value.version = result.version || ''
       updateInfo.value.checking = false
       return
     }
