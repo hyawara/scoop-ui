@@ -1123,7 +1123,7 @@ function openBucketDrawer() {
 /* 选中：一级视觉 —— font-semibold(600) + 最亮纯白/深色 */
 .dashboard-tabs :deep(.n-tabs-tab--active .n-tabs-tab__label) {
   font-weight: 600;
-  color: #1f2937; /* 亮色选中：text-gray-800 */
+  color: var(--app-primary, #1f2937); /* 亮色选中：跟随主题色，回退 text-gray-800 */
 }
 :where(.dark) .dashboard-tabs :deep(.n-tabs-tab--active .n-tabs-tab__label) {
   color: #fafafa; /* 暗色选中：text-zinc-50 */

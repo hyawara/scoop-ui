@@ -18,6 +18,7 @@ import {
   TextOutline,
   ExpandOutline,
   CheckmarkCircleOutline,
+  CheckmarkOutline,
   SunnyOutline,
   MoonOutline,
   LogoGithub,
@@ -41,6 +42,7 @@ import {
   DownloadOutline,
 } from '@vicons/ionicons5'
 import type { Ref } from 'vue'
+import { THEME_PRESETS, THEME_PRESET_KEYS } from '@/theme/presets'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ 'update:show': [value: boolean] }>()
@@ -82,13 +84,9 @@ const sidebarNav = [
   { key: 'scoopconfig', label: 'Scoop 配置', icon: TerminalOutline },
 ]
 
-const colorPresets: Record<string, { name: string; primary: string }> = {
-  aurora: { name: '极光紫', primary: '#7B6FF0' },
-  ocean: { name: '海洋蓝', primary: '#3B82F6' },
-  emerald: { name: '翠绿色', primary: '#10B981' },
-  sunset: { name: '落日橙', primary: '#F59E0B' },
-  rose: { name: '玫瑰红', primary: '#EC4899' },
-}
+// 配色预设直接取自唯一数据源 theme/presets.ts（杜绝多处硬编码漂移）
+const colorPresets = THEME_PRESETS
+const colorPresetKeys = THEME_PRESET_KEYS
 
 const fontInput = ref('')
 const dragIndex = ref<number | null>(null)
@@ -449,15 +447,18 @@ watch(() => props.show, (val) => {
               </div>
 
               <div class="color-grid">
-                <button v-for="(preset, key) in colorPresets" :key="key" @click="selectPreset(key)"
+                <button v-for="key in colorPresetKeys" :key="key" @click="selectPreset(key)"
                   class="color-dot-wrapper"
-                  :class="{ 'color-dot-wrapper--active': colorPreset === key }">
+                  :class="{ 'color-dot-wrapper--active': colorPreset === key }"
+                  :title="colorPresets[key].name">
                   <div class="color-dot"
-                    :style="{ background: preset.primary }"
+                    :style="{ background: colorPresets[key].dot }"
                     :class="{ 'color-dot--active': colorPreset === key }">
-                    <NIcon v-if="colorPreset === key" :component="CheckmarkCircleOutline" size="12" class="text-white" />
+                    <NIcon v-if="colorPreset === key" :component="CheckmarkOutline" size="14"
+                      :style="{ color: colorPresets[key].onColor }" />
                   </div>
-                  <span class="color-dot-label">{{ preset.name }}</span>
+                  <span class="color-dot-label"
+                    :class="{ 'color-dot-label--active': colorPreset === key }">{{ colorPresets[key].name }}</span>
                 </button>
               </div>
 
@@ -1350,24 +1351,34 @@ watch(() => props.show, (val) => {
 .color-dot:hover {
   transform: scale(1.12);
 }
-/* 选中：外层高亮环包裹，中间留 2px 呼吸空隙（用 box-shadow 双环实现） */
+/* 选中：外层高亮环包裹，中间留 2px 呼吸空隙（用 box-shadow 双环实现）；环色跟随全局主题色变量 */
 .color-dot--active {
   box-shadow:
     0 0 0 2px var(--app-bg, #fff),
-    0 0 0 3.5px rgba(16, 185, 129, 0.6);
+    0 0 0 3.5px color-mix(in srgb, var(--app-primary, #10b981) 65%, transparent);
 }
 .dark .color-dot--active {
   box-shadow:
     0 0 0 2px #181c25,
-    0 0 0 3.5px rgba(52, 211, 153, 0.55);
+    0 0 0 3.5px color-mix(in srgb, var(--app-primary, #34d399) 60%, transparent);
 }
 
 .color-dot-label {
   font-size: 10px;
   color: rgba(0, 0, 0, 0.35);
+  transition: color 0.2s ease, font-weight 0.2s ease;
 }
 .dark .color-dot-label {
   color: rgba(255, 255, 255, 0.3);
+}
+/* 选中标签：加重字色并跟随主题色 */
+.color-dot-label--active {
+  color: var(--app-primary, #10b981);
+  font-weight: 600;
+}
+.dark .color-dot-label--active {
+  color: var(--app-primary, #34d399);
+  font-weight: 600;
 }
 
 /* ═══════════════════════════════════════════════

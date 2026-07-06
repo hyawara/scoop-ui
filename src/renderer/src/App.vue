@@ -20,6 +20,7 @@ import Onboarding from '@/components/Onboarding.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
+import { resolvePreset, DEFAULT_PRESET } from '@/theme/presets'
 
 const appStore = useAppStore()
 const packagesStore = usePackagesStore()
@@ -30,7 +31,7 @@ const isDark = ref(true)
 const fontFamily = ref('')
 const fontList = ref<string[]>([])
 const fontSize = ref(14)
-const colorPreset = ref('aurora')
+const colorPreset = ref(DEFAULT_PRESET)
 const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
@@ -175,23 +176,21 @@ watch(searchQuery, (val) => {
   }
 })
 
-const presetColors: Record<string, { primary: string; primaryHover: string }> = {
-  aurora: { primary: '#7B6FF0', primaryHover: '#9F94F5' },
-  ocean: { primary: '#3B82F6', primaryHover: '#60A5FA' },
-  emerald: { primary: '#10B981', primaryHover: '#34D399' },
-  sunset: { primary: '#F59E0B', primaryHover: '#FBBF24' },
-  rose: { primary: '#EC4899', primaryHover: '#F472B6' },
-}
+// ─── 当前激活的主题预设（唯一数据源 theme/presets.ts）───
+const activePreset = computed(() => resolvePreset(colorPreset.value))
 
-// ─── 🍵 护眼豆沙绿 (Matcha Light) 主题覆盖 ───
+// ─── 🎨 亮色模式主题覆盖（主色跟随 colorPreset 动态切换，Brand-600 档保证白底高对比）───
 const lightMatchaOverrides = computed(() => {
-  // 亮色模式下强制统一使用抹茶绿为主色调，不随 colorPreset 改变
-  const MATCHA_GREEN = '#4E8A64'
-  const MATCHA_GREEN_HOVER = '#5D9E74'
+  // 亮色模式取 light 档（600 系，白底对比度更高，符合 WCAG）
+  const c = activePreset.value.light
+  const MATCHA_GREEN = c.primary
+  const MATCHA_GREEN_HOVER = c.primaryHover
+  const MATCHA_GREEN_PRESSED = c.primaryPressed
   const base: Record<string, any> = {
     borderRadius: '8px',
     primaryColor: MATCHA_GREEN,
     primaryColorHover: MATCHA_GREEN_HOVER,
+    primaryColorPressed: MATCHA_GREEN_PRESSED,
     bodyColor: 'transparent',
     cardColor: '#FFFFFF',
     modalColor: '#FFFFFF',
@@ -295,11 +294,13 @@ const lightMatchaOverrides = computed(() => {
 
 // ─── 🌑 极客暗色模式 主题覆盖 ───
 const darkDefaultOverrides = computed(() => {
-  const colors = presetColors[colorPreset.value] || presetColors.aurora
+  // 暗色模式取 dark 档（500 系，深底上更鲜亮跳脱）
+  const colors = activePreset.value.dark
   const base: Record<string, any> = {
     borderRadius: '8px',
     primaryColor: colors.primary,
     primaryColorHover: colors.primaryHover,
+    primaryColorPressed: colors.primaryPressed,
     bodyColor: 'transparent',
     cardColor: '#13151a',
     modalColor: '#1e222b',
@@ -343,6 +344,21 @@ const darkDefaultOverrides = computed(() => {
 const themeOverrides = computed(() => {
   return isDark.value ? darkDefaultOverrides.value : lightMatchaOverrides.value
 })
+
+// ─── 主题色 CSS 变量注入 ───
+// 把当前预设的主色三档写入 <html> 的自定义属性，供非 Naive 组件
+// （Tab 下划线/字色、按钮、状态小字等 Tailwind/scoped CSS）直接引用 var(--app-primary)
+function syncPrimaryCssVars() {
+  const tokens = isDark.value ? activePreset.value.dark : activePreset.value.light
+  const root = document.documentElement
+  root.style.setProperty('--app-primary', tokens.primary)
+  root.style.setProperty('--app-primary-hover', tokens.primaryHover)
+  root.style.setProperty('--app-primary-pressed', tokens.primaryPressed)
+  root.style.setProperty('--app-on-primary', activePreset.value.onColor)
+}
+
+// colorPreset / isDark 任一变化即重写 CSS 变量（immediate 保证冷启动即注入）
+watch([colorPreset, isDark], syncPrimaryCssVars, { immediate: true })
 
 provide('searchQuery', searchQuery)
 provide('updateInfo', updateInfo)
