@@ -90,7 +90,7 @@ const manifestJson = computed(() => {
           <!-- Header -->
           <div class="flex items-start gap-4 mb-5">
             <div
-              class="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
+              class="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg"
               :class="installed
                 ? 'bg-gradient-to-br from-green-400 to-emerald-500'
                 : 'bg-gradient-to-br from-blue-400 to-purple-500'"
@@ -133,7 +133,7 @@ const manifestJson = computed(() => {
           </p>
 
           <!-- Advanced Options -->
-          <div class="dark:bg-white/[0.03] bg-black/[0.02] border dark:border-white/[0.06] border-black/[0.06] rounded-xl p-4 mb-4 space-y-3">
+          <div class="dark:bg-white/[0.03] bg-black/[0.02] border dark:border-white/[0.06] border-black/[0.06] rounded-lg p-4 mb-4 space-y-3">
             <h4 class="text-sm font-semibold text-white mb-3">高级安装选项</h4>
             <div class="flex items-center justify-between">
               <span class="text-sm text-slate-300">全局安装 (--global)</span>
@@ -150,7 +150,7 @@ const manifestJson = computed(() => {
           </div>
 
           <!-- Manifest preview -->
-          <div class="dark:bg-[#090a0d] bg-gray-100 border dark:border-white/[0.06] border-black/[0.08] rounded-xl p-4 mb-4">
+          <div class="dark:bg-[#090a0d] bg-gray-100 border dark:border-white/[0.06] border-black/[0.08] rounded-lg p-4 mb-4">
             <h4 class="text-sm font-semibold text-white mb-2">Manifest 信息</h4>
             <pre class="text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed text-slate-300">{{ manifestJson }}</pre>
           </div>

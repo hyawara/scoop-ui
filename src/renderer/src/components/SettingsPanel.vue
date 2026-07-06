@@ -694,7 +694,8 @@ watch(() => props.show, (val) => {
 .settings-shell {
   width: 780px;
   height: 560px;
-  border-radius: 12px;
+  /* 外壳：统一 14px 大外壳 */
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -958,11 +959,12 @@ watch(() => props.show, (val) => {
   line-height: 1.3;
 }
 .dark .setting-title {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .setting-desc {
   font-size: 11px;
+  font-weight: 400;
   color: rgba(0, 0, 0, 0.35);
   line-height: 1.3;
 }
@@ -990,10 +992,11 @@ watch(() => props.show, (val) => {
    9. Version Badge — 等宽字体标签
    ═══════════════════════════════════════════════ */
 .version-badge {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 500;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(16, 185, 129, 0.06);
   color: rgba(16, 185, 129, 0.75);
   white-space: nowrap;
@@ -1018,10 +1021,10 @@ watch(() => props.show, (val) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(16, 185, 129, 0.12);
   color: rgb(16, 185, 129);
   white-space: nowrap;
@@ -1137,8 +1140,9 @@ watch(() => props.show, (val) => {
 }
 
 .update-percent {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 600;
   color: rgba(16, 185, 129, 0.85);
   min-width: 2.5em;
   white-space: nowrap;
@@ -1179,8 +1183,9 @@ watch(() => props.show, (val) => {
 }
 
 .progress-meta {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 400;
   color: rgba(0, 0, 0, 0.3);
   white-space: nowrap;
   flex-shrink: 0;
@@ -1251,43 +1256,54 @@ watch(() => props.show, (val) => {
 /* ═══════════════════════════════════════════════
    11. Color Grid
    ═══════════════════════════════════════════════ */
+/* 扁平容器行：5 个圆圈收在一个胶囊行内，不再悬空 */
 .color-grid {
   display: flex;
-  gap: 16px;
-  padding: 8px 12px 4px;
+  gap: 18px;
+  padding: 10px 12px;
+  margin: 0 12px;
+  border-radius: var(--radius-md); /* 中卡 8px */
+  background: rgba(0, 0, 0, 0.02);
+}
+.dark .color-grid {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .color-dot-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   cursor: pointer;
   background: none;
   border: none;
   padding: 0;
 }
 
+/* 圆圈直径收敛至 22px，取消粗糙边框，选中态用精致外层高亮环 + 2px 呼吸空隙 */
 .color-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%; /* 特殊元素保持全圆 */
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  border: 2px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
 }
 .color-dot:hover {
   transform: scale(1.12);
 }
+/* 选中：外层高亮环包裹，中间留 2px 呼吸空隙（用 box-shadow 双环实现） */
 .color-dot--active {
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+  box-shadow:
+    0 0 0 2px var(--app-bg, #fff),
+    0 0 0 3.5px rgba(16, 185, 129, 0.6);
 }
 .dark .color-dot--active {
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
+  box-shadow:
+    0 0 0 2px #181c25,
+    0 0 0 3.5px rgba(52, 211, 153, 0.55);
 }
 
 .color-dot-label {
@@ -1319,15 +1335,16 @@ watch(() => props.show, (val) => {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm); /* 微件统一 6px */
   transition: background-color 0.12s ease;
   border: 1px solid transparent;
 }
+/* Hover 平滑淡色胶囊效果 bg-white/[0.02] */
 .font-row:hover {
-  background: rgba(0, 0, 0, 0.025);
+  background: rgba(0, 0, 0, 0.02);
 }
 .dark .font-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
 }
 .font-row--drag-over {
   border-color: rgba(16, 185, 129, 0.3);
@@ -1335,13 +1352,13 @@ watch(() => props.show, (val) => {
 }
 
 .font-row__handle {
-  color: rgba(0, 0, 0, 0.2);
+  color: rgba(0, 0, 0, 0.14);
   cursor: grab;
   flex-shrink: 0;
   transition: color 0.12s ease;
 }
 .dark .font-row__handle {
-  color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.14);
 }
 .font-row:hover .font-row__handle {
   color: rgba(0, 0, 0, 0.4);
@@ -1353,6 +1370,7 @@ watch(() => props.show, (val) => {
 .font-row__name {
   flex: 1;
   font-size: 12px;
+  font-weight: 400;
   color: rgba(0, 0, 0, 0.7);
   min-width: 0;
   overflow: hidden;
@@ -1370,7 +1388,7 @@ watch(() => props.show, (val) => {
   background: none;
   border: none;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1404,7 +1422,7 @@ watch(() => props.show, (val) => {
 .token-badge {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.04);
   color: rgba(0, 0, 0, 0.35);
   display: flex;
@@ -1481,8 +1499,9 @@ watch(() => props.show, (val) => {
 }
 
 .config-value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 400;
   color: rgba(0, 0, 0, 0.35);
   text-align: right;
   word-break: break-all;
@@ -1541,8 +1560,9 @@ watch(() => props.show, (val) => {
   padding: 16px 0 20px;
   margin-top: 20px;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 400;
   color: rgba(0, 0, 0, 0.18);
   display: flex;
   align-items: center;

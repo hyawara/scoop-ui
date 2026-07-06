@@ -35,7 +35,7 @@ async function startInstall() {
   <div class="flex-1 flex items-center justify-center p-8">
     <NCard class="max-w-lg w-full text-center" :bordered="false">
       <div class="py-8">
-        <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+        <div class="w-20 h-20 mx-auto mb-6 rounded-app-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
           <span class="text-white text-3xl font-bold">S</span>
         </div>
 

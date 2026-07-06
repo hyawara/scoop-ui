@@ -99,8 +99,8 @@ async function handleInstallAria2() {
   <NCard :bordered="false" class="glass-card" content-class="flex flex-col !p-5">
     <!-- 卡片标题 -->
     <div class="flex items-center gap-2.5 mb-4 w-full min-w-0">
-      <ServerOutline class="w-5 h-5 text-slate-300 flex-shrink-0" />
-      <span class="font-semibold text-base text-white whitespace-nowrap flex-shrink-0">存储与环境管理</span>
+      <ServerOutline class="w-5 h-5 dark:text-zinc-400 text-slate-300 flex-shrink-0" />
+      <span class="font-medium text-[14px] dark:text-zinc-50 text-white whitespace-nowrap flex-shrink-0">存储与环境管理</span>
     </div>
 
     <!-- 主体：紧凑垂直布局 -->
@@ -117,9 +117,9 @@ async function handleInstallAria2() {
             :gap-degree="60"
             :stroke-width="6"
           >
-            <span class="text-sm text-white/80 font-medium">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
+            <span class="text-[13px] font-mono font-semibold dark:text-zinc-200 text-white/80">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
           </NProgress>
-          <span class="text-xs text-slate-400">{{ settingsStore.cacheInfo.files || 0 }} 个缓存文件</span>
+          <span class="text-[11px] font-normal dark:text-zinc-500 text-slate-400">{{ settingsStore.cacheInfo.files || 0 }} 个缓存文件</span>
         </div>
 
         <!-- 右侧: 环境信息 -->
@@ -127,8 +127,8 @@ async function handleInstallAria2() {
           <!-- Scoop Root 路径 + 打开按钮 -->
           <div class="flex items-center justify-between group">
             <div class="flex items-center gap-2 min-w-0">
-              <FolderOpenOutline class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-              <span class="text-sm text-slate-300 font-medium flex-shrink-0">Root</span>
+              <FolderOpenOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 flex-shrink-0" />
+              <span class="text-[12px] font-normal dark:text-zinc-400 text-slate-300 flex-shrink-0">Root</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
               <template v-if="settingsStore.scoopEnv.scoop">
@@ -141,21 +141,21 @@ async function handleInstallAria2() {
                       class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
                       @click="openFolder(settingsStore.scoopEnv.scoop)"
                     >
-                      <FolderOpenOutline class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                      <FolderOpenOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 group-hover:text-cyan-400 transition-colors" />
                     </NButton>
                   </template>
                   {{ settingsStore.scoopEnv.scoop }}
                 </NTooltip>
               </template>
-              <span v-else class="text-sm text-slate-500">默认</span>
+              <span v-else class="text-[12px] dark:text-zinc-500 text-slate-500">默认</span>
             </div>
           </div>
 
           <!-- Global 路径 + 打开按钮 -->
           <div class="flex items-center justify-between group">
             <div class="flex items-center gap-2 min-w-0">
-              <GlobeOutline class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-              <span class="text-sm text-slate-300 font-medium flex-shrink-0">Global</span>
+              <GlobeOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 flex-shrink-0" />
+              <span class="text-[12px] font-normal dark:text-zinc-400 text-slate-300 flex-shrink-0">Global</span>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
               <template v-if="settingsStore.scoopEnv.global">
@@ -168,26 +168,26 @@ async function handleInstallAria2() {
                       class="!w-6 !h-6 !p-0 !rounded-md flex items-center justify-center"
                       @click="openFolder(settingsStore.scoopEnv.global)"
                     >
-                      <FolderOpenOutline class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                      <FolderOpenOutline class="w-3.5 h-3.5 dark:text-zinc-500 text-slate-400 group-hover:text-cyan-400 transition-colors" />
                     </NButton>
                   </template>
                   {{ settingsStore.scoopEnv.global }}
                 </NTooltip>
               </template>
-              <span v-else class="text-sm text-slate-500">未配置</span>
+              <span v-else class="text-[12px] dark:text-zinc-500 text-slate-500">未配置</span>
             </div>
           </div>
 
           <!-- Aria2 加速状态 + 闭环引导 -->
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <RocketOutline class="w-3.5 h-3.5 flex-shrink-0" :class="settingsStore.aria2Enabled ? 'text-emerald-400' : 'text-slate-400'" />
-              <span class="text-sm font-medium text-slate-300">Aria2 加速</span>
+              <RocketOutline class="w-3.5 h-3.5 flex-shrink-0" :class="settingsStore.aria2Enabled ? 'text-emerald-400' : 'dark:text-zinc-500 text-slate-400'" />
+              <span class="text-[12px] font-normal dark:text-zinc-400 text-slate-300">Aria2 加速</span>
             </div>
             <div class="flex items-center gap-1.5">
               <template v-if="settingsStore.aria2Enabled">
                 <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span class="text-sm font-medium text-emerald-400">多线程已开启</span>
+                <span class="text-[12px] font-medium text-emerald-400">多线程已开启</span>
               </template>
               <NButton
                 v-else
@@ -240,31 +240,31 @@ async function handleInstallAria2() {
           :show-indicator="false"
           color="#6B5BED"
         />
-        <p class="text-xs text-slate-400 mt-1.5">{{ diskInfo }}</p>
+        <p class="text-[11px] font-normal dark:text-zinc-500 text-slate-400 mt-1.5">{{ diskInfo }}</p>
       </div>
 
       <!-- 下半区：Scoop 生态统计微型网格（带独立发光背景） -->
       <div class="grid grid-cols-3 gap-2.5">
-        <div class="flex flex-col items-center py-3 rounded-xl dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
+        <div class="flex flex-col items-center py-3 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <CubeOutline class="w-4 h-4 text-cyan-400" />
-            <span class="text-xl font-extrabold text-cyan-400 leading-none">{{ settingsStore.bucketCount }}</span>
+            <span class="text-[18px] font-mono font-semibold text-cyan-400 leading-none">{{ settingsStore.bucketCount }}</span>
           </div>
-          <span class="text-xs dark:text-slate-300 text-gray-600 mt-1.5 font-medium">Buckets</span>
+          <span class="text-[11px] font-normal dark:text-zinc-400 text-gray-600 mt-1.5">Buckets</span>
         </div>
-        <div class="flex flex-col items-center py-3 rounded-xl dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
+        <div class="flex flex-col items-center py-3 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <AppsOutline class="w-4 h-4 text-emerald-500" />
-            <span class="text-xl font-extrabold text-emerald-500 leading-none">{{ settingsStore.installedCount }}</span>
+            <span class="text-[18px] font-mono font-semibold text-emerald-500 leading-none">{{ settingsStore.installedCount }}</span>
           </div>
-          <span class="text-xs dark:text-slate-300 text-gray-600 mt-1.5 font-medium">Apps</span>
+          <span class="text-[11px] font-normal dark:text-zinc-400 text-gray-600 mt-1.5">Apps</span>
         </div>
-        <div class="flex flex-col items-center py-3 rounded-xl dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
+        <div class="flex flex-col items-center py-3 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <GlobeOutline class="w-4 h-4 text-teal-500" />
-            <span class="text-xl font-extrabold text-teal-500 leading-none">{{ settingsStore.globalCount }}</span>
+            <span class="text-[18px] font-mono font-semibold text-teal-500 leading-none">{{ settingsStore.globalCount }}</span>
           </div>
-          <span class="text-xs dark:text-slate-300 text-gray-600 mt-1.5 font-medium">Global</span>
+          <span class="text-[11px] font-normal dark:text-zinc-400 text-gray-600 mt-1.5">Global</span>
         </div>
       </div>
     </div>

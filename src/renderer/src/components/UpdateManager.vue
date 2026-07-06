@@ -174,7 +174,7 @@ function installNow() {
             {{ new Date(updateInfo.releaseDate).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) }}
           </span>
         </div>
-        <div class="dark:bg-[#0b0c10] bg-gray-100 rounded-xl p-4 border dark:border-white/[0.06] border-black/[0.08] max-h-[320px] overflow-y-auto custom-scrollbar">
+        <div class="dark:bg-[#0b0c10] bg-gray-100 rounded-lg p-4 border dark:border-white/[0.06] border-black/[0.08] max-h-[320px] overflow-y-auto custom-scrollbar">
           <div class="text-sm dark:text-slate-300 text-gray-700 leading-relaxed space-y-2 whitespace-pre-wrap">
             {{ updateInfo.notes || '暂无更新日志' }}
           </div>

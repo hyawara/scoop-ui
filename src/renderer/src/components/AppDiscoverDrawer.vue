@@ -99,7 +99,7 @@ async function copyMainCmd() {
       <template #header>
         <div class="flex items-center gap-2">
           <span class="text-base font-semibold text-white/90">软件详情</span>
-          <span v-if="app" class="px-1.5 py-0.5 text-[11px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-400 text-gray-500 rounded font-mono leading-none">{{ app.versions.length }} 个版本</span>
+          <span v-if="app" class="px-1.5 py-0.5 text-[11px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-400 text-gray-500 rounded-md font-mono leading-none">{{ app.versions.length }} 个版本</span>
         </div>
       </template>
 
@@ -112,7 +112,7 @@ async function copyMainCmd() {
       <div v-else-if="app" class="flex-1 flex flex-col overflow-hidden">
         <div class="px-5 pt-4 pb-3 flex items-start gap-4 border-b dark:border-white/[0.04] border-black/[0.06]">
           <div
-            class="w-14 h-14 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0 shadow-lg"
+            class="w-14 h-14 rounded-lg bg-gradient-to-br flex items-center justify-center flex-shrink-0 shadow-lg"
             :class="app.gradient"
           >
             <span class="text-white text-xl font-bold">{{ app.icon }}</span>
@@ -139,14 +139,14 @@ async function copyMainCmd() {
           <template v-else>
             <div class="flex items-center gap-2 mb-3">
               <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">可用版本</span>
-              <span class="px-1.5 py-0.5 text-[10px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-500 text-gray-500 rounded font-mono">{{ versionsWithStatus.length }}</span>
+              <span class="px-1.5 py-0.5 text-[10px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-500 text-gray-500 rounded-md font-mono">{{ versionsWithStatus.length }}</span>
             </div>
 
           <div class="flex flex-col gap-2">
             <div
               v-for="ver in versionsWithStatus"
               :key="`${ver.bucket}-${ver.manifestName}`"
-              class="group flex items-start gap-3 px-3.5 py-3 rounded-xl border dark:border-white/[0.04] border-black/[0.06] dark:bg-white/[0.01] bg-black/[0.02] dark:hover:bg-white/[0.03] hover:bg-black/[0.04] transition-all duration-150"
+              class="group flex items-start gap-3 px-3.5 py-3 rounded-lg border dark:border-white/[0.04] border-black/[0.06] dark:bg-white/[0.01] bg-black/[0.02] dark:hover:bg-white/[0.03] hover:bg-black/[0.04] transition-all duration-150"
             >
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
@@ -204,7 +204,7 @@ async function copyMainCmd() {
             v-if="app.website"
             secondary
             size="small"
-            class="flex-1 !rounded-lg"
+            class="flex-1 !rounded-md"
             @click="openWebsite(app.website)"
           >
             <template #icon><NIcon :component="GlobeOutline" size="14" /></template>
@@ -213,7 +213,7 @@ async function copyMainCmd() {
           <NButton
             secondary
             size="small"
-            class="flex-1 !rounded-lg"
+            class="flex-1 !rounded-md"
             @click="copyMainCmd"
             :disabled="!app || versionsWithStatus.length === 0"
           >

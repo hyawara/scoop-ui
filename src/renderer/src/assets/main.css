@@ -10,11 +10,14 @@
   :root {
     --app-bg: #F4F7F4;
     --app-bg-gradient: radial-gradient(ellipse at 50% 0%, rgba(78, 138, 100, 0.05) 0%, transparent 60%);
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-    --font-mono: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+    /* ── 圆角嵌套系统：外壳 > 主卡 > 中卡 > 微件 ── */
+    --radius-micro: 6px;   /* 微件：输入框/按钮/Badge/列表项 */
+    --radius-sm: 6px;      /* = micro，兼容旧类名 */
+    --radius-md: 8px;      /* 中卡：应用卡片/代理面板/包裹项 */
+    --radius-lg: 12px;     /* 主卡：glass-card 主容器 */
+    --radius-xl: 14px;     /* 外壳：Window / Modal 大外壳 */
+    /* ── 真·等宽字体：技术参数/版本号专用（修正原先误配为非等宽） ── */
+    --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 
     /* Scrollbar — light */
     --scrollbar-thumb: rgba(0, 0, 0, 0.08);
@@ -62,8 +65,14 @@
     box-sizing: border-box;
   }
 
+  html, body, #app {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+    font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
     background: transparent;
     overflow: hidden;
   }
