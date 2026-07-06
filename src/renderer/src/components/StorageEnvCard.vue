@@ -117,7 +117,7 @@ async function handleInstallAria2() {
             :gap-degree="60"
             :stroke-width="6"
           >
-            <span class="text-[13px] font-mono font-semibold dark:text-zinc-200 text-white/80">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
+            <span class="text-[13px] font-mono font-bold dark:text-zinc-100 text-white/80">{{ settingsStore.cacheInfo.size || 0 }} MB</span>
           </NProgress>
           <span class="text-[11px] font-normal dark:text-zinc-500 text-slate-400">{{ settingsStore.cacheInfo.files || 0 }} 个缓存文件</span>
         </div>
@@ -248,21 +248,21 @@ async function handleInstallAria2() {
         <div class="flex flex-col items-center py-3 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <CubeOutline class="w-4 h-4 text-cyan-400" />
-            <span class="text-[18px] font-mono font-semibold text-cyan-400 leading-none">{{ settingsStore.bucketCount }}</span>
+            <span class="text-[18px] font-mono font-bold text-cyan-400 leading-none">{{ settingsStore.bucketCount }}</span>
           </div>
           <span class="text-[11px] font-normal dark:text-zinc-400 text-gray-600 mt-1.5">Buckets</span>
         </div>
         <div class="flex flex-col items-center py-3 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <AppsOutline class="w-4 h-4 text-emerald-500" />
-            <span class="text-[18px] font-mono font-semibold text-emerald-500 leading-none">{{ settingsStore.installedCount }}</span>
+            <span class="text-[18px] font-mono font-bold text-emerald-500 leading-none">{{ settingsStore.installedCount }}</span>
           </div>
           <span class="text-[11px] font-normal dark:text-zinc-400 text-gray-600 mt-1.5">Apps</span>
         </div>
         <div class="flex flex-col items-center py-3 rounded-lg dark:bg-white/[0.04] bg-black/[0.03] border dark:border-white/[0.08] border-black/[0.06] dark:hover:bg-white/[0.07] hover:bg-black/[0.05] dark:hover:border-white/[0.12] hover:border-black/[0.1] transition-all cursor-default">
           <div class="flex items-center gap-1.5">
             <GlobeOutline class="w-4 h-4 text-teal-500" />
-            <span class="text-[18px] font-mono font-semibold text-teal-500 leading-none">{{ settingsStore.globalCount }}</span>
+            <span class="text-[18px] font-mono font-bold text-teal-500 leading-none">{{ settingsStore.globalCount }}</span>
           </div>
           <span class="text-[11px] font-normal dark:text-zinc-400 text-gray-600 mt-1.5">Global</span>
         </div>

@@ -77,13 +77,13 @@ const ringDashoffset = computed(() => {
       <span v-else class="text-gray-400 text-sm font-medium font-mono">{{ pkg.name[0].toUpperCase() }}</span>
     </div>
 
-    <!-- 信息区：名称 + 版本 + 标签，永不换行 -->
-    <div class="flex-1 min-w-0 flex items-center ml-2.5 overflow-hidden">
-      <span class="font-medium text-[14px] dark:text-zinc-50 text-gray-800 truncate flex-shrink-0">{{ pkg.name }}</span>
-      <span class="text-zinc-400 text-[12px] font-normal font-mono ml-3 flex-shrink-0">{{ pkg.version }}</span>
+    <!-- 信息区：名称 + 版本 + 标签，永不换行，弹性自适应 -->
+    <div class="flex-1 min-w-0 flex items-center flex-nowrap ml-2.5 overflow-hidden">
+      <span class="font-semibold text-sm dark:text-zinc-50 text-gray-800 truncate flex-shrink-0">{{ pkg.name }}</span>
+      <span class="text-zinc-400 text-[12px] font-medium font-mono ml-3 flex-shrink-0">{{ pkg.version }}</span>
       <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-[11px] font-normal border dark:border-white/[0.06] border-black/[0.08] dark:text-zinc-400 text-gray-500 rounded-md font-mono flex-shrink-0">{{ pkg.bucket }}</span>
       <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-[11px] font-normal border dark:border-white/[0.06] border-black/[0.08] dark:text-zinc-400 text-gray-500 rounded-md font-mono flex-shrink-0">Global</span>
-      <span v-if="newVersion && !progress" class="ml-3 text-amber-500/80 text-[12px] font-semibold font-mono flex-shrink-0">→ {{ newVersion }}</span>
+      <span v-if="newVersion && !progress" class="ml-3 text-amber-400 text-[12px] font-semibold font-mono flex-shrink-0">→ {{ newVersion }}</span>
       <span v-if="mode === 'search' && isInstalled" class="ml-3 px-2 py-0.5 text-[11px] font-normal dark:text-zinc-500 text-gray-500 font-mono flex-shrink-0 rounded-md dark:bg-white/[0.04] bg-black/[0.03]">已安装</span>
     </div>
 

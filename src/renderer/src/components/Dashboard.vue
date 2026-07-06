@@ -768,8 +768,8 @@ function openBucketDrawer() {
 
 <template>
   <div class="flex gap-5 h-full">
-    <!-- === 左侧大卡片 (约 60%) === -->
-    <div class="flex-[3] min-w-0 h-full">
+    <!-- === 左侧大卡片：弹性自适应，最小 450px === -->
+    <div class="flex-1 min-w-[450px] h-full">
       <NCard
         :bordered="false"
         class="overflow-hidden glass-card h-full"
@@ -1029,8 +1029,8 @@ function openBucketDrawer() {
       </NCard>
     </div>
 
-    <!-- === 右侧列 === -->
-    <div class="flex-[3] flex flex-col gap-5 h-full min-w-0">
+    <!-- === 右侧列：固定宽度 380~420px，仪表盘质感 === -->
+    <div class="w-[400px] min-w-[380px] max-w-[420px] flex-shrink-0 flex flex-col gap-5 h-full">
       <StorageEnvCard />
       <ProxyCard />
     </div>
