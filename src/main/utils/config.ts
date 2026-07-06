@@ -15,6 +15,7 @@ export interface AppConfig {
   }
   packages: {
     selectedPackages: string[]
+    pinnedPackages: string[]
   }
   theme: {
     dark: boolean
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: AppConfig = {
   },
   packages: {
     selectedPackages: [],
+    pinnedPackages: [],
   },
   theme: {
     dark: true,

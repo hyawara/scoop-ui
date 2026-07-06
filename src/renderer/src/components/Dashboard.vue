@@ -47,7 +47,8 @@ const batchUninstallDialogReforge = ref<ReturnType<typeof dialog.warning> | null
 
 // 行内进度系统
 const pkgProgress = usePackageProgress()
-const updatingPackages = ref<Set<string>>(new Set())
+// 批量队列执行进度（顶栏「正在执行 (1/9)」显示用）
+const queueState = ref<{ current: number; total: number }>({ current: 0, total: 0 })
 
 // 单包日志弹窗
 const showPkgLogModal = ref(false)
@@ -307,6 +308,49 @@ const batchUpdating = ref(false)
 const uninstallingSet = ref<Set<string>>(new Set())
 const removingSet = ref<Set<string>>(new Set())
 
+// Pinned packages state
+const pinnedPackages = ref<Set<string>>(new Set())
+
+async function loadPinnedFromConfig() {
+  try {
+    const arr = await window.scoopAPI.getConfig('packages.pinnedPackages')
+    if (Array.isArray(arr)) pinnedPackages.value = new Set(arr)
+  } catch { /* ignore */ }
+}
+
+async function savePinnedToConfig() {
+  try {
+    await window.scoopAPI.setConfig('packages.pinnedPackages', [...pinnedPackages.value])
+  } catch { /* ignore */ }
+}
+
+function togglePin(name: string) {
+  const s = new Set(pinnedPackages.value)
+  if (s.has(name)) {
+    s.delete(name)
+  } else {
+    s.add(name)
+  }
+  pinnedPackages.value = s
+  savePinnedToConfig()
+}
+
+function isPinned(name: string): boolean {
+  return pinnedPackages.value.has(name)
+}
+
+// Sorted installed packages: pinned first, then alphabetical
+const sortedInstalled = computed(() => {
+  const list = [...packagesStore.installed]
+  return list.sort((a, b) => {
+    const aPinned = pinnedPackages.value.has(a.name)
+    const bPinned = pinnedPackages.value.has(b.name)
+    if (aPinned && !bPinned) return -1
+    if (!aPinned && bPinned) return 1
+    return a.name.localeCompare(b.name)
+  })
+})
+
 async function loadSelectedFromConfig() {
   try {
     const arr = await window.scoopAPI.getConfig('packages.selectedPackages')
@@ -332,7 +376,7 @@ function toggleSelect(name: string) {
 }
 
 function toggleSelectAll() {
-  const allNames = packagesStore.installed.map((p: any) => p.name)
+  const allNames = sortedInstalled.value.map((p: any) => p.name)
   if (selectedPackages.value.size === allNames.length && allNames.every(n => selectedPackages.value.has(n))) {
     selectedPackages.value = new Set()
   } else {
@@ -342,12 +386,12 @@ function toggleSelectAll() {
 }
 
 function isAllSelected(): boolean {
-  const allNames = packagesStore.installed.map((p: any) => p.name)
+  const allNames = sortedInstalled.value.map((p: any) => p.name)
   return allNames.length > 0 && allNames.every(n => selectedPackages.value.has(n))
 }
 
 function isIndeterminate(): boolean {
-  const allNames = packagesStore.installed.map((p: any) => p.name)
+  const allNames = sortedInstalled.value.map((p: any) => p.name)
   const count = allNames.filter(n => selectedPackages.value.has(n)).length
   return count > 0 && count < allNames.length
 }
@@ -366,6 +410,7 @@ function scrollLogToBottom() {
 
 onMounted(() => {
   loadSelectedFromConfig()
+  loadPinnedFromConfig()
   checkingUpdates.value = true
   packagesStore.loadUpdatable().finally(() => {
     checkingUpdates.value = false
@@ -578,7 +623,8 @@ async function handleDiscoverInstall(manifestName: string) {
  * @returns 更新是否成功
  */
 async function updateSinglePackage(name: string): Promise<boolean> {
-  pkgProgress.startUpdate(name)
+  // 调度器激活：queued → downloading（processing 起点）
+  pkgProgress.startProcessing(name)
   try {
     await window.scoopAPI.update(name)
     // 清除图标缓存，更新后重新提取（删除 key 以触发 fetchIcon 重新获取）
@@ -600,26 +646,20 @@ async function updateSinglePackage(name: string): Promise<boolean> {
 }
 
 async function handleUpdate(pkg: any) {
-  if (updatingPackages.value.has(pkg.name)) return
-  const s = new Set(updatingPackages.value)
-  s.add(pkg.name)
-  updatingPackages.value = s
-  try {
-    const ok = await updateSinglePackage(pkg.name)
-    if (!ok) {
-      message.error(`更新 ${pkg.name} 失败`)
-      return
-    }
-    // 后台静默刷新（不阻塞 UI 反馈）
-    packagesStore.loadInstalled()
-    packagesStore.loadUpdatable()
-    // 异步重新获取图标
-    fetchIcon(pkg.name)
-  } finally {
-    const s2 = new Set(updatingPackages.value)
-    s2.delete(pkg.name)
-    updatingPackages.value = s2
+  // 已在活跃队列中（queued/downloading/installing）则忽略重复触发
+  if (pkgProgress.isActive(pkg.name)) return
+  // 单包也走队列：先入队呈现 queued 态，再由调度器提升为 processing
+  pkgProgress.enqueueOne(pkg.name)
+  const ok = await updateSinglePackage(pkg.name)
+  if (!ok) {
+    message.error(`更新 ${pkg.name} 失败`)
+    return
   }
+  // 后台静默刷新（不阻塞 UI 反馈）
+  packagesStore.loadInstalled()
+  packagesStore.loadUpdatable()
+  // 异步重新获取图标
+  fetchIcon(pkg.name)
 }
 
 async function handleUninstall(pkg: any) {
@@ -651,25 +691,28 @@ async function handleUninstall(pkg: any) {
 }
 
 /**
- * 批量更新一组包（勾选更新 / 全部更新共用）。
- * 逐个更新以独立追踪每个包的行内进度，完成后清空勾选并后台刷新。
+ * 串行任务队列调度器（勾选更新 / 全部更新 / 单包共用）。
+ *
+ * 核心正反馈：点击瞬间把整批包一次性标记为 queued（UI 立刻呈现"系统已接管 N 个任务"），
+ * 再由调度器 for...await 逐个提升为 processing 执行底层 scoop update，
+ * 完成一个自动激活下一个 queued，全程驱动 queueState 供顶栏「正在执行 (x/N)」显示。
+ *
  * @param names 待更新的包名列表
  * @param flag 对应的加载态 ref（batchUpdating 或 updatingAll）
  */
-async function runBatchUpdate(names: string[], flag: Ref<boolean>) {
+async function runUpdateQueue(names: string[], flag: Ref<boolean>) {
   if (names.length === 0) return
   flag.value = true
-  // 为每个包启动行内进度并锁定
-  const s = new Set(updatingPackages.value)
-  for (const n of names) s.add(n)
-  updatingPackages.value = s
+  // ① 即时正反馈：整批同时入队 → 全部呈现 queued 态
+  pkgProgress.enqueue(names)
+  queueState.value = { current: 0, total: names.length }
   try {
-    for (const name of names) {
-      await updateSinglePackage(name)
+    // ② 串行调度：逐个提升 processing → 执行 → 成功后激活下一个
+    for (let i = 0; i < names.length; i++) {
+      queueState.value = { current: i + 1, total: names.length }
+      await updateSinglePackage(names[i])
     }
-    selectedPackages.value = new Set()
-    saveSelectedToConfig()
-    // 后台静默刷新
+    // ③ 后台静默刷新
     packagesStore.loadInstalled()
     packagesStore.loadUpdatable()
     // 异步重新获取所有更新包的图标
@@ -678,7 +721,7 @@ async function runBatchUpdate(names: string[], flag: Ref<boolean>) {
     }
   } finally {
     flag.value = false
-    updatingPackages.value = new Set()
+    queueState.value = { current: 0, total: 0 }
   }
 }
 
@@ -688,7 +731,7 @@ function handleBatchUpdate() {
     message.warning('请先勾选需要更新的软件')
     return
   }
-  runBatchUpdate(names, batchUpdating)
+  runUpdateQueue(names, batchUpdating)
 }
 
 function handleUpdateAllConfirm() {
@@ -701,7 +744,7 @@ function handleUpdateAllConfirm() {
     negativeText: '取消',
     onPositiveClick: () => {
       const names = packagesStore.updatable.map((p) => p.name)
-      runBatchUpdate(names, updatingAll)
+      runUpdateQueue(names, updatingAll)
     },
   })
 }
@@ -727,9 +770,9 @@ function handleBatchUninstall() {
 
 async function executeBatchUninstall(names: string[]) {
   // 锁定所有选中卡片
-  const s = new Set(uninstallingSet.value)
-  for (const n of names) s.add(n)
-  uninstallingSet.value = s
+  const lockSet = new Set(uninstallingSet.value)
+  for (const n of names) lockSet.add(n)
+  uninstallingSet.value = lockSet
 
   let failed = 0
   for (const name of names) {
@@ -751,7 +794,12 @@ async function executeBatchUninstall(names: string[]) {
     message.warning(`${names.length - failed} 个卸载成功，${failed} 个卸载失败`)
   }
 
-  selectedPackages.value = new Set()
+  // 从选中状态中移除已卸载的软件，保留其他选中状态
+  const newSelected = new Set(selectedPackages.value)
+  for (const name of names) {
+    newSelected.delete(name)
+  }
+  selectedPackages.value = newSelected
   saveSelectedToConfig()
   await packagesStore.loadInstalled()
   await packagesStore.loadUpdatable()
@@ -787,10 +835,13 @@ function openBucketDrawer() {
           </template>
           <template #suffix>
             <div class="flex items-center gap-1 mr-3">
-              <NButton size="tiny" secondary @click="openBucketDrawer" class="!rounded-app-sm">
-                <template #icon><NIcon :component="Cube" size="14" /></template>
-                软件源
-              </NButton>
+              <button
+                @click="openBucketDrawer"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-all duration-150 dark:text-zinc-400 text-zinc-600 hover:text-zinc-900 dark:hover:text-zinc-200 dark:bg-white/[0.04] bg-zinc-100 hover:bg-zinc-200 dark:hover:bg-white/[0.08]"
+              >
+                <NIcon :component="Cube" size="14" />
+                <span>软件源</span>
+              </button>
             </div>
           </template>
 
@@ -875,15 +926,21 @@ function openBucketDrawer() {
                     </template>
                     <template v-else>
                       <button
-                        :disabled="selectedPackageNames.length === 0 || batchUpdating"
+                        :disabled="selectedPackageNames.length === 0 || batchUpdating || updatingAll"
                         @click="handleBatchUpdate"
                         class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md border transition-all select-none"
-                        :class="selectedPackageNames.length === 0
+                        :class="(selectedPackageNames.length === 0 && !batchUpdating) || updatingAll
                           ? 'dark:border-white/[0.04] border-black/[0.06] bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
                           : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 cursor-pointer'"
                       >
-                        <NIcon :component="DownloadOutline" :size="15" />
-                        更新 ({{ selectedPackageNames.length }})
+                        <template v-if="batchUpdating">
+                          <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-indigo-400 rounded-full animate-spin" />
+                          正在执行 ({{ queueState.current }}/{{ queueState.total }})
+                        </template>
+                        <template v-else>
+                          <NIcon :component="DownloadOutline" :size="15" />
+                          更新 ({{ selectedPackageNames.length }})
+                        </template>
                       </button>
                       <button
                         :disabled="selectedPackageNames.length === 0"
@@ -897,14 +954,20 @@ function openBucketDrawer() {
                         卸载 ({{ selectedPackageNames.length }})
                       </button>
                       <button
-                        :disabled="packagesStore.updatable.length === 0 || updatingAll"
+                        :disabled="packagesStore.updatable.length === 0 || updatingAll || batchUpdating"
                         @click="handleUpdateAllConfirm"
                         class="flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-md transition-colors select-none"
-                        :class="packagesStore.updatable.length === 0
+                        :class="packagesStore.updatable.length === 0 || batchUpdating
                           ? 'dark:text-zinc-500 text-gray-500 cursor-not-allowed'
                           : 'dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-white/[0.04] text-gray-600 hover:text-gray-800 hover:bg-black/[0.03] cursor-pointer'"
                       >
-                        全部更新
+                        <template v-if="updatingAll">
+                          <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-current rounded-full animate-spin" />
+                          执行中 ({{ queueState.current }}/{{ queueState.total }})
+                        </template>
+                        <template v-else>
+                          全部更新
+                        </template>
                       </button>
                     </template>
                   </div>
@@ -915,12 +978,13 @@ function openBucketDrawer() {
               <div class="flex flex-col pt-2 pb-4">
                 <TransitionGroup name="list" tag="div" class="flex flex-col">
                   <AppListItem
-                    v-for="pkg in packagesStore.installed"
+                    v-for="pkg in sortedInstalled"
                     :key="pkg.name"
                     :pkg="pkg"
                     :mode="updatableNames.has(pkg.name) ? 'updatable' : 'installed'"
                     :checked="selectedPackages.has(pkg.name)"
                     :disabled="uninstallingSet.has(pkg.name)"
+                    :pinned="isPinned(pkg.name)"
                     :new-version="getNewVersion(pkg.name)"
                     :progress="pkgProgress.getProgress(pkg.name)"
                     :icon="getIcon(pkg.name)"
@@ -928,6 +992,7 @@ function openBucketDrawer() {
                     @update="handleUpdate"
                     @uninstall="handleUninstall"
                     @show-logs="showPkgLogs"
+                    @toggle-pin="togglePin"
                   />
                 </TransitionGroup>
               </div>
@@ -1069,7 +1134,7 @@ function openBucketDrawer() {
         <div v-for="(line, i) in activePkgLogLines" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
           <span class="dark:text-zinc-600 text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
         </div>
-        <span v-if="updatingPackages.has(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
+        <span v-if="pkgProgress.isActive(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
       </div>
       <template #footer>
         <div class="flex justify-end">
