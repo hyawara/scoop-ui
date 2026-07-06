@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NCheckbox, NButton, NIcon } from 'naive-ui'
+import { NCheckbox, NButton, NIcon, NPopconfirm } from 'naive-ui'
 import { DownloadOutline, TrashOutline, TerminalOutline, TimeOutline, CheckmarkCircle, CloseCircle, ArrowUpCircleOutline } from '@vicons/ionicons5'
 
 interface PackageInfo {
@@ -114,52 +114,63 @@ const ringDashoffset = computed(() => {
       <Transition name="task-fade" mode="out-in">
         <!-- ═══ 状态 A：idle 静止/准备态（无任何进度） ═══ -->
         <div v-if="!inTaskView" key="idle" class="flex items-center gap-1.5">
-          <!-- 更新按钮（有新版本时常驻入口，Hover 显现） -->
+          <!-- 更新按钮：有新版本时常驻高亮显现（琥珀色引导暗示） -->
           <NButton
             v-if="newVersion"
             text size="small"
-            class="!text-amber-500/80 hover:!text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            class="!text-amber-500 hover:!text-amber-400 transition-colors duration-200 cursor-pointer"
             title="更新到新版本"
             @click.stop="emit('update', pkg)"
           >
             <template #icon><NIcon :component="ArrowUpCircleOutline" size="16" /></template>
           </NButton>
-          <!-- 置顶按钮 -->
+          <!-- 置顶按钮：静默常驻低亮，Hover 高亮 -->
           <template v-if="mode !== 'search'">
             <button
-              class="pin-btn flex items-center justify-center w-5 h-5 rounded transition-all duration-150"
-              :class="pinned
-                ? 'is-pinned-btn'
-                : 'text-zinc-600 dark:text-zinc-600 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] opacity-0 group-hover:opacity-100'"
-              :title="pinned ? '取消置顶' : '置顶'"
+              v-if="pinned"
+              class="pin-btn flex items-center justify-center w-5 h-5 rounded transition-colors duration-200 cursor-pointer"
+              title="取消置顶"
               @click.stop="emit('toggle-pin', pkg.name)"
             >
-              <!-- 已置顶：实心图钉，正立高亮 -->
-              <svg v-if="pinned" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                 <path d="M16 3v2l-1 1v5l3 3v1h-5v6l-1 1-1-1v-6H5v-1l3-3V6L7 5V3h9z"/>
               </svg>
-              <!-- 未置顶：同款图钉线框，微倾斜 -->
-              <svg v-else class="w-3.5 h-3.5 -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+            </button>
+            <button
+              v-else
+              class="pin-btn flex items-center justify-center w-5 h-5 rounded transition-colors duration-200 dark:text-zinc-600 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] cursor-pointer"
+              title="置顶"
+              @click.stop="emit('toggle-pin', pkg.name)"
+            >
+              <svg class="w-3.5 h-3.5 -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
                 <path d="M16 3v2l-1 1v5l3 3v1h-5v6l-1 1-1-1v-6H5v-1l3-3V6L7 5V3h9z"/>
               </svg>
             </button>
           </template>
-          <!-- 卸载按钮 -->
+          <!-- 卸载按钮：静默常驻低亮，Hover 变红，带 NPopconfirm 二次确认 -->
           <template v-if="mode !== 'search'">
-            <NButton
-              text size="small"
-              class="!text-gray-600 hover:!text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              title="卸载"
-              @click.stop="emit('uninstall', pkg)"
+            <NPopconfirm
+              @positive-click.stop="emit('uninstall', pkg)"
+              :show-icon="false"
             >
-              <template #icon><NIcon :component="TrashOutline" size="15" /></template>
-            </NButton>
+              <template #trigger>
+                <NButton
+                  text size="small"
+                  class="!text-zinc-500 dark:!text-zinc-600 hover:!text-rose-400 dark:hover:!text-rose-400 transition-colors duration-200 cursor-pointer"
+                  title="卸载"
+                  @click.stop
+                >
+                  <template #icon><NIcon :component="TrashOutline" size="15" /></template>
+                </NButton>
+              </template>
+              <span class="text-[13px]">确定要完全卸载 <strong>{{ pkg.name }}</strong> 吗？</span>
+            </NPopconfirm>
           </template>
-          <!-- 安装按钮（搜索模式） -->
+          <!-- 安装按钮（搜索模式）：静默常驻低亮，Hover 高亮 -->
           <NButton
             v-if="mode === 'search' && !isInstalled"
             text size="small"
-            class="!text-gray-600 dark:hover:!text-white hover:!text-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            class="!text-zinc-500 dark:!text-zinc-600 hover:!text-zinc-800 dark:hover:!text-white transition-colors duration-200 cursor-pointer"
             title="安装"
             @click.stop="emit('install', pkg.name)"
           >
