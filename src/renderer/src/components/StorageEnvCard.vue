@@ -1,5 +1,5 @@
 <template>
-  <NCard class="glass-card" content-class="flex flex-col gap-4 p-5">
+  <NCard class="glass-card" content-class="flex flex-col gap-6 p-5">
     <!-- ========== Block 1: Interactive Metric Cards ========== -->
     <!-- Buckets + Apps 在同一行 -->
     <div class="grid grid-cols-2 gap-2">
@@ -165,20 +165,21 @@
       </div>
     </div>
 
-    <!-- ========== Block 2: Network & Acceleration ========== -->
+    <!-- ═══════════════ 功能岛 A：网络代理中心 ═══════════════ -->
     <div
-      class="flex flex-col gap-3 rounded-xl p-4 transition-colors duration-200"
-      :class="isDark ? 'bg-zinc-900/40 border border-white/5' : 'bg-white border border-zinc-200'"
+      class="rounded-xl border p-4 flex flex-col gap-3"
+      :class="isDark ? 'bg-zinc-900/40 border-zinc-800/60' : 'bg-zinc-50 border-zinc-300'"
     >
-      <!-- Proxy Toggle Row -->
-      <div class="flex items-center justify-between min-h-[24px]">
-        <div class="flex items-center gap-2 shrink-0">
+      <!-- 头部：Globe + 标题 + Switch -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
           <GlobeOutline
-            class="shrink-0 header-icon"
+            class="shrink-0"
             :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
+            :style="{ width: 'var(--app-font-size)', height: 'var(--app-font-size)' }"
           />
           <span
-            class="text-sm font-medium whitespace-nowrap"
+            class="font-semibold text-sm"
             :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
           >网络代理</span>
         </div>
@@ -192,30 +193,41 @@
         </NSwitch>
       </div>
 
-      <!-- Proxy Form (collapsible) -->
+      <!-- 代理表单：竖线分割一行流 -->
       <NCollapseTransition :show="proxyEnabled">
-        <div class="flex flex-col gap-2.5 pt-1">
-          <div class="flex items-center gap-2">
+        <div class="flex flex-col gap-2">
+          <div class="proxy-row flex items-center gap-0">
+            <!-- 协议选择 -->
             <NSelect
               v-model:value="proxyProtocol"
               :options="protocolOptions"
               size="small"
-              class="proxy-select"
+              class="proxy-row__select"
               :style="{ width: '90px' }"
             />
+            <div
+              class="w-px h-4 mx-1.5 shrink-0"
+              :class="isDark ? 'bg-zinc-700' : 'bg-zinc-300'"
+            />
+            <!-- 代理地址 -->
             <NInput
               v-model:value="proxyHost"
               placeholder="127.0.0.1"
               size="small"
-              class="proxy-input flex-1"
+              class="proxy-row__input flex-1"
               :input-props="{ autocomplete: 'off' }"
             />
+            <div
+              class="w-px h-4 mx-1.5 shrink-0"
+              :class="isDark ? 'bg-zinc-700' : 'bg-zinc-300'"
+            />
+            <!-- 代理端口 -->
             <NInput
               v-model:value="proxyPort"
               placeholder="7890"
               size="small"
-              class="proxy-input"
-              :style="{ width: '70px' }"
+              class="proxy-row__port"
+              :style="{ width: '64px' }"
               :input-props="{ autocomplete: 'off' }"
             />
           </div>
@@ -232,18 +244,19 @@
         </div>
       </NCollapseTransition>
 
-      <!-- Aria2 Toggle Row -->
+      <!-- Aria2 加速行 -->
       <div
-        class="flex items-center justify-between min-h-[24px]"
-        :class="isDark ? 'border-t border-white/5 pt-3' : 'border-t border-zinc-100 pt-3'"
+        class="flex items-center justify-between pt-1"
+        :class="isDark ? 'border-t border-white/5' : 'border-t border-zinc-100'"
       >
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex items-center gap-2">
           <RocketOutline
-            class="shrink-0 header-icon"
+            class="shrink-0"
             :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
+            :style="{ width: 'var(--app-font-size)', height: 'var(--app-font-size)' }"
           />
           <span
-            class="text-sm font-medium whitespace-nowrap"
+            class="font-semibold text-sm"
             :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
           >Aria2 加速</span>
           <span
@@ -273,25 +286,21 @@
       </div>
     </div>
 
-    <!-- ========== 分割线 ========== -->
+    <!-- ═══════════════ 功能岛 B：镜像源加速中心 ═══════════════ -->
     <div
-      class="border-t"
-      :class="isDark ? 'border-zinc-800/50' : 'border-zinc-200'"
-    />
-
-    <!-- ========== Block 3: Mirror Source ========== -->
-    <div
-      class="flex flex-col gap-3 rounded-xl p-4 transition-colors duration-200"
-      :class="isDark ? 'bg-zinc-900/40 border border-white/5' : 'bg-white border border-zinc-200'"
+      class="rounded-xl border p-4 flex flex-col gap-3"
+      :class="isDark ? 'bg-zinc-900/40 border-zinc-800/60' : 'bg-zinc-50 border-zinc-300'"
     >
+      <!-- 头部：Flash + 标题 + 选择框 -->
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2 shrink-0">
-          <ServerOutline
-            class="shrink-0 header-icon"
+          <FlashOutline
+            class="shrink-0"
             :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
+            :style="{ width: 'var(--app-font-size)', height: 'var(--app-font-size)' }"
           />
           <span
-            class="text-sm font-medium whitespace-nowrap"
+            class="font-semibold text-sm whitespace-nowrap"
             :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
           >加速镜像源</span>
         </div>
@@ -309,14 +318,22 @@
         />
       </div>
 
-      <!-- Custom mirror prefix input (collapsible, only for 'custom') -->
+      <!-- 脚注：当前对接状态 -->
+      <div class="flex items-center gap-1.5 text-[11px]" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
+        <span>当前已自动对接</span>
+        <span class="font-medium" :class="isDark ? 'text-zinc-300' : 'text-zinc-600'">
+          {{ mirrorSource === 'official' ? 'Scoop 官方源' : mirrorSource === 'ghproxy' ? 'GHProxy 加速链路' : '自定义镜像源' }}
+        </span>
+      </div>
+
+      <!-- 自定义镜像前缀输入（collapsible） -->
       <NCollapseTransition :show="mirrorSource === 'custom'">
-        <div class="flex items-center gap-2 pt-0.5">
+        <div class="flex items-center gap-2">
           <NInput
             v-model:value="customPrefix"
             placeholder="https://your-proxy.com/"
             size="small"
-            class="proxy-input flex-1"
+            class="flex-1 proxy-input"
             :input-props="{ autocomplete: 'off' }"
             :disabled="mirrorLoading"
           />
@@ -367,7 +384,7 @@ import {
 } from 'naive-ui'
 import {
   GlobeOutline,
-  ServerOutline,
+  FlashOutline,
   PulseOutline,
   RocketOutline,
 } from '@vicons/ionicons5'
@@ -747,46 +764,54 @@ onUnmounted(() => {
   padding: 0;
 }
 
-/* Proxy form compact sizing */
-:deep(.proxy-select .n-base-selection),
-:deep(.proxy-input .n-input) {
-  font-size: var(--app-font-size) !important;
-  border-radius: 10px !important;
+/* ═══════════════ Proxy Row ═══════════════ */
+
+/* NSelect：去掉自带边框和背景，与卡片融为一体 */
+.proxy-row__select :deep(.n-base-selection),
+.proxy-row__select :deep(.n-base-selection--focus) {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
 }
 
+/* NInput：去掉自带边框和背景 */
+.proxy-row__input :deep(.n-input),
+.proxy-row__input :deep(.n-input--focus),
+.proxy-row__input :deep(.n-input--hover),
+.proxy-row__port :deep(.n-input),
+.proxy-row__port :deep(.n-input--focus),
+.proxy-row__port :deep(.n-input--hover) {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+}
+
+/* Mirror select sizing */
 :deep(.mirror-select .n-base-selection) {
   font-size: var(--app-font-size) !important;
   border-radius: 10px !important;
 }
 
-/* Light mode overrides */
+/* Hover ring for NSelect in general */
 :deep(.n-base-selection:not(.n-base-selection--disabled):not(.n-base-selection--active):hover) {
   border-color: var(--primary) !important;
 }
 
 @media (prefers-color-scheme: light) {
-  :deep(.proxy-select .n-base-selection),
   :deep(.mirror-select .n-base-selection) {
     background-color: #ffffff !important;
     border-color: #e4e4e7 !important;
     color: #27272a !important;
   }
-
-  :deep(.proxy-input .n-input) {
-    background-color: #ffffff !important;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
-  :deep(.proxy-select .n-base-selection),
   :deep(.mirror-select .n-base-selection) {
     background-color: rgba(255, 255, 255, 0.05) !important;
     border-color: rgba(255, 255, 255, 0.1) !important;
     color: #e4e4e7 !important;
-  }
-
-  :deep(.proxy-input .n-input) {
-    background-color: rgba(255, 255, 255, 0.05) !important;
   }
 }
 
