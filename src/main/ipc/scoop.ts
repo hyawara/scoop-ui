@@ -312,25 +312,27 @@ export function registerScoopIPC(): void {
   })
 
   // Cleanup old versions
-  // ── 旧版本测量脚本（git-bash du 直接取目录大小，不递归求和） ──
+  // ── 旧版本测量脚本（git-bash du 直接取目录大小） ──
   const MEASURE_OLD_VERSIONS_SCRIPT = `
     APPS_DIR="\${SCOOP:-\$HOME/scoop}/apps"
     TOTAL=0
     for app in "$APPS_DIR"/*/; do
       [ -d "$app" ] || continue
       CURRENT="\${app}current"
-      if [ -L "$CURRENT" ] && [ -d "$CURRENT" ]; then
-        TARGET=$(realpath "$CURRENT" 2>/dev/null)
+      if [ -d "$CURRENT" ]; then
+        CURRENT_RESOLVED=$(realpath "$CURRENT" 2>/dev/null)
         for ver in "$app"*/; do
-          VER=$(basename "$ver")
-          [ "$VER" = "current" ] && continue
-          [ "$(realpath "$ver" 2>/dev/null)" = "$TARGET" ] && continue
+          [ "$(basename "$ver")" = "current" ] && continue
+          if [ -n "$CURRENT_RESOLVED" ]; then
+            VER_RESOLVED=$(realpath "$ver" 2>/dev/null)
+            [ "$VER_RESOLVED" = "$CURRENT_RESOLVED" ] && continue
+          fi
           SIZE=$(du -sb "$ver" 2>/dev/null | cut -f1)
           TOTAL=$((TOTAL + (SIZE)))
         done
       fi
     done
-    echo $TOTAL
+    echo "$TOTAL"
   `
 
   ipcMain.handle('scoop:cleanup', async (event) => {
