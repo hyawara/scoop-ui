@@ -882,9 +882,6 @@ function openBucketDrawer() {
           <NTabPane name="installed" class="flex-1 overflow-hidden">
             <template #tab>
               <span class="text-[13px]">已安装</span>
-              <span v-if="updatableNames.size > 0"
-                class="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-mono font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-              >{{ updatableNames.size }}</span>
             </template>
 
             <!-- 初始加载状态 -->
@@ -1001,6 +998,10 @@ function openBucketDrawer() {
                         </template>
                         <template v-else>
                           全部更新
+                          <span
+                            v-if="packagesStore.updatable.length > 0"
+                            class="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-mono font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                          >{{ packagesStore.updatable.length }}</span>
                         </template>
                       </button>
                     </template>
