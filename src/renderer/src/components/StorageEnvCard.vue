@@ -516,13 +516,19 @@ async function handleImport() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 慢数据后台加载，不阻塞
   Promise.all([
     settingsStore.loadDiskSpace(),
     settingsStore.loadCacheInfo(),
-    settingsStore.checkAria2(),
     settingsStore.loadEcoStats(),
     loadOldVersionsSize(),
+  ])
+
+  // 等 proxy 和 Aria2 状态加载完后恢复 UI 开关
+  await Promise.all([
+    settingsStore.loadProxy(),
+    settingsStore.checkAria2(),
   ])
 
   if (settingsStore.proxy?.enabled) {
