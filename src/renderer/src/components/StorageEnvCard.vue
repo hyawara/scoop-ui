@@ -287,11 +287,12 @@
     </div>
 
     <!-- ═══════════════ 功能岛 B：镜像源加速中心 ═══════════════ -->
+    <!--
+      TODO: 后续开发 - 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
     <div
       class="rounded-xl border p-4 flex flex-col gap-3"
       :class="isDark ? 'bg-zinc-900/40 border-zinc-800/60' : 'bg-zinc-50 border-zinc-300'"
     >
-      <!-- 头部：Flash + 标题 + 选择框 -->
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2 shrink-0">
           <FlashOutline
@@ -317,16 +318,12 @@
           @update:value="applyMirror"
         />
       </div>
-
-      <!-- 脚注：当前对接状态 -->
       <div class="flex items-center gap-1.5 text-[11px]" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
         <span>当前已自动对接</span>
         <span class="font-medium" :class="isDark ? 'text-zinc-300' : 'text-zinc-600'">
           {{ mirrorSource === 'official' ? 'Scoop 官方源' : mirrorSource === 'ghproxy' ? 'GHProxy 加速链路' : '自定义镜像源' }}
         </span>
       </div>
-
-      <!-- 自定义镜像前缀输入（collapsible） -->
       <NCollapseTransition :show="mirrorSource === 'custom'">
         <div class="flex items-center gap-2">
           <NInput
@@ -349,6 +346,7 @@
         </div>
       </NCollapseTransition>
     </div>
+    -->
 
     <!-- ========== Block 5: Health Check (Footer) ========== -->
     <NButton
@@ -377,14 +375,16 @@ import {
   NSelect,
   NInput,
   NCollapseTransition,
-  NTooltip,
+  // NTooltip — 由于镜像代理功能暂时注释，后续开发再启用
+  // NTooltip,
   NPopconfirm,
   useMessage,
   type SelectOption,
 } from 'naive-ui'
 import {
   GlobeOutline,
-  FlashOutline,
+  // FlashOutline — 由于镜像代理功能暂时注释，后续开发再启用
+  // FlashOutline,
   PulseOutline,
   RocketOutline,
 } from '@vicons/ionicons5'
@@ -402,10 +402,11 @@ const proxyPort = ref('7890')
 const proxyLoading = ref(false)
 
 // ── Mirror ──
-const mirrorSource = ref<string>('official')
-const mirrorLoading = ref(false)
-const GHPROXY_PREFIX = 'https://gh-proxy.com/'
-const customPrefix = ref<string>('')
+// 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
+// const mirrorSource = ref<string>('official')
+// const mirrorLoading = ref(false)
+// const GHPROXY_PREFIX = 'https://gh-proxy.com/'
+// const customPrefix = ref<string>('')
 
 // ── Aria2 ──
 const aria2Installing = ref(false)
@@ -425,87 +426,88 @@ const protocolOptions = [
   { label: 'SOCKS5', value: 'socks5' },
 ]
 
-interface MirrorOption extends SelectOption {
-  label: string
-  shortLabel: string
-  value: string
-  desc: string
-}
-const mirrorOptions: MirrorOption[] = [
-  {
-    label: '🌐 官方默认源 (GitHub Direct)',
-    shortLabel: '🌐 官方默认源',
-    value: 'official',
-    desc: '直连 GitHub 官方仓库，适合已开启全局系统代理的用户。',
-  },
-  {
-    label: '⚡ GHProxy 链路代理加速 (推荐)',
-    shortLabel: '⚡ GHProxy 加速',
-    value: 'ghproxy',
-    desc: '为 GitHub 下载链接注入国内 CDN 前缀，与 aria2 多线程完美共存。',
-  },
-  {
-    label: '🛠️ 自定义镜像源...',
-    shortLabel: '🛠️ 自定义源',
-    value: 'custom',
-    desc: '手动输入你信任的私有或高校 Scoop 镜像前缀地址。',
-  },
-]
+// 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
+// interface MirrorOption extends SelectOption {
+//   label: string
+//   shortLabel: string
+//   value: string
+//   desc: string
+// }
+// const mirrorOptions: MirrorOption[] = [
+//   {
+//     label: '🌐 官方默认源 (GitHub Direct)',
+//     shortLabel: '🌐 官方默认源',
+//     value: 'official',
+//     desc: '直连 GitHub 官方仓库，适合已开启全局系统代理的用户。',
+//   },
+//   {
+//     label: '⚡ GHProxy 链路代理加速 (推荐)',
+//     shortLabel: '⚡ GHProxy 加速',
+//     value: 'ghproxy',
+//     desc: '为 GitHub 下载链接注入国内 CDN 前缀，与 aria2 多线程完美共存。',
+//   },
+//   {
+//     label: '🛠️ 自定义镜像源...',
+//     shortLabel: '🛠️ 自定义源',
+//     value: 'custom',
+//     desc: '手动输入你信任的私有或高校 Scoop 镜像前缀地址。',
+//   },
+// ]
 
-function renderMirrorLabel(option: SelectOption): VNodeChild {
-  const dark = isDark?.value ?? true
-  const desc = (option as MirrorOption).desc ?? ''
-  return h(
-    'div',
-    { class: 'flex flex-col gap-0.5 py-1' },
-    [
-      h(
-        'span',
-        {
-          class: 'font-medium leading-tight',
-          style: {
-            fontSize: 'var(--app-font-size)',
-            color: dark ? '#e4e4e7' : '#27272a',
-          },
-        },
-        String(option.label ?? ''),
-      ),
-      h(
-        'span',
-        {
-          class: 'font-normal leading-snug',
-          style: {
-            fontSize: '11px',
-            color: dark ? '#71717a' : '#a1a1aa',
-          },
-        },
-        desc,
-      ),
-    ],
-  )
-}
+// function renderMirrorLabel(option: SelectOption): VNodeChild {
+//   const dark = isDark?.value ?? true
+//   const desc = (option as MirrorOption).desc ?? ''
+//   return h(
+//     'div',
+//     { class: 'flex flex-col gap-0.5 py-1' },
+//     [
+//       h(
+//         'span',
+//         {
+//           class: 'font-medium leading-tight',
+//           style: {
+//             fontSize: 'var(--app-font-size)',
+//             color: dark ? '#e4e4e7' : '#27272a',
+//           },
+//         },
+//         String(option.label ?? ''),
+//       ),
+//       h(
+//         'span',
+//         {
+//           class: 'font-normal leading-snug',
+//           style: {
+//             fontSize: '11px',
+//             color: dark ? '#71717a' : '#a1a1aa',
+//           },
+//         },
+//         desc,
+//       ),
+//     ],
+//   )
+// }
 
-function renderMirrorTag(props: { option: SelectOption }): VNodeChild {
-  const opt = props.option as MirrorOption
-  const short = opt.shortLabel ?? String(opt.label ?? '')
-  const desc = opt.desc ?? ''
-  return h(
-    NTooltip,
-    { trigger: 'hover', placement: 'top', style: { maxWidth: '260px' } },
-    {
-      trigger: () =>
-        h(
-          'span',
-          {
-            class: 'whitespace-nowrap overflow-hidden text-ellipsis',
-            style: { fontSize: 'var(--app-font-size)' },
-          },
-          short,
-        ),
-      default: () => desc,
-    },
-  )
-}
+// function renderMirrorTag(props: { option: SelectOption }): VNodeChild {
+//   const opt = props.option as MirrorOption
+//   const short = opt.shortLabel ?? String(opt.label ?? '')
+//   const desc = opt.desc ?? ''
+//   return h(
+//     NTooltip,
+//     { trigger: 'hover', placement: 'top', style: { maxWidth: '260px' } },
+//     {
+//       trigger: () =>
+//         h(
+//           'span',
+//           {
+//             class: 'whitespace-nowrap overflow-hidden text-ellipsis',
+//             style: { fontSize: 'var(--app-font-size)' },
+//           },
+//           short,
+//         ),
+//       default: () => desc,
+//     },
+//   )
+// }
 
 const cacheSizeDisplay = computed(() => {
   const size = settingsStore.cacheInfo?.size ?? 0
@@ -651,52 +653,53 @@ async function applyProxy() {
   }
 }
 
-async function applyMirror(value: string) {
-  if (value === 'custom') {
-    const prefix = customPrefix.value.trim()
-    if (!prefix) {
-      message.info('请在下方输入自定义镜像前缀后回车应用')
-      return
-    }
-    if (!/^https:\/\/[\w.\-]+(:\d+)?\//.test(prefix)) {
-      message.warning('自定义前缀需以 https:// 开头且包含路径')
-      return
-    }
-  }
+// 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
+// async function applyMirror(value: string) {
+//   if (value === 'custom') {
+//     const prefix = customPrefix.value.trim()
+//     if (!prefix) {
+//       message.info('请在下方输入自定义镜像前缀后回车应用')
+//       return
+//     }
+//     if (!/^https:\/\/[\w.\-]+(:\d+)?\//.test(prefix)) {
+//       message.warning('自定义前缀需以 https:// 开头且包含路径')
+//       return
+//     }
+//   }
 
-  const payload: { mirror: string; prefix?: string } =
-    value === 'official'
-      ? { mirror: 'official' }
-      : value === 'ghproxy'
-        ? { mirror: 'ghproxy', prefix: GHPROXY_PREFIX }
-        : { mirror: 'custom', prefix: customPrefix.value.trim() }
+//   const payload: { mirror: string; prefix?: string } =
+//     value === 'official'
+//       ? { mirror: 'official' }
+//       : value === 'ghproxy'
+//         ? { mirror: 'ghproxy', prefix: GHPROXY_PREFIX }
+//         : { mirror: 'custom', prefix: customPrefix.value.trim() }
 
-  try {
-    mirrorLoading.value = true
-    const res = await window.scoopAPI.switchMirror(payload)
+//   try {
+//     mirrorLoading.value = true
+//     const res = await window.scoopAPI.switchMirror(payload)
 
-    if (!res.success) {
-      message.error(res.error || '部分 bucket 换源失败')
-      return
-    }
+//     if (!res.success) {
+//       message.error(res.error || '部分 bucket 换源失败')
+//       return
+//     }
 
-    await settingsStore.checkAria2()
+//     await settingsStore.checkAria2()
 
-    const aria2Hint = settingsStore.aria2Installed
-      ? '，已无缝对接 aria2 多线程加速器'
-      : ''
-    const restoreHint = res.aria2Restored ? '（已自动恢复 aria2 开关）' : ''
-    message.success(`镜像源已切换：${res.switched}/${res.total} 个 bucket${aria2Hint}${restoreHint}`)
-  } catch {
-    message.error('切换镜像源失败')
-  } finally {
-    mirrorLoading.value = false
-  }
-}
+//     const aria2Hint = settingsStore.aria2Installed
+//       ? '，已无缝对接 aria2 多线程加速器'
+//       : ''
+//     const restoreHint = res.aria2Restored ? '（已自动恢复 aria2 开关）' : ''
+//     message.success(`镜像源已切换：${res.switched}/${res.total} 个 bucket${aria2Hint}${restoreHint}`)
+//   } catch {
+//     message.error('切换镜像源失败')
+//   } finally {
+//     mirrorLoading.value = false
+//   }
+// }
 
-function applyCustomMirror() {
-  return applyMirror('custom')
-}
+// function applyCustomMirror() {
+//   return applyMirror('custom')
+// }
 
 async function toggleAria2(enabled: boolean) {
   try {
@@ -788,18 +791,19 @@ onUnmounted(() => {
   background: transparent !important;
 }
 
+/* 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。 */
 /* Mirror select sizing */
-:deep(.mirror-select .n-base-selection) {
+/* :deep(.mirror-select .n-base-selection) {
   font-size: var(--app-font-size) !important;
   border-radius: 10px !important;
-}
+} */
 
 /* Hover ring for NSelect in general */
-:deep(.n-base-selection:not(.n-base-selection--disabled):not(.n-base-selection--active):hover) {
+/* :deep(.n-base-selection:not(.n-base-selection--disabled):not(.n-base-selection--active):hover) {
   border-color: var(--primary) !important;
-}
+} */
 
-@media (prefers-color-scheme: light) {
+/* @media (prefers-color-scheme: light) {
   :deep(.mirror-select .n-base-selection) {
     background-color: #ffffff !important;
     border-color: #e4e4e7 !important;
@@ -813,7 +817,7 @@ onUnmounted(() => {
     border-color: rgba(255, 255, 255, 0.1) !important;
     color: #e4e4e7 !important;
   }
-}
+} */
 
 .stat-badge {
   user-select: none;
