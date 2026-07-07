@@ -2,31 +2,49 @@
   <NCard class="glass-card" content-class="flex flex-col gap-4 p-5">
     <!-- ========== Block 1: Micro Stat Badges ========== -->
     <div class="grid grid-cols-3 gap-2">
+      <!-- Buckets -->
       <div
-        v-for="badge in statBadges"
-        :key="badge.label"
         class="stat-badge flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
         :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
-        :style="{ '--accent': badge.color }"
       >
-        <span
-          class="font-mono text-[15px] font-bold leading-none tabular-nums"
-          :class="isDark ? badge.darkText : badge.lightText"
-        >
-          {{ badge.value }}
+        <span class="font-mono text-[15px] font-bold leading-none tabular-nums" :class="isDark ? 'text-cyan-400' : 'text-cyan-600'">
+          {{ settingsStore.bucketCount ?? '-' }}
         </span>
-        <span
-          class="text-[10px] leading-tight font-normal tracking-wide text-center"
-          :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
-        >
-          {{ badge.label }}
+        <span class="text-[10px] leading-tight font-normal tracking-wide text-center" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
+          Buckets 软件源
         </span>
-        <span
-          v-if="badge.sub"
-          class="text-[9px] leading-none font-normal"
-          :class="isDark ? 'text-zinc-600' : 'text-zinc-400'"
-        >
-          {{ badge.sub }}
+      </div>
+
+      <!-- Apps -->
+      <div
+        class="stat-badge flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
+        :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
+      >
+        <span class="font-mono text-[15px] font-bold leading-none tabular-nums" :class="isDark ? 'text-emerald-400' : 'text-emerald-600'">
+          {{ settingsStore.installedCount ?? '-' }}
+        </span>
+        <span class="text-[10px] leading-tight font-normal tracking-wide text-center" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
+          Apps 已安装
+        </span>
+      </div>
+
+      <!-- Cache -->
+      <div
+        class="stat-badge flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
+        :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
+      >
+        <div class="flex items-baseline gap-1 min-w-0 flex-wrap justify-center">
+          <span class="font-mono text-[15px] font-bold leading-none tabular-nums" :class="isDark ? 'text-violet-400' : 'text-violet-600'">
+            {{ cacheSizeDisplay }}
+          </span>
+          <span
+            v-if="cacheFilesDisplay"
+            class="text-xs font-sans font-normal leading-none whitespace-nowrap"
+            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
+          >/ {{ cacheFilesDisplay }}</span>
+        </div>
+        <span class="text-[10px] leading-tight font-normal tracking-wide text-center" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
+          Cache 缓存包
         </span>
       </div>
     </div>
@@ -440,34 +458,6 @@ function renderMirrorTag(props: { option: SelectOption }): VNodeChild {
     },
   )
 }
-
-// ── Stat Badges ──
-const statBadges = computed(() => [
-  {
-    value: settingsStore.bucketCount ?? '-',
-    label: 'Buckets',
-    sub: null,
-    color: '#06b6d4',
-    darkText: 'text-cyan-400',
-    lightText: 'text-cyan-600',
-  },
-  {
-    value: settingsStore.installedCount ?? '-',
-    label: 'Apps',
-    sub: null,
-    color: '#10b981',
-    darkText: 'text-emerald-400',
-    lightText: 'text-emerald-600',
-  },
-  {
-    value: cacheSizeDisplay.value,
-    label: 'Cache',
-    sub: cacheFilesDisplay.value,
-    color: '#8b5cf6',
-    darkText: 'text-violet-400',
-    lightText: 'text-violet-600',
-  },
-])
 
 const cacheSizeDisplay = computed(() => {
   const raw = settingsStore.cacheInfo?.size ?? 0
