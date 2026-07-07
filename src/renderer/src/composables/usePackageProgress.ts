@@ -14,6 +14,8 @@ export interface PackageProgress {
   phase: PackagePhase
   percent: number
   logs: string[]
+  // error 相位时的错误摘要（通常是末尾 3 行关键日志），用于弹窗高亮显示
+  error?: string
 }
 
 const progressMap = reactive<Map<string, PackageProgress>>(new Map())
@@ -21,7 +23,6 @@ const progressMap = reactive<Map<string, PackageProgress>>(new Map())
 const archiveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const SUCCESS_ARCHIVE_MS = 2000
-const ERROR_ARCHIVE_MS = 3000
 
 const PATTERN_PERCENT = /\((\d+)%\)/
 const PATTERN_PERCENT_ALT = /(\d+)%/
@@ -32,6 +33,48 @@ function parsePercent(line: string): number | null {
   m = PATTERN_PERCENT_ALT.exec(line)
   if (m) return parseInt(m[1], 10)
   return null
+}
+
+/**
+ * 把一段可能包含 \r（回车覆盖）与 \n（换行）的流式输出，正确合并进现有 logs 数组。
+ *
+ * Scoop 下载大文件时会用 \r 把光标移回行首反复重绘同一行进度条（如
+ * `12.3 MB / 45.6 MB (27%)`），若无脑 push 会堆出成百上千行"卡死"感。
+ * 处理规则：
+ *  1. 先把 \r\n 归一成 \n（Windows CRLF），避免被当成回车覆盖。
+ *  2. 按 \n 切分成若干片段：第一个片段续接当前流，其余片段各自成新行。
+ *  3. 每个片段内若含 \r，只保留最后一个 \r 之后的内容（即进度条最终态）。
+ *  4. 片段合并到 logs：
+ *     - 第一个片段：若它自身带 \r（是纯覆盖更新），或当前末行仍是"进行中"的
+ *       同类进度行，则覆盖末行；否则续接到末行尾部。
+ *     - 后续片段：一律 push 为新行。
+ */
+function appendWithCarriageReturn(logs: string[], chunk: string): void {
+  const normalized = chunk.replace(/\r\n/g, '\n')
+  const segments = normalized.split('\n')
+
+  for (let i = 0; i < segments.length; i++) {
+    const raw = segments[i]
+    const hasCr = raw.includes('\r')
+    // 只保留最后一个 \r 之后的内容（进度条重绘的最终态）
+    const text = hasCr ? raw.slice(raw.lastIndexOf('\r') + 1) : raw
+
+    if (i === 0) {
+      // 首段：决定是覆盖末行还是续接
+      if (logs.length === 0) {
+        logs.push(text)
+      } else if (hasCr) {
+        // 带回车 → 覆盖当前末行（进度条刷新）
+        logs[logs.length - 1] = text
+      } else {
+        // 不带回车 → 视为上一 chunk 未完成行的续接
+        logs[logs.length - 1] = logs[logs.length - 1] + text
+      }
+    } else {
+      // 换行后的新段，各自独立成行
+      logs.push(text)
+    }
+  }
 }
 
 export function usePackageProgress() {
@@ -85,10 +128,12 @@ export function usePackageProgress() {
     // 仅在真正执行中的相位解析日志，queued/success/error 忽略
     if (p.phase !== 'downloading' && p.phase !== 'installing') return
 
-    p.logs.push(message)
+    // 处理 \r 覆盖 / \n 分行，避免进度条把日志刷成成百上千行
+    appendWithCarriageReturn(p.logs, message)
 
-    // 解析 Aria2 / 下载百分比
-    const pct = parsePercent(message)
+    // 从最新一行解析下载百分比（进度条最终态在末行）
+    const lastLine = p.logs[p.logs.length - 1] ?? ''
+    const pct = parsePercent(lastLine)
     if (pct !== null) {
       p.percent = pct
     }
@@ -122,19 +167,23 @@ export function usePackageProgress() {
     }, SUCCESS_ARCHIVE_MS))
   }
 
-  /** 失败：标记 error，停留 3 秒后自动归档（清除） */
-  function failUpdate(name: string) {
+  /**
+   * 失败：标记 error 并常驻（不自动归档），强制用户正视失败结果。
+   * error 态会一直停留在 UI 上，直到用户手动重试（重新 enqueue/startUpdate 覆盖）
+   * 或主动关闭/清理。这是"杜绝伪成功"需求的关键——失败必须显式暴露，不能悄悄消失。
+   * @param name 包名
+   * @param errorSummary 错误摘要（通常是末尾 3 行关键日志），用于弹窗高亮
+   */
+  function failUpdate(name: string, errorSummary?: string) {
     clearTimer(name)
     const p = progressMap.get(name)
     if (p) {
       p.phase = 'error'
+      if (errorSummary) p.error = errorSummary
     } else {
-      progressMap.set(name, { phase: 'error', percent: 0, logs: [] })
+      progressMap.set(name, { phase: 'error', percent: 0, logs: [], error: errorSummary })
     }
-    archiveTimers.set(name, setTimeout(() => {
-      progressMap.delete(name)
-      archiveTimers.delete(name)
-    }, ERROR_ARCHIVE_MS))
+    // 注意：不设归档定时器，error 态常驻直到用户手动处理
   }
 
   function getProgress(name: string): PackageProgress | undefined {
@@ -149,6 +198,12 @@ export function usePackageProgress() {
   function isActive(name: string): boolean {
     const p = progressMap.get(name)
     return !!p && (p.phase === 'queued' || p.phase === 'downloading' || p.phase === 'installing')
+  }
+
+  /** 手动清除单个包的进度记录（error 态用户点"关闭"/重试前调用） */
+  function clearProgress(name: string) {
+    clearTimer(name)
+    progressMap.delete(name)
   }
 
   function clearAll() {
@@ -168,6 +223,7 @@ export function usePackageProgress() {
     getProgress,
     hasProgress,
     isActive,
+    clearProgress,
     clearAll,
   }
 }

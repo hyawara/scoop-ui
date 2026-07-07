@@ -99,9 +99,13 @@ export const usePackagesStore = defineStore('packages', () => {
       window.scoopAPI.onProgress((data: ProgressData) => {
         progress.value = data
       })
-      await window.scoopAPI.update(name)
+      // 后端带版本双重校验，返回结构化结果而非抛异常；失败时主动抛出让调用方感知，杜绝"伪成功"
+      const result = await window.scoopAPI.update(name)
       await loadInstalled()
       await loadUpdatable()
+      if (!result.success) {
+        throw new Error(result.error || '更新失败')
+      }
     } finally {
       loading.value = false
       window.scoopAPI.removeProgressListener()

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   listInstalled: () => ipcRenderer.invoke('scoop:listInstalled'),
   listUpdatable: () => ipcRenderer.invoke('scoop:listUpdatable'),
   checkAria2: () => ipcRenderer.invoke('scoop:checkAria2'),
+  setAria2Enabled: (enabled: boolean) => ipcRenderer.invoke('scoop:setAria2Enabled', enabled),
   listBuckets: () => ipcRenderer.invoke('scoop:listBuckets'),
   addBucket: (name: string, repo?: string) => ipcRenderer.invoke('scoop:addBucket', name, repo),
   removeBucket: (name: string) => ipcRenderer.invoke('scoop:removeBucket', name),

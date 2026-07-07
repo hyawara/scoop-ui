@@ -19,6 +19,18 @@ interface ProgressData {
   message: string
 }
 
+// Scoop 包更新结果（与 src/main/ipc/scoop.ts 的 scoop:update handler 返回值保持一致）
+// 后端不再 throw，而是返回结构化结果对象，携带版本双重校验信息，杜绝"伪成功"
+interface UpdateResult {
+  success: boolean
+  package: string
+  code?: number
+  localVersion?: string
+  expectedVersion?: string
+  error?: string
+  verifyError?: string
+}
+
 // 主进程 electron-updater 统一推送的更新事件（与 src/main/ipc/updater.ts 保持一致）
 type UpdateEvent =
   | { status: 'checking' }
@@ -37,13 +49,14 @@ interface Window {
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>
-    update: (name?: string) => Promise<void>
+    update: (name?: string) => Promise<UpdateResult>
     cleanup: () => Promise<void>
     cache: () => Promise<{ size: number; files: number }>
     clearCache: () => Promise<void>
     listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>
     listUpdatable: () => Promise<{ name: string; oldVersion: string; newVersion: string }[]>
-    checkAria2: () => Promise<{ enabled: boolean }>
+    checkAria2: () => Promise<{ installed: boolean; enabled: boolean }>
+    setAria2Enabled: (enabled: boolean) => Promise<{ success: boolean }>
     openExternal: (url: string) => Promise<void>
     openPath: (path: string) => Promise<void>
     getConfig: (path?: string) => Promise<any>

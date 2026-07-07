@@ -99,9 +99,19 @@ export function execPowerShell(
   })
 }
 
+// ANSI color/escape code matcher. Built from char code 27 (ESC) to avoid
+// embedding a literal control character in the source (keeps linters happy).
+const ANSI_PATTERN = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g')
+
 // Strip ANSI escape codes and carriage returns from terminal output
 function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '')
+  return text.replace(ANSI_PATTERN, '').replace(/\r/g, '')
+}
+
+// Strip ANSI color codes only, KEEPING carriage returns (\r) so the renderer
+// can detect progress-bar overwrites (scoop emits \r when downloading files).
+function stripAnsiKeepCr(text: string): string {
+  return text.replace(ANSI_PATTERN, '')
 }
 
 /**
@@ -176,9 +186,11 @@ export function execScoop(
 
     const stdoutDecoder = iconv.decodeStream('gbk')
     stdoutDecoder.on('data', (text: string) => {
-      const cleaned = stripAnsi(text)
-      stdout += cleaned
-      onProgress?.(cleaned)
+      // Keep \r for the renderer so it can collapse progress-bar overwrites;
+      // strip \r from the accumulated buffer used for parsing (version, tables).
+      const withCr = stripAnsiKeepCr(text)
+      stdout += withCr.replace(/\r/g, '')
+      onProgress?.(withCr)
     })
     child.stdout?.pipe(stdoutDecoder)
 

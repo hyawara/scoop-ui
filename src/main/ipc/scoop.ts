@@ -35,6 +35,22 @@ function parseFixedWidthTable<T>(
   return result
 }
 
+/**
+ * 从 scoop list 输出中解析指定包的本地实际安装版本号。
+ * 用于更新后的版本双重校验，杜绝"伪成功"。
+ * @param listStdout `scoop list` 原始输出
+ * @param pkgName 目标包名（大小写不敏感匹配）
+ * @returns 本地实际版本号；未找到返回 null
+ */
+function parseInstalledVersion(listStdout: string, pkgName: string): string | null {
+  const rows = parseFixedWidthTable(listStdout, (fields) => {
+    if (fields.length < 2 || !fields[0] || !fields[1]) return null
+    return { name: fields[0].trim(), version: fields[1].trim() }
+  })
+  const row = rows.find((r) => r.name.toLowerCase() === pkgName.toLowerCase())
+  return row ? row.version : null
+}
+
 function buildInstallScript(scoopPath: string, globalPath: string): string {
   return `
 $env:SCOOP = '${scoopPath.replace(/'/g, "''")}'
@@ -188,17 +204,86 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // Update packages
+  // Update packages —— 带 close code 判定 + 版本双重校验，杜绝"伪成功"
   ipcMain.handle('scoop:update', async (event, name?: string) => {
+    if (name && !/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
+      throw new Error('Invalid package name')
+    }
     const args = name ? `update ${name}` : 'update --all'
     const win = BrowserWindow.fromWebContents(event.sender)
-    return execScoop(args, (data) => {
-        sendProgress(win, {
-          type: 'update',
-          package: name || '*',
-          message: data.trim(),
-        })
+    const pkgLabel = name || '*'
+
+    // 步骤1：执行更新，onProgress 保留 \r（不 trim），让前端识别进度条回车覆盖
+    const { stdout, stderr, code } = await execScoop(args, (data) => {
+      sendProgress(win, {
+        type: 'update',
+        package: pkgLabel,
+        message: data,
+      })
     })
+
+    // 抓取末尾3行非空日志作为错误摘要
+    const tailLog = (): string =>
+      (stderr || stdout)
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .slice(-3)
+        .join('\n')
+
+    // 进程退出码非 0 → 直接判定失败
+    if (code !== 0) {
+      return {
+        success: false,
+        package: pkgLabel,
+        code,
+        error: tailLog() || '更新进程异常退出',
+      }
+    }
+
+    // 步骤2：仅单包更新做版本双重校验（--all 无法逐一断言，按 code 通过）
+    if (name) {
+      try {
+        const [{ stdout: listStdout }, manifest] = await Promise.all([
+          execScoop('list'),
+          execScoopJSON<{ version?: string }>(`cat ${name}`),
+        ])
+        const localVersion = parseInstalledVersion(listStdout, name)
+        const expectedVersion = manifest?.version?.trim() || ''
+
+        // 两个版本都取到才断言；任一缺失则降级为通过但记录 verifyError
+        if (localVersion && expectedVersion) {
+          if (localVersion !== expectedVersion) {
+            return {
+              success: false,
+              package: pkgLabel,
+              code,
+              localVersion,
+              expectedVersion,
+              error: `版本校验失败：本地实际版本 ${localVersion}，期望最新版本 ${expectedVersion}`,
+            }
+          }
+          return { success: true, package: pkgLabel, localVersion, expectedVersion }
+        }
+
+        return {
+          success: true,
+          package: pkgLabel,
+          localVersion: localVersion || '',
+          expectedVersion,
+          verifyError: '未能获取完整版本信息，已跳过版本校验',
+        }
+      } catch (e) {
+        // 校验逻辑自身异常 → 不冤枉更新结果，降级为通过但记录
+        return {
+          success: true,
+          package: pkgLabel,
+          verifyError: `版本校验执行异常：${(e as Error).message}`,
+        }
+      }
+    }
+
+    return { success: true, package: pkgLabel }
   })
 
   // Cleanup old versions
@@ -414,27 +499,32 @@ export function registerScoopIPC(): void {
     return { success: true }
   })
 
-  // Check Aria2 status (check both config flag and actual binary presence)
+  // Check Aria2 status — returns both installed and enabled separately
   ipcMain.handle('scoop:checkAria2', async () => {
     // Check if aria2 is actually installed on the system via scoop list
     let installed = false
     try {
       const { stdout } = await execScoop('list aria2')
-      // scoop list aria2 outputs lines if installed; if not installed, output says "Couldn't find manifest for 'aria2'"
       installed = stdout.trim().length > 0
         && !stdout.toLowerCase().includes("couldn't find")
         && !stdout.toLowerCase().includes('is not installed')
         && !stdout.toLowerCase().includes('no results')
     } catch { /* not installed */ }
 
-    // Also check the scoop config flag
+    // Check the scoop config flag (aria2-enabled)
     let enabled = false
     try {
       const { stdout } = await execScoop('config aria2-enabled')
       enabled = stdout.trim().toLowerCase() === 'true'
     } catch { /* config not set */ }
 
-    return { enabled: installed || enabled }
+    return { installed, enabled }
+  })
+
+  // Toggle Aria2 enabled/disabled in scoop config
+  ipcMain.handle('scoop:setAria2Enabled', async (_event, enabled: boolean) => {
+    await execScoop(`config aria2-enabled ${enabled}`)
+    return { success: true }
   })
 
   // List buckets

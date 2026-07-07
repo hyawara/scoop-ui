@@ -50,8 +50,12 @@ async function handleUninstall() {
 }
 
 async function handleUpdate() {
-  await packagesStore.update(props.pkg.name)
-  message.success(`${props.pkg.name} 更新完成`)
+  try {
+    await packagesStore.update(props.pkg.name)
+    message.success(`${props.pkg.name} 更新完成`)
+  } catch (e) {
+    message.error((e as Error).message || `${props.pkg.name} 更新失败`)
+  }
 }
 
 const manifestJson = computed(() => {

@@ -199,13 +199,13 @@ async function handleInstallAria2() {
           <!-- Aria2 加速状态 + 闭环引导 -->
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <RocketOutline class="w-3.5 h-3.5 flex-shrink-0" :class="settingsStore.aria2Enabled ? 'text-emerald-400' : 'dark:text-zinc-500 text-zinc-500'" />
+              <RocketOutline class="w-3.5 h-3.5 flex-shrink-0" :class="settingsStore.aria2Installed ? 'text-emerald-400' : 'dark:text-zinc-500 text-zinc-500'" />
               <span class="text-[12px] font-medium dark:text-zinc-300 text-zinc-700">Aria2 加速</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <template v-if="settingsStore.aria2Enabled">
-                <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span class="text-[12px] font-medium text-emerald-400">多线程已开启</span>
+              <template v-if="settingsStore.aria2Installed">
+                <span class="inline-block w-2 h-2 rounded-full" :class="settingsStore.aria2Enabled ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'" />
+                <span class="text-[12px] font-medium" :class="settingsStore.aria2Enabled ? 'text-emerald-400' : 'text-zinc-500'">{{ settingsStore.aria2Enabled ? '多线程已开启' : '多线程已关闭' }}</span>
               </template>
               <NButton
                 v-else

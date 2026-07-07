@@ -30,6 +30,7 @@ import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
 import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import ProxyCard from '@/components/ProxyCard.vue'
+import Aria2Card from '@/components/Aria2Card.vue'
 
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
@@ -453,6 +454,27 @@ const activePkgLogLines = computed(() => {
   return p ? p.logs : []
 })
 
+// 当前日志包是否处于 error 态（更新失败/版本校验未通过）
+const activePkgErrored = computed(() => {
+  if (!activePkgLogName.value) return false
+  return pkgProgress.getProgress(activePkgLogName.value)?.phase === 'error'
+})
+
+// error 态的错误摘要（通常为末尾3行日志或版本校验失败信息），供弹窗顶部高亮
+const activePkgError = computed(() => {
+  if (!activePkgLogName.value) return ''
+  return pkgProgress.getProgress(activePkgLogName.value)?.error || ''
+})
+
+// 从日志弹窗内重试更新：清理旧 error 态后重新走更新流程
+async function retryUpdateFromLog() {
+  const name = activePkgLogName.value
+  if (!name) return
+  pkgProgress.clearProgress(name)
+  const pkg = packagesStore.updatable.find((p) => p.name === name) || { name }
+  await handleUpdate(pkg)
+}
+
 // 日志弹窗打开时，新日志自动滚底
 watch(() => activePkgLogLines.value.length, () => {
   if (showPkgLogModal.value) scrollLogToBottom()
@@ -626,21 +648,28 @@ async function updateSinglePackage(name: string): Promise<boolean> {
   // 调度器激活：queued → downloading（processing 起点）
   pkgProgress.startProcessing(name)
   try {
-    await window.scoopAPI.update(name)
+    // 后端带版本双重校验，返回结构化结果而非抛异常；伪成功已被拦截
+    const result = await window.scoopAPI.update(name)
+    if (!result.success) {
+      // 更新进程失败或版本校验未通过 → error 态常驻，带错误摘要供弹窗高亮
+      pkgProgress.failUpdate(name, result.error)
+      return false
+    }
     // 清除图标缓存，更新后重新提取（删除 key 以触发 fetchIcon 重新获取）
     await window.scoopAPI.clearAppIcon(name)
     const { [name]: _removed, ...restIcons } = iconMap.value
     iconMap.value = restIcons
-    // 零延迟闪变：立即原地改写版本号 + 抹除更新态
-    const newVer = getNewVersion(name)
+    // 零延迟闪变：优先用校验回传的实际版本号，回退到列表预期版本
+    const newVer = result.localVersion || getNewVersion(name)
     const pkgInList = packagesStore.installed.find((p) => p.name === name)
     if (pkgInList && newVer) pkgInList.version = newVer
     // 本地移除更新态（不等 reload）
     packagesStore.updatable = packagesStore.updatable.filter((p) => p.name !== name)
     pkgProgress.finishUpdate(name)
     return true
-  } catch {
-    pkgProgress.failUpdate(name)
+  } catch (e) {
+    // IPC 通道异常等兜底
+    pkgProgress.failUpdate(name, (e as Error)?.message)
     return false
   }
 }
@@ -1098,6 +1127,7 @@ function openBucketDrawer() {
     <div class="flex-1 w-full min-w-[360px] max-w-[460px] flex flex-col gap-5 h-full">
       <StorageEnvCard />
       <ProxyCard />
+      <Aria2Card />
     </div>
 
     <BucketDrawer v-model:show="showBucketDrawer" />
@@ -1124,6 +1154,17 @@ function openBucketDrawer() {
       <div class="flex items-center justify-between mb-3">
         <span class="text-[11px] font-normal dark:text-zinc-500 text-slate-500">共 {{ activePkgLogLines.length }} 行输出</span>
       </div>
+      <!-- error 态：顶部红色警告横幅，高亮错误摘要 -->
+      <div
+        v-if="activePkgErrored"
+        class="mb-3 px-3 py-2.5 rounded-lg border dark:border-red-500/30 border-red-400/40 dark:bg-red-500/[0.08] bg-red-50 flex items-start gap-2.5"
+      >
+        <span class="text-red-500 text-[13px] leading-none mt-0.5">⚠</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-[12px] font-medium dark:text-red-400 text-red-600">更新失败</div>
+          <div v-if="activePkgError" class="mt-1 text-[11px] font-mono dark:text-red-300/80 text-red-500/90 whitespace-pre-wrap break-all leading-relaxed">{{ activePkgError }}</div>
+        </div>
+      </div>
       <div
         ref="pkgLogContainerRef"
         class="dark:bg-[#090a0d] bg-gray-100 p-4 rounded-lg dark:text-emerald-400 text-emerald-700 font-mono text-[11px] h-96 overflow-y-auto custom-scrollbar border dark:border-white/[0.06] border-black/[0.08]"
@@ -1137,7 +1178,17 @@ function openBucketDrawer() {
         <span v-if="pkgProgress.isActive(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
       </div>
       <template #footer>
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <!-- error 态才提供重试按钮，重跑更新流程 -->
+          <NButton
+            v-if="activePkgErrored"
+            size="small"
+            type="primary"
+            @click="retryUpdateFromLog"
+            class="!rounded-md"
+          >
+            重试更新
+          </NButton>
           <NButton size="small" quaternary @click="showPkgLogModal = false" class="!rounded-md">关闭</NButton>
         </div>
       </template>

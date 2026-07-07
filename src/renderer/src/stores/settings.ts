@@ -10,7 +10,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const scoopEnv = ref<ScoopEnv>({ scoop: '', global: '' })
   const proxy = ref<ProxyConfig>({ enabled: false, address: '', type: 'http' })
   const diskSpace = ref<{ Used: number; Free: number; Name?: string } | null>(null)
+  const aria2Installed = ref(false)
   const aria2Enabled = ref(false)
+  const aria2Loading = ref(false)
   const loading = ref(false)
   const proxyLoading = ref(false)
 
@@ -79,9 +81,21 @@ export const useSettingsStore = defineStore('settings', () => {
   async function checkAria2() {
     try {
       const res = await window.scoopAPI.checkAria2()
+      aria2Installed.value = res.installed
       aria2Enabled.value = res.enabled
     } catch {
+      aria2Installed.value = false
       aria2Enabled.value = false
+    }
+  }
+
+  async function setAria2Enabled(enabled: boolean) {
+    aria2Loading.value = true
+    try {
+      await window.scoopAPI.setAria2Enabled(enabled)
+      aria2Enabled.value = enabled
+    } finally {
+      aria2Loading.value = false
     }
   }
 
@@ -124,8 +138,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    cacheInfo, scoopEnv, proxy, diskSpace, aria2Enabled, loading, proxyLoading,
+    cacheInfo, scoopEnv, proxy, diskSpace, aria2Installed, aria2Enabled, aria2Loading, loading, proxyLoading,
     bucketCount, installedCount, globalCount,
-    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, installAria2, migrateScoop, setProxyConfig, removeProxy, loadProxy, loadEcoStats
+    loadCacheInfo, clearCache, loadEnv, loadDiskSpace, checkAria2, setAria2Enabled, installAria2, migrateScoop, setProxyConfig, removeProxy, loadProxy, loadEcoStats
   }
 })

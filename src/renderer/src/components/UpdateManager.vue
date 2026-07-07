@@ -29,12 +29,14 @@ const dismissed = ref(false)
 const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
 
 function shouldShow(): BannerState {
+  // 设置窗口打开时，所有 App 自更新反馈就地闭环在设置面板内，
+  // 右下角 Toast 全程静默（含 downloading/downloaded），杜绝两处进度打架。
+  if (showSettings?.value) return 'hidden'
   const phase = updateInfo?.value?.phase
-  // 下载完成 → 常驻提示重启，不受 dismiss / 设置面板影响
+  // 下载完成 → 常驻提示重启，不受 dismiss 影响
   if (phase === 'downloaded') return 'downloaded'
   if (phase === 'downloading') return 'updating'
   if (dismissed.value) return 'hidden'
-  if (showSettings?.value) return 'hidden'
   // 用户在设置页主动检查更新时，抑制"发现新版本"toast，反馈就地闭环在设置窗口
   if (suppressUpdateToast?.value) return 'hidden'
   if (updateInfo?.value?.hasUpdate) return 'notified'
