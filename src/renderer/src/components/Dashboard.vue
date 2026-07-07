@@ -987,10 +987,10 @@ function openBucketDrawer() {
                       <button
                         :disabled="packagesStore.updatable.length === 0 || updatingAll || batchUpdating"
                         @click="handleUpdateAllConfirm"
-                        class="flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-md transition-colors select-none"
+                        class="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-md border transition-all select-none"
                         :class="packagesStore.updatable.length === 0 || batchUpdating
-                          ? 'dark:text-zinc-500 text-gray-500 cursor-not-allowed'
-                          : 'dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-white/[0.04] text-gray-600 hover:text-gray-800 hover:bg-black/[0.03] cursor-pointer'"
+                          ? 'dark:border-white/[0.04] border-black/[0.06] bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
+                          : 'border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 cursor-pointer'"
                       >
                         <template v-if="updatingAll">
                           <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-current rounded-full animate-spin" />
