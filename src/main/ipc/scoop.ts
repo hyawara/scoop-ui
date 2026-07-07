@@ -312,32 +312,34 @@ export function registerScoopIPC(): void {
   })
 
   // Cleanup old versions
+  // ── 旧版本测量脚本（git-bash du 直接取目录大小，不递归求和） ──
+  const MEASURE_OLD_VERSIONS_SCRIPT = `
+    APPS_DIR="\${SCOOP:-\$HOME/scoop}/apps"
+    TOTAL=0
+    for app in "$APPS_DIR"/*/; do
+      [ -d "$app" ] || continue
+      CURRENT="\${app}current"
+      if [ -L "$CURRENT" ] && [ -d "$CURRENT" ]; then
+        TARGET=$(realpath "$CURRENT" 2>/dev/null)
+        for ver in "$app"*/; do
+          VER=$(basename "$ver")
+          [ "$VER" = "current" ] && continue
+          [ "$(realpath "$ver" 2>/dev/null)" = "$TARGET" ] && continue
+          SIZE=$(du -sb "$ver" 2>/dev/null | cut -f1)
+          TOTAL=$((TOTAL + (SIZE)))
+        done
+      fi
+    done
+    echo $TOTAL
+  `
+
   ipcMain.handle('scoop:cleanup', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
 
-    // 先测量清理前的旧版本大小
     let beforeBytes = 0
     try {
-      const { stdout: sizeBefore } = await execPowerShell(`
-        $appsDir = Join-Path (scoop config root_path) "apps"
-        $total = 0
-        Get-ChildItem $appsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-          $appDir = $_.FullName
-          $current = Join-Path $appDir "current"
-          if (Test-Path $current) {
-            $target = (Get-Item $current -ErrorAction SilentlyContinue).Target
-            if ($target) {
-              Get-ChildItem $appDir -Directory | Where-Object {
-                $_.FullName -ne $target -and $_.FullName -ne $current
-              } | ForEach-Object {
-                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $total += $_.Length }
-              }
-            }
-          }
-        }
-        $total
-      `)
-      beforeBytes = parseInt(sizeBefore.trim()) || 0
+      const { stdout } = await execGitBash(MEASURE_OLD_VERSIONS_SCRIPT)
+      beforeBytes = parseInt(stdout.trim()) || 0
     } catch { /* ignore */ }
 
     await execScoop('cleanup --all', (data) => {
@@ -348,29 +350,10 @@ export function registerScoopIPC(): void {
       })
     })
 
-    // 测量清理后的旧版本大小
     let afterBytes = 0
     try {
-      const { stdout: sizeAfter } = await execPowerShell(`
-        $appsDir = Join-Path (scoop config root_path) "apps"
-        $total = 0
-        Get-ChildItem $appsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-          $appDir = $_.FullName
-          $current = Join-Path $appDir "current"
-          if (Test-Path $current) {
-            $target = (Get-Item $current -ErrorAction SilentlyContinue).Target
-            if ($target) {
-              Get-ChildItem $appDir -Directory | Where-Object {
-                $_.FullName -ne $target -and $_.FullName -ne $current
-              } | ForEach-Object {
-                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $total += $_.Length }
-              }
-            }
-          }
-        }
-        $total
-      `)
-      afterBytes = parseInt(sizeAfter.trim()) || 0
+      const { stdout } = await execGitBash(MEASURE_OLD_VERSIONS_SCRIPT)
+      afterBytes = parseInt(stdout.trim()) || 0
     } catch { /* ignore */ }
 
     const released = Math.max(0, beforeBytes - afterBytes)
@@ -380,25 +363,7 @@ export function registerScoopIPC(): void {
   // Measure remaining old versions size
   ipcMain.handle('scoop:measureOldVersions', async () => {
     try {
-      const { stdout } = await execPowerShell(`
-        $appsDir = Join-Path (scoop config root_path) "apps"
-        $total = 0
-        Get-ChildItem $appsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-          $appDir = $_.FullName
-          $current = Join-Path $appDir "current"
-          if (Test-Path $current) {
-            $target = (Get-Item $current -ErrorAction SilentlyContinue).Target
-            if ($target) {
-              Get-ChildItem $appDir -Directory | Where-Object {
-                $_.FullName -ne $target -and $_.FullName -ne $current
-              } | ForEach-Object {
-                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $total += $_.Length }
-              }
-            }
-          }
-        }
-        $total
-      `)
+      const { stdout } = await execGitBash(MEASURE_OLD_VERSIONS_SCRIPT)
       const bytes = parseInt(stdout.trim()) || 0
       return { bytes }
     } catch {
