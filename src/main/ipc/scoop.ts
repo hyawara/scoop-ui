@@ -314,13 +314,96 @@ export function registerScoopIPC(): void {
   // Cleanup old versions
   ipcMain.handle('scoop:cleanup', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    return execScoop('cleanup --all', (data) => {
-        sendProgress(win, {
-          type: 'message',
-          package: 'scoop',
-          message: data.trim(),
-        })
+
+    // 先测量清理前的旧版本大小
+    let beforeBytes = 0
+    try {
+      const { stdout: sizeBefore } = await execPowerShell(`
+        $appsDir = Join-Path (scoop config root_path) "apps"
+        $total = 0
+        Get-ChildItem $appsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+          $appDir = $_.FullName
+          $current = Join-Path $appDir "current"
+          if (Test-Path $current) {
+            $target = (Get-Item $current -ErrorAction SilentlyContinue).Target
+            if ($target) {
+              Get-ChildItem $appDir -Directory | Where-Object {
+                $_.FullName -ne $target -and $_.FullName -ne $current
+              } | ForEach-Object {
+                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $total += $_.Length }
+              }
+            }
+          }
+        }
+        $total
+      `)
+      beforeBytes = parseInt(sizeBefore.trim()) || 0
+    } catch { /* ignore */ }
+
+    await execScoop('cleanup --all', (data) => {
+      sendProgress(win, {
+        type: 'message',
+        package: 'scoop',
+        message: data.trim(),
+      })
     })
+
+    // 测量清理后的旧版本大小
+    let afterBytes = 0
+    try {
+      const { stdout: sizeAfter } = await execPowerShell(`
+        $appsDir = Join-Path (scoop config root_path) "apps"
+        $total = 0
+        Get-ChildItem $appsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+          $appDir = $_.FullName
+          $current = Join-Path $appDir "current"
+          if (Test-Path $current) {
+            $target = (Get-Item $current -ErrorAction SilentlyContinue).Target
+            if ($target) {
+              Get-ChildItem $appDir -Directory | Where-Object {
+                $_.FullName -ne $target -and $_.FullName -ne $current
+              } | ForEach-Object {
+                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $total += $_.Length }
+              }
+            }
+          }
+        }
+        $total
+      `)
+      afterBytes = parseInt(sizeAfter.trim()) || 0
+    } catch { /* ignore */ }
+
+    const released = Math.max(0, beforeBytes - afterBytes)
+    return { released }
+  })
+
+  // Measure remaining old versions size
+  ipcMain.handle('scoop:measureOldVersions', async () => {
+    try {
+      const { stdout } = await execPowerShell(`
+        $appsDir = Join-Path (scoop config root_path) "apps"
+        $total = 0
+        Get-ChildItem $appsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+          $appDir = $_.FullName
+          $current = Join-Path $appDir "current"
+          if (Test-Path $current) {
+            $target = (Get-Item $current -ErrorAction SilentlyContinue).Target
+            if ($target) {
+              Get-ChildItem $appDir -Directory | Where-Object {
+                $_.FullName -ne $target -and $_.FullName -ne $current
+              } | ForEach-Object {
+                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $total += $_.Length }
+              }
+            }
+          }
+        }
+        $total
+      `)
+      const bytes = parseInt(stdout.trim()) || 0
+      return { bytes }
+    } catch {
+      return { bytes: 0 }
+    }
   })
 
   // Get cache info

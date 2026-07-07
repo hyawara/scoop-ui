@@ -387,13 +387,8 @@ async function handleClearCache() {
 // ── Cleanup Actions ──
 async function loadOldVersionsSize() {
   try {
-    const disk = settingsStore.diskSpace
-    if (!disk) {
-      oldVersionsSize.value = 0
-      return
-    }
-    const used = disk.Used
-    oldVersionsSize.value = Math.max(0, Math.round(used * 0.15))
+    const result = await window.scoopAPI.measureOldVersions()
+    oldVersionsSize.value = result.bytes
   } catch {
     oldVersionsSize.value = 0
   }
@@ -402,13 +397,18 @@ async function loadOldVersionsSize() {
 async function handleCleanup() {
   cleanupLoading.value = true
   try {
-    await window.scoopAPI.cleanup()
+    const result = await window.scoopAPI.cleanup()
     await Promise.all([
       settingsStore.loadDiskSpace(),
       settingsStore.loadCacheInfo(),
     ])
     await loadOldVersionsSize()
-    message.success('旧版本已清理完成')
+    const released = result?.released
+    if (released && released > 0) {
+      message.success(`已释放 ${formatBytes(released)} 磁盘空间`)
+    } else {
+      message.success('旧版本已清理完成')
+    }
   } catch {
     message.error('清理旧版本失败')
   } finally {

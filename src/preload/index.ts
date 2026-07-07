@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
 
   exportApps: () => ipcRenderer.invoke('scoop:export'),
   importApps: () => ipcRenderer.invoke('scoop:import'),
+  measureOldVersions: () => ipcRenderer.invoke('scoop:measureOldVersions'),
 
   openExternal: (url: string) => ipcRenderer.invoke('scoop:openExternal', url),
   openPath: (path: string) => ipcRenderer.invoke('scoop:openPath', path),

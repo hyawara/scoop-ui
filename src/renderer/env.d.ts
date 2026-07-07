@@ -50,7 +50,7 @@ interface Window {
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>
     update: (name?: string) => Promise<UpdateResult>
-    cleanup: () => Promise<void>
+    cleanup: () => Promise<{ released: number }>
     cache: () => Promise<{ size: number; unit: string; files: number }>
     clearCache: () => Promise<void>
     listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>
@@ -84,6 +84,7 @@ interface Window {
     setScoopConfig: (key: string, value: string) => Promise<void>
     exportApps: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>
     importApps: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>
+    measureOldVersions: () => Promise<{ bytes: number }>
 
     getAppIcon: (packageName: string) => Promise<{ icon: string | null }>
     clearAppIcon: (packageName: string) => Promise<{ success: boolean }>
