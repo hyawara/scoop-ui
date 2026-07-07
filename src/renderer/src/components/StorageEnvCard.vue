@@ -273,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, inject, type Ref } from 'vue'
+import { ref, computed, onMounted, watch, inject, type Ref } from 'vue'
 import {
   NButton,
   NProgress,
@@ -284,10 +284,12 @@ import {
   useMessage,
 } from 'naive-ui'
 import { useSettingsStore } from '@/stores/settings'
+import { usePackagesStore } from '@/stores/packages'
 
 const isDark = inject<Ref<boolean>>('isDark')
 const message = useMessage()
 const settingsStore = useSettingsStore()
+const packagesStore = usePackagesStore()
 
 // ── Proxy ──
 const proxyEnabled = ref(false)
@@ -536,6 +538,19 @@ onMounted(async () => {
   }
 
   aria2EnabledLocal.value = settingsStore.aria2Enabled
+})
+
+// ── 自动同步：安装/更新/卸载后刷新右侧数据卡片 ──
+let syncTimer: ReturnType<typeof setTimeout> | null = null
+watch([() => packagesStore.installed.length, () => packagesStore.updatable.length], () => {
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = setTimeout(async () => {
+    await Promise.all([
+      settingsStore.loadDiskSpace(),
+      settingsStore.loadCacheInfo(),
+    ])
+    await loadOldVersionsSize()
+  }, 1500)
 })
 </script>
 
