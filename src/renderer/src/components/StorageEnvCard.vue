@@ -522,9 +522,8 @@ onMounted(async () => {
     settingsStore.loadCacheInfo(),
     settingsStore.checkAria2(),
     settingsStore.loadEcoStats(),
+    loadOldVersionsSize(),
   ])
-
-  await loadOldVersionsSize()
 
   if (settingsStore.proxy?.enabled) {
     proxyEnabled.value = true

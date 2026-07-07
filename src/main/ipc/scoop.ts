@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
 import { join } from 'path'
-import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, statSync, readlinkSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, readlinkSync, promises as fsp } from 'fs'
 import { spawn } from 'child_process'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
@@ -311,22 +311,21 @@ export function registerScoopIPC(): void {
     return { success: true, package: pkgLabel }
   })
 
-  // ── 旧版本测量：纯 Node.js ──
-  function getDirSize(dirPath: string): number {
+  // ── 旧版本测量：纯 Node.js（异步并发） ──
+  async function getDirSize(dirPath: string): Promise<number> {
     let total = 0
     try {
-      const entries = readdirSync(dirPath, { withFileTypes: true })
-      for (const entry of entries) {
+      const entries = await fsp.readdir(dirPath, { withFileTypes: true })
+      const sizes = await Promise.all(entries.map(async (entry) => {
         const fullPath = join(dirPath, entry.name)
         try {
-          if (entry.isDirectory()) {
-            total += getDirSize(fullPath)
-          } else if (entry.isFile()) {
-            total += statSync(fullPath).size
-          }
-        } catch { /* skip unreadable */ }
-      }
-    } catch { /* skip unreadable */ }
+          if (entry.isDirectory()) return await getDirSize(fullPath)
+          if (entry.isFile()) return (await fsp.stat(fullPath)).size
+        } catch { /* skip */ }
+        return 0
+      }))
+      total = sizes.reduce((a, b) => a + b, 0)
+    } catch { /* skip */ }
     return total
   }
 
@@ -336,9 +335,9 @@ export function registerScoopIPC(): void {
       const appsDir = join(scoopRoot, 'apps')
       if (!existsSync(appsDir)) return 0
 
-      let total = 0
-      for (const app of readdirSync(appsDir, { withFileTypes: true })) {
-        if (!app.isDirectory()) continue
+      const apps = await fsp.readdir(appsDir, { withFileTypes: true })
+      const appResults = await Promise.all(apps.map(async (app) => {
+        if (!app.isDirectory()) return 0
         const appDir = join(appsDir, app.name)
         const currentPath = join(appDir, 'current')
 
@@ -348,14 +347,16 @@ export function registerScoopIPC(): void {
           currentTarget = join(appDir, currentTarget)
         } catch { /* not a junction */ }
 
-        for (const ver of readdirSync(appDir, { withFileTypes: true })) {
-          if (!ver.isDirectory() || ver.name === 'current') continue
+        const versions = await fsp.readdir(appDir, { withFileTypes: true })
+        const verResults = await Promise.all(versions.map(async (ver) => {
+          if (!ver.isDirectory() || ver.name === 'current') return 0
           const verPath = join(appDir, ver.name)
-          if (currentTarget && verPath.toLowerCase() === currentTarget.toLowerCase()) continue
-          total += getDirSize(verPath)
-        }
-      }
-      return total
+          if (currentTarget && verPath.toLowerCase() === currentTarget.toLowerCase()) return 0
+          return await getDirSize(verPath)
+        }))
+        return verResults.reduce((a, b) => a + b, 0)
+      }))
+      return appResults.reduce((a, b) => a + b, 0)
     } catch {
       return 0
     }
