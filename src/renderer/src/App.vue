@@ -536,10 +536,8 @@ function openSettings() {
               />
 
               <div class="h-[calc(100vh-70px)] overflow-hidden w-full px-6 py-4 relative">
-                <Transition name="fade" mode="out-in">
-                  <Dashboard v-if="!committedSearch.trim()" />
-                  <SearchPanel v-else :query="committedSearch" />
-                </Transition>
+                <Dashboard v-show="!committedSearch.trim()" />
+                <SearchPanel v-show="!!committedSearch.trim()" :query="committedSearch" />
               </div>
             </template>
 
@@ -563,12 +561,4 @@ function openSettings() {
 </template>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
 </style>
