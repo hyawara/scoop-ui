@@ -32,6 +32,7 @@ export interface ProgressData {
 
 export interface CacheInfo {
   size: number
+  unit: string
   files: number
 }
 

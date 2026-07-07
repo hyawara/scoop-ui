@@ -3,6 +3,7 @@ import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/
 import { homedir } from 'os'
 import { join } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from 'fs'
+import { spawn } from 'child_process'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
@@ -324,19 +325,20 @@ export function registerScoopIPC(): void {
 
   // Get cache info
   ipcMain.handle('scoop:cache', async () => {
-    const { stdout } = await execScoop('cache show', undefined, undefined, homedir())
-    // 直接解析 "Total: X file(s), Y MB" 汇总行
-    const totalMatch = stdout.match(/Total:\s*(\d+)\s*files?,\s*([\d.]+)\s*(KB|MB|GB|B)/i)
-    if (totalMatch) {
-      const files = parseInt(totalMatch[1])
-      let size = parseFloat(totalMatch[2])
-      const unit = totalMatch[3].toUpperCase()
-      if (unit === 'KB') size *= 1024
-      else if (unit === 'MB') size *= 1024 * 1024
-      else if (unit === 'GB') size *= 1024 * 1024 * 1024
-      return { size: Math.round(size / (1024 * 1024) * 100) / 100, files }
+    try {
+      const { stdout } = await execScoop('cache', undefined, undefined, homedir())
+      // 解析 "Total: X files, Y MB" 汇总行
+      const totalMatch = stdout.match(/Total:\s*(\d+)\s*files?,\s*([\d.]+)\s*(MB|GB)/i)
+      if (totalMatch) {
+        const files = parseInt(totalMatch[1])
+        const size = parseFloat(totalMatch[2])
+        const unit = totalMatch[3].toUpperCase()
+        return { size, unit, files }
+      }
+      return { size: 0, unit: 'MB', files: 0 }
+    } catch {
+      return { size: 0, unit: 'MB', files: 0 }
     }
-    return { size: 0, files: 0 }
   })
 
   // Clear cache
@@ -869,5 +871,112 @@ export function registerScoopIPC(): void {
         ? `${failed.length} 个 bucket 换源失败：${failed.map((f) => f.bucket).join(', ')}`
         : undefined,
     }
+  })
+
+  // ============================================
+  // 内嵌命令执行器 — 允许用户在应用内直接执行后置配置命令
+  // 安全机制：白名单 + 危险命令拦截
+  // ============================================
+
+  // 安全白名单：只允许执行Scoop相关的辅助命令
+  const ALLOWED_COMMAND_PATTERNS = [
+    /^scoop\s+(reset|uninstall|install|update|checkup|cleanup|config|bucket|list|status|search|info|cat|home|prefix|which|shim|export|import|hold|unhold|hold-check|virustotal|help)/i,
+    /^(mysqld|nginx|redis-server|redis-cli|node|npm|yarn|pnpm|python|pip|java|javac|gradle|maven|mvn)\s+/i,
+    /^shim\s+/i,
+    /^netsh\s+/i,
+    /^Set-ExecutionPolicy\s+/i,
+  ]
+
+  // 危险命令黑名单
+  const DANGEROUS_PATTERNS = [
+    /rm\s+-rf/i,
+    /rmdir\s+\/s/i,
+    /del\s+\/s/i,
+    /format\s+[a-z]/i,
+    /shutdown/i,
+    /reboot/i,
+    /Remove-Item\s+.*-Recurse.*-Force/i,
+    /Clear-Content/i,
+  ]
+
+  function isCommandSafe(command: string): { safe: boolean; reason?: string } {
+    // 检查危险命令黑名单
+    for (const pattern of DANGEROUS_PATTERNS) {
+      if (pattern.test(command)) {
+        return { safe: false, reason: `检测到危险命令: ${command}` }
+      }
+    }
+
+    // 检查白名单
+    const isAllowed = ALLOWED_COMMAND_PATTERNS.some(pattern => pattern.test(command.trim()))
+    if (!isAllowed) {
+      return { safe: false, reason: `命令不在白名单内: ${command}` }
+    }
+
+    // 限制命令长度
+    if (command.length > 500) {
+      return { safe: false, reason: '命令过长' }
+    }
+
+    return { safe: true }
+  }
+
+  // 注册executeCommand处理器
+  ipcMain.handle('scoop:executeCommand', async (event, command: string) => {
+    // 安全校验
+    const validation = isCommandSafe(command)
+    if (!validation.safe) {
+      throw new Error(validation.reason || '命令安全校验失败')
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+
+    return new Promise((resolve, reject) => {
+      // 使用PowerShell执行命令（与项目现有模式一致）
+      const child = spawn('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        command
+      ], {
+        env: process.env,
+        shell: false,
+      })
+
+      child.stdout.on('data', (data: Buffer) => {
+        const chunk = data.toString('utf-8')
+        // 实时推送日志到renderer
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('scoop:executeCommand:log', {
+            command,
+            type: 'stdout',
+            content: chunk,
+          })
+        }
+      })
+
+      child.stderr.on('data', (data: Buffer) => {
+        const chunk = data.toString('utf-8')
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('scoop:executeCommand:log', {
+            command,
+            type: 'stderr',
+            content: chunk,
+          })
+        }
+      })
+
+      child.on('close', (code: number | null) => {
+        if (code === 0) {
+          resolve({ success: true })
+        } else {
+          reject(new Error(`命令执行失败，退出码: ${code}`))
+        }
+      })
+
+      child.on('error', (err: Error) => {
+        reject(err)
+      })
+    })
   })
 }

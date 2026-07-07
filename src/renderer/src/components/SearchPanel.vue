@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { watch, computed, ref, nextTick } from 'vue'
-import { NScrollbar, NEmpty, NSkeleton, NModal, NButton, useMessage } from 'naive-ui'
+import { NScrollbar, NEmpty, NSkeleton, NButton, useMessage } from 'naive-ui'
 import { SearchOutline, CloudDownloadOutline } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import AppDetail from '@/components/AppDetail.vue'
 import AppListItem from '@/components/AppListItem.vue'
+import TerminalDrawer from '@/components/TerminalDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 
 const props = defineProps<{ query: string }>()
@@ -70,6 +71,12 @@ const activePkgLogLines = computed(() => {
 // 日志弹窗打开时，新日志自动滚底
 watch(() => activePkgLogLines.value.length, () => {
   if (showPkgLogModal.value) scrollLogToBottom()
+})
+
+// 当前日志包的进度数据（供TerminalDrawer使用）
+const currentPkgProgress = computed(() => {
+  if (!activePkgLogName.value) return null
+  return pkgProgress.getProgress(activePkgLogName.value) || null
 })
 
 async function quickInstall(pkgName: string) {
@@ -171,36 +178,11 @@ const skeletonItems = Array.from({ length: 5 })
       </div>
     </div>
 
-    <!-- 单包终端日志弹窗 -->
-    <NModal
+    <!-- 单包终端日志抽屉 -->
+    <TerminalDrawer
       v-model:show="showPkgLogModal"
-      preset="card"
-      :title="`${activePkgLogName} 执行日志`"
-      style="width: 640px"
-      :closable="true"
-      :mask-closable="true"
-      :close-on-esc="true"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-xs text-slate-500">共 {{ activePkgLogLines.length }} 行输出</span>
-      </div>
-      <div
-        ref="pkgLogContainerRef"
-        class="dark:bg-[#090a0d] bg-gray-100 p-4 rounded-lg dark:text-emerald-400 text-emerald-700 font-mono text-xs h-96 overflow-y-auto custom-scrollbar border dark:border-white/[0.06] border-black/[0.08]"
-      >
-        <div v-if="activePkgLogLines.length === 0" class="text-slate-600 text-center py-8">
-          暂无日志输出
-        </div>
-        <div v-for="(line, i) in activePkgLogLines" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
-          <span class="text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
-        </div>
-        <span v-if="installingSet.has(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
-      </div>
-      <template #footer>
-        <div class="flex justify-end">
-          <NButton size="small" quaternary @click="showPkgLogModal = false" class="!rounded-md">关闭</NButton>
-        </div>
-      </template>
-    </NModal>
+      :progress="currentPkgProgress"
+      :package-name="activePkgLogName"
+    />
   </div>
 </template>

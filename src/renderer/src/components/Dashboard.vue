@@ -33,6 +33,7 @@ import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
 import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
+import TerminalDrawer from '@/components/TerminalDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 import type { DiscoverApp, AppVersion } from '@/types'
 
@@ -476,6 +477,12 @@ async function retryUpdateFromLog() {
 // 日志弹窗打开时，新日志自动滚底
 watch(() => activePkgLogLines.value.length, () => {
   if (showPkgLogModal.value) scrollLogToBottom()
+})
+
+// 当前日志包的进度数据（供TerminalDrawer使用）
+const currentPkgProgress = computed(() => {
+  if (!activePkgLogName.value) return null
+  return pkgProgress.getProgress(activePkgLogName.value) || null
 })
 
 // ═══ 热门推荐（空状态用） ═══
@@ -1137,58 +1144,12 @@ function openBucketDrawer() {
       @install="handleDiscoverInstall"
     />
 
-    <!-- 单包终端日志弹窗 -->
-    <NModal
+    <!-- 单包终端日志抽屉 -->
+    <TerminalDrawer
       v-model:show="showPkgLogModal"
-      preset="card"
-      :title="`${activePkgLogName} 执行日志`"
-      style="width: 640px"
-      :closable="true"
-      :mask-closable="true"
-      :close-on-esc="true"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-[11px] font-normal dark:text-zinc-500 text-slate-500">共 {{ activePkgLogLines.length }} 行输出</span>
-      </div>
-      <!-- error 态：顶部红色警告横幅，高亮错误摘要 -->
-      <div
-        v-if="activePkgErrored"
-        class="mb-3 px-3 py-2.5 rounded-lg border dark:border-red-500/30 border-red-400/40 dark:bg-red-500/[0.08] bg-red-50 flex items-start gap-2.5"
-      >
-        <span class="text-red-500 text-[13px] leading-none mt-0.5">⚠</span>
-        <div class="flex-1 min-w-0">
-          <div class="text-[12px] font-medium dark:text-red-400 text-red-600">更新失败</div>
-          <div v-if="activePkgError" class="mt-1 text-[11px] font-mono dark:text-red-300/80 text-red-500/90 whitespace-pre-wrap break-all leading-relaxed">{{ activePkgError }}</div>
-        </div>
-      </div>
-      <div
-        ref="pkgLogContainerRef"
-        class="dark:bg-[#090a0d] bg-gray-100 p-4 rounded-lg dark:text-emerald-400 text-emerald-700 font-mono text-[11px] h-96 overflow-y-auto custom-scrollbar border dark:border-white/[0.06] border-black/[0.08]"
-      >
-        <div v-if="activePkgLogLines.length === 0" class="dark:text-zinc-600 text-slate-600 text-center py-8">
-          暂无日志输出
-        </div>
-        <div v-for="(line, i) in activePkgLogLines" :key="i" class="whitespace-pre-wrap break-all leading-relaxed">
-          <span class="dark:text-zinc-600 text-slate-600 mr-2 select-none">{{ String(i + 1).padStart(3, '0') }}</span>{{ line }}
-        </div>
-        <span v-if="pkgProgress.isActive(activePkgLogName)" class="inline-block w-2 h-4 bg-emerald-400/70 animate-pulse ml-1" />
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <!-- error 态才提供重试按钮，重跑更新流程 -->
-          <NButton
-            v-if="activePkgErrored"
-            size="small"
-            type="primary"
-            @click="retryUpdateFromLog"
-            class="!rounded-md"
-          >
-            重试更新
-          </NButton>
-          <NButton size="small" quaternary @click="showPkgLogModal = false" class="!rounded-md">关闭</NButton>
-        </div>
-      </template>
-    </NModal>
+      :progress="currentPkgProgress"
+      :package-name="activePkgLogName"
+    />
   </div>
 </template>
 

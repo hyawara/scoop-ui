@@ -55,6 +55,16 @@ contextBridge.exposeInMainWorld('scoopAPI', {
     ipcRenderer.removeAllListeners('scoop:log')
   },
 
+  // 内嵌命令执行器 API
+  executeCommand: (command: string) => ipcRenderer.invoke('scoop:executeCommand', command),
+  onExecuteCommandLog: (callback: (data: { command: string; type: 'stdout' | 'stderr'; content: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { command: string; type: 'stdout' | 'stderr'; content: string }) => callback(data)
+    ipcRenderer.on('scoop:executeCommand:log', handler)
+    return () => {
+      ipcRenderer.removeListener('scoop:executeCommand:log', handler)
+    }
+  },
+
   getConfig: (path?: string) => ipcRenderer.invoke('config:get', path),
   setConfig: (path: string, value: any) => ipcRenderer.invoke('config:set', path, value),
   getAllConfig: () => ipcRenderer.invoke('config:getAll'),

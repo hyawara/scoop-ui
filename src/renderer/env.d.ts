@@ -51,7 +51,7 @@ interface Window {
     uninstall: (name: string, global?: boolean) => Promise<void>
     update: (name?: string) => Promise<UpdateResult>
     cleanup: () => Promise<void>
-    cache: () => Promise<{ size: number; files: number }>
+    cache: () => Promise<{ size: number; unit: string; files: number }>
     clearCache: () => Promise<void>
     listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>
     listUpdatable: () => Promise<{ name: string; oldVersion: string; newVersion: string }[]>
@@ -90,6 +90,11 @@ interface Window {
     removeProgressListener: () => void
     onLog: (callback: (data: ProgressData) => void) => void
     removeLogListener: () => void
+
+    // 内嵌命令执行器 API
+    executeCommand: (command: string) => Promise<{ success: boolean }>
+    onExecuteCommandLog: (callback: (data: { command: string; type: 'stdout' | 'stderr'; content: string }) => void) => () => void
+
     windowControl: {
       minimize: () => void
       maximize: () => void

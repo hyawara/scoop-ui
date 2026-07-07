@@ -1,51 +1,167 @@
 <template>
   <NCard class="glass-card" content-class="flex flex-col gap-4 p-5">
-    <!-- ========== Block 1: Micro Stat Badges ========== -->
-    <div class="grid grid-cols-3 gap-2">
-      <!-- Buckets -->
+    <!-- ========== Block 1: Interactive Metric Cards ========== -->
+    <!-- Buckets + Apps 在同一行 -->
+    <div class="grid grid-cols-2 gap-2">
+      <!-- Buckets - Hover 显示同步按钮 -->
       <div
-        class="stat-badge flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
+        class="group stat-badge relative flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
         :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
       >
-        <span class="font-mono text-[15px] font-bold leading-none tabular-nums" :class="isDark ? 'text-cyan-400' : 'text-cyan-600'">
+        <span
+          class="font-mono text-[15px] font-bold leading-none tabular-nums"
+          :class="isDark ? 'text-cyan-400' : 'text-cyan-600'"
+          :style="{ fontFamily: 'var(--app-font-family)' }"
+        >
           {{ settingsStore.bucketCount ?? '-' }}
         </span>
-        <span class="text-[10px] leading-tight font-normal tracking-wide text-center" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
+        <span
+          class="text-[10px] leading-tight font-normal tracking-wide text-center"
+          :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
+          :style="{ fontFamily: 'var(--app-font-family)' }"
+        >
           Buckets 软件源
         </span>
+        <!-- Hover 操作按钮：同步 -->
+        <button
+          class="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110"
+          :class="isDark ? 'bg-zinc-800 hover:bg-cyan-500/20 text-zinc-400 hover:text-cyan-400' : 'bg-zinc-200 hover:bg-cyan-50 text-zinc-500 hover:text-cyan-600'"
+          :disabled="syncingBuckets"
+          @click.stop="handleSyncBuckets"
+        >
+          <svg v-if="!syncingBuckets" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+            <path d="M16 16h5v5"/>
+          </svg>
+          <svg v-else class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+        </button>
       </div>
 
-      <!-- Apps -->
+      <!-- Apps - Hover 显示检查更新按钮 -->
       <div
-        class="stat-badge flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
+        class="group stat-badge relative flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
         :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
       >
-        <span class="font-mono text-[15px] font-bold leading-none tabular-nums" :class="isDark ? 'text-emerald-400' : 'text-emerald-600'">
+        <span
+          class="font-mono text-[15px] font-bold leading-none tabular-nums"
+          :class="isDark ? 'text-emerald-400' : 'text-emerald-600'"
+          :style="{ fontFamily: 'var(--app-font-family)' }"
+        >
           {{ settingsStore.installedCount ?? '-' }}
         </span>
-        <span class="text-[10px] leading-tight font-normal tracking-wide text-center" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
+        <span
+          class="text-[10px] leading-tight font-normal tracking-wide text-center"
+          :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
+          :style="{ fontFamily: 'var(--app-font-family)' }"
+        >
           Apps 已安装
         </span>
+        <!-- Hover 操作按钮：检查更新 -->
+        <button
+          class="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110"
+          :class="isDark ? 'bg-zinc-800 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400' : 'bg-zinc-200 hover:bg-emerald-50 text-zinc-500 hover:text-emerald-600'"
+          :disabled="checkingUpdates"
+          @click.stop="handleCheckUpdates"
+        >
+          <svg v-if="!checkingUpdates" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.3-4.3"/>
+          </svg>
+          <svg v-else class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+        </button>
       </div>
+    </div>
 
-      <!-- Cache -->
-      <div
-        class="stat-badge flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
-        :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
-      >
-        <div class="flex items-baseline gap-1 min-w-0 flex-wrap justify-center">
-          <span class="font-mono text-[15px] font-bold leading-none tabular-nums" :class="isDark ? 'text-violet-400' : 'text-violet-600'">
+    <!-- Cache + 磁盘空间 组合 -->
+    <div
+      class="stat-badge flex flex-col gap-2 rounded-xl px-4 py-3 min-w-0 transition-all duration-200"
+      :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
+    >
+      <!-- Cache 行 -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span
+            class="font-mono text-[15px] font-bold leading-none tabular-nums"
+            :class="isDark ? 'text-violet-400' : 'text-violet-600'"
+            :style="{ fontFamily: 'var(--app-font-family)' }"
+          >
             {{ cacheSizeDisplay }}
           </span>
+          <span class="text-zinc-500">/</span>
           <span
-            v-if="cacheFilesDisplay"
-            class="text-xs font-sans font-normal leading-none whitespace-nowrap"
+            class="font-mono text-[12px] font-normal leading-none whitespace-nowrap"
             :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
-          >/ {{ cacheFilesDisplay }}</span>
+            :style="{ fontFamily: 'var(--app-font-family)' }"
+          >
+            {{ cacheFilesDisplay }}
+          </span>
+          <span
+            class="text-[10px] leading-tight font-normal tracking-wide"
+            :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
+            :style="{ fontFamily: 'var(--app-font-family)' }"
+          >
+            Cache 缓存包
+          </span>
         </div>
-        <span class="text-[10px] leading-tight font-normal tracking-wide text-center" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
-          Cache 缓存包
-        </span>
+        <!-- 清理缓存按钮 - 始终显示，点击二次确认 -->
+        <NPopconfirm
+          @positive-click="handleClearCacheStart"
+        >
+          <template #trigger>
+            <button
+              class="w-6 h-6 flex items-center justify-center rounded-md transition-all duration-200 hover:scale-110"
+              :class="clearSuccess 
+                ? (isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
+                : (isDark ? 'bg-zinc-800 hover:bg-amber-500/20 text-zinc-400 hover:text-amber-400' : 'bg-zinc-200 hover:bg-amber-50 text-zinc-500 hover:text-amber-600')"
+              :disabled="clearingCache"
+            >
+              <!-- 成功状态：绿色勾勾 -->
+              <svg v-if="clearSuccess" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              <!-- Loading 状态：旋转动画 -->
+              <svg v-else-if="clearingCache" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              </svg>
+              <!-- 默认状态：垃圾桶 -->
+              <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"/>
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                <path d="M10 11v6"/>
+                <path d="M14 11v6"/>
+              </svg>
+            </button>
+          </template>
+          确认清理所有缓存文件？
+        </NPopconfirm>
+      </div>
+      <!-- 磁盘空间行 -->
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center justify-between text-[11px]">
+          <span :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">磁盘空间</span>
+          <span
+            class="font-mono font-medium"
+            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
+          >
+            {{ diskUsedDisplay }} / {{ diskTotalDisplay }}
+          </span>
+        </div>
+        <NProgress
+          type="line"
+          :percentage="diskPercentage"
+          :height="4"
+          :color="diskBarColor"
+          :rail-color="diskRailColor"
+          :show-indicator="false"
+          :border-radius="2"
+        />
       </div>
     </div>
 
@@ -157,7 +273,13 @@
       </div>
     </div>
 
-    <!-- ========== Block 2.5: Mirror Source ========== -->
+    <!-- ========== 分割线 ========== -->
+    <div
+      class="border-t"
+      :class="isDark ? 'border-zinc-800/50' : 'border-zinc-200'"
+    />
+
+    <!-- ========== Block 3: Mirror Source ========== -->
     <div
       class="flex flex-col gap-3 rounded-xl p-4 transition-colors duration-200"
       :class="isDark ? 'bg-zinc-900/40 border border-white/5' : 'bg-white border border-zinc-200'"
@@ -211,111 +333,25 @@
       </NCollapseTransition>
     </div>
 
-    <!-- ========== Block 3: Disk Space ========== -->
-    <div class="flex flex-col gap-1.5">
-      <div class="flex items-center justify-between text-xs">
-        <span :class="isDark ? 'text-zinc-400' : 'text-zinc-500'">磁盘空间</span>
-        <span
-          class="font-mono font-medium"
-          :class="isDark ? 'text-zinc-300' : 'text-zinc-600'"
-        >
-          {{ diskUsedDisplay }} / {{ diskTotalDisplay }}
-        </span>
-      </div>
-      <NProgress
-        type="line"
-        :percentage="diskPercentage"
-        :height="6"
-        :color="diskBarColor"
-        :rail-color="diskRailColor"
-        :show-indicator="false"
-        :border-radius="4"
-      />
-    </div>
-
-    <!-- ========== Block 4: Quick Actions ========== -->
-    <div
-      class="flex flex-col gap-3 rounded-xl p-4 transition-colors duration-200"
-      :class="isDark ? 'bg-zinc-900/40 border border-white/5' : 'bg-white border border-zinc-200'"
+    <!-- ========== Block 5: Health Check (Footer) ========== -->
+    <NButton
+      block
+      secondary
+      size="small"
+      :loading="checkingUp"
+      :class="isDark ? 'hover:bg-violet-500/10 hover:text-violet-300' : 'hover:bg-violet-50 hover:text-violet-600'"
+      @click="handleCheckup"
     >
-      <span
-        class="text-[11px] font-medium uppercase tracking-wider"
-        :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
-      >
-        快捷工具
-      </span>
-
-      <!-- Update Scoop -->
-      <div class="flex flex-col gap-1">
-        <NButton
-          block
-          secondary
-          :loading="updatingScoop"
-          :class="isDark ? 'hover:bg-cyan-500/10 hover:text-cyan-300' : 'hover:bg-cyan-50 hover:text-cyan-600'"
-          @click="handleUpdateScoop"
-        >
-          <template #icon>
-            <RefreshOutline :size="14" />
-          </template>
-          更新 Scoop 核心
-        </NButton>
-        <p
-          class="px-1 leading-snug"
-          :class="isDark ? 'text-zinc-600' : 'text-zinc-400'"
-        >
-          同步远程仓库，获取最新的软件清单与 CLI 主程序（不影响已安装应用）
-        </p>
-      </div>
-
-      <!-- Clear Cache -->
-      <div class="flex flex-col gap-1">
-        <NButton
-          block
-          secondary
-          :loading="clearingCache"
-          :class="isDark ? 'hover:bg-emerald-500/10 hover:text-emerald-300' : 'hover:bg-emerald-50 hover:text-emerald-600'"
-          @click="handleClearCache"
-        >
-          <template #icon>
-            <TrashOutline :size="14" />
-          </template>
-          清理全部残留与缓存
-        </NButton>
-        <p
-          class="px-1 leading-snug"
-          :class="isDark ? 'text-zinc-600' : 'text-zinc-400'"
-        >
-          安全擦除历史卸载残留及已完成的安装包，释放磁盘空间
-        </p>
-      </div>
-
-      <!-- Health Check -->
-      <div class="flex flex-col gap-1">
-        <NButton
-          block
-          secondary
-          :loading="checkingUp"
-          :class="isDark ? 'hover:bg-violet-500/10 hover:text-violet-300' : 'hover:bg-violet-50 hover:text-violet-600'"
-          @click="handleCheckup"
-        >
-          <template #icon>
-            <PulseOutline :size="14" />
-          </template>
-          运行系统环境健康检查
-        </NButton>
-        <p
-          class="px-1 leading-snug"
-          :class="isDark ? 'text-zinc-600' : 'text-zinc-400'"
-        >
-          扫描底层 Scoop 环境变量、断联的 Shim 指针及潜在的目录冲突
-        </p>
-      </div>
-    </div>
+      <template #icon>
+        <PulseOutline :size="14" />
+      </template>
+      运行系统环境健康检查
+    </NButton>
   </NCard>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, inject, h, type Ref, type VNodeChild } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject, h, type Ref, type VNodeChild } from 'vue'
 import {
   NCard,
   NButton,
@@ -325,14 +361,13 @@ import {
   NInput,
   NCollapseTransition,
   NTooltip,
+  NPopconfirm,
   useMessage,
   type SelectOption,
 } from 'naive-ui'
 import {
   GlobeOutline,
   ServerOutline,
-  TrashOutline,
-  RefreshOutline,
   PulseOutline,
   RocketOutline,
 } from '@vicons/ionicons5'
@@ -352,9 +387,7 @@ const proxyLoading = ref(false)
 // ── Mirror ──
 const mirrorSource = ref<string>('official')
 const mirrorLoading = ref(false)
-// ghproxy 加速节点：gh-proxy.com 实测最稳（0.75~0.95s）为首选，ghproxy.net 冷启动慢作备用
 const GHPROXY_PREFIX = 'https://gh-proxy.com/'
-// 自定义源前缀（用户手动输入的私有/高校镜像前缀，形如 https://your-proxy/）
 const customPrefix = ref<string>('')
 
 // ── Aria2 ──
@@ -362,9 +395,12 @@ const aria2Installing = ref(false)
 const aria2EnabledLocal = ref(false)
 
 // ── Quick Actions ──
-const updatingScoop = ref(false)
 const clearingCache = ref(false)
+const clearSuccess = ref(false)
+let clearSuccessTimer: ReturnType<typeof setTimeout> | null = null
 const checkingUp = ref(false)
+const syncingBuckets = ref(false)
+const checkingUpdates = ref(false)
 
 // ── Options ──
 const protocolOptions = [
@@ -372,8 +408,6 @@ const protocolOptions = [
   { label: 'SOCKS5', value: 'socks5' },
 ]
 
-// 镜像预设：仅保留实测可返回真实 git commit hash 的方案。
-// geekhour.net/scoop/*.git 经核验为假源（返回 HTML 非 git 端点），gitee 社区源已停更，均已剔除以免误导。
 interface MirrorOption extends SelectOption {
   label: string
   shortLabel: string
@@ -401,8 +435,6 @@ const mirrorOptions: MirrorOption[] = [
   },
 ]
 
-// 下拉项自定义渲染：上行标题（font-medium）+ 下行精细描述（text-[11px] 弱化色）。
-// 暗/亮两套对比度：标题 zinc-200/zinc-800，描述 zinc-500/zinc-400。
 function renderMirrorLabel(option: SelectOption): VNodeChild {
   const dark = isDark?.value ?? true
   const desc = (option as MirrorOption).desc ?? ''
@@ -436,7 +468,6 @@ function renderMirrorLabel(option: SelectOption): VNodeChild {
   )
 }
 
-// 选中框渲染：只显示单行短标签（防截断），hover 时用 NTooltip 弹出完整描述。
 function renderMirrorTag(props: { option: SelectOption }): VNodeChild {
   const opt = props.option as MirrorOption
   const short = opt.shortLabel ?? String(opt.label ?? '')
@@ -460,16 +491,15 @@ function renderMirrorTag(props: { option: SelectOption }): VNodeChild {
 }
 
 const cacheSizeDisplay = computed(() => {
-  const raw = settingsStore.cacheInfo?.size ?? 0
-  if (raw === 0) return '0 B'
-  if (raw >= 1 << 30) return ((raw / (1 << 30)) as number).toFixed(1) + ' GB'
-  if (raw >= 1 << 20) return ((raw / (1 << 20)) as number).toFixed(1) + ' MB'
-  return ((raw / (1 << 10)) as number).toFixed(1) + ' KB'
+  const size = settingsStore.cacheInfo?.size ?? 0
+  const unit = settingsStore.cacheInfo?.unit ?? 'MB'
+  if (size === 0) return '0 MB'
+  return `${size} ${unit}`
 })
 
 const cacheFilesDisplay = computed(() => {
   const files = settingsStore.cacheInfo?.files ?? 0
-  return files > 0 ? `${files} 个文件` : null
+  return files > 0 ? `${files} 个文件` : '0 个文件'
 })
 
 // ── Disk ──
@@ -505,6 +535,66 @@ function formatBytes(bytes: number): string {
   if (bytes >= 1 << 30) return ((bytes / (1 << 30)) as number).toFixed(2) + ' GB'
   if (bytes >= 1 << 20) return ((bytes / (1 << 20)) as number).toFixed(1) + ' MB'
   return ((bytes / (1 << 10)) as number).toFixed(1) + ' KB'
+}
+
+// ── Card Actions ──
+async function handleSyncBuckets() {
+  try {
+    syncingBuckets.value = true
+    await settingsStore.loadEcoStats()
+    message.success('软件源已同步')
+  } catch {
+    message.error('同步失败')
+  } finally {
+    syncingBuckets.value = false
+  }
+}
+
+async function handleCheckUpdates() {
+  try {
+    checkingUpdates.value = true
+    message.info('正在检查更新…')
+    await window.scoopAPI?.update?.()
+    message.success('检查完成')
+  } catch {
+    message.error('检查失败')
+  } finally {
+    checkingUpdates.value = false
+  }
+}
+
+function handleClearCacheStart() {
+  clearingCache.value = true
+  handleClearCache()
+}
+
+async function handleClearCache() {
+  try {
+    await settingsStore.clearCache()
+    await settingsStore.loadCacheInfo()
+    clearingCache.value = false
+    clearSuccess.value = true
+    if (clearSuccessTimer) clearTimeout(clearSuccessTimer)
+    clearSuccessTimer = setTimeout(() => {
+      clearSuccess.value = false
+    }, 2000)
+  } catch {
+    clearingCache.value = false
+    message.error('清理失败')
+  }
+}
+
+async function handleCheckup() {
+  try {
+    checkingUp.value = true
+    message.info('正在检查环境健康…')
+    await window.scoopAPI?.update?.()
+    message.success('环境检查完成')
+  } catch {
+    message.error('健康检查失败')
+  } finally {
+    checkingUp.value = false
+  }
 }
 
 // ── Actions ──
@@ -545,7 +635,6 @@ async function applyProxy() {
 }
 
 async function applyMirror(value: string) {
-  // custom：先确保用户已填入合法前缀，否则不下发命令，仅展开输入框等待
   if (value === 'custom') {
     const prefix = customPrefix.value.trim()
     if (!prefix) {
@@ -558,7 +647,6 @@ async function applyMirror(value: string) {
     }
   }
 
-  // 组装下发给后端的 payload：official 无前缀；ghproxy 用内置节点；custom 用用户输入
   const payload: { mirror: string; prefix?: string } =
     value === 'official'
       ? { mirror: 'official' }
@@ -567,10 +655,7 @@ async function applyMirror(value: string) {
         : { mirror: 'custom', prefix: customPrefix.value.trim() }
 
   try {
-    // 进入 loading，禁止重复点击（底层 git remote set-url 虽快，但串行多 bucket 仍需防抖）
     mirrorLoading.value = true
-
-    // 后端串行 git remote set-url 无损换源，并内置 aria2 守护（换源前后比对，绝不动已开启的 aria2）
     const res = await window.scoopAPI.switchMirror(payload)
 
     if (!res.success) {
@@ -578,7 +663,6 @@ async function applyMirror(value: string) {
       return
     }
 
-    // 换源可能触发 scoop 重置，前端 store 再同步一次 aria2 真实状态用于 UI
     await settingsStore.checkAria2()
 
     const aria2Hint = settingsStore.aria2Installed
@@ -593,47 +677,8 @@ async function applyMirror(value: string) {
   }
 }
 
-// 自定义前缀输入框「应用」按钮：复用 applyMirror 的 custom 分支（含前缀校验 + 无损换源 + aria2 守护）
 function applyCustomMirror() {
   return applyMirror('custom')
-}
-
-async function handleUpdateScoop() {
-  try {
-    updatingScoop.value = true
-    await window.scoopAPI?.update()
-    message.success('Scoop 已更新')
-  } catch {
-    message.error('更新失败')
-  } finally {
-    updatingScoop.value = false
-  }
-}
-
-async function handleClearCache() {
-  try {
-    clearingCache.value = true
-    await settingsStore.clearCache()
-    await settingsStore.loadCacheInfo()
-    message.success('缓存已清理')
-  } catch {
-    message.error('清理失败')
-  } finally {
-    clearingCache.value = false
-  }
-}
-
-async function handleCheckup() {
-  try {
-    checkingUp.value = true
-    message.info('正在检查环境健康…')
-    await window.scoopAPI?.update?.()
-    message.success('环境检查完成')
-  } catch {
-    message.error('健康检查失败')
-  } finally {
-    checkingUp.value = false
-  }
 }
 
 async function toggleAria2(enabled: boolean) {
@@ -677,6 +722,10 @@ onMounted(async () => {
   }
 
   aria2EnabledLocal.value = settingsStore.aria2Enabled
+})
+
+onUnmounted(() => {
+  if (clearSuccessTimer) clearTimeout(clearSuccessTimer)
 })
 </script>
 
@@ -746,8 +795,7 @@ onMounted(async () => {
   cursor: default;
 }
 
-/* 兜底：NButton 内部图标容器跟随全局正文字号 --app-font-size 同步缩放，
-   用户在设置里调大/调小字体时，图标同步等比增减 */
+/* 兜底：NButton 内部图标容器跟随全局正文字号 --app-font-size 同步缩放 */
 :deep(.n-button .n-button__icon) {
   --n-icon-size: var(--app-font-size);
   font-size: var(--app-font-size);
@@ -758,7 +806,7 @@ onMounted(async () => {
   height: var(--app-font-size) !important;
 }
 
-/* 卡片标题图标（GlobeOutline / RocketOutline / ServerOutline）与正文字号同步 */
+/* 卡片标题图标与正文字号同步 */
 .header-icon {
   width: var(--app-font-size);
   height: var(--app-font-size);

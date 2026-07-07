@@ -6,7 +6,7 @@ import { usePackagesStore } from '@/stores/packages'
 export const useSettingsStore = defineStore('settings', () => {
   const packagesStore = usePackagesStore()
 
-  const cacheInfo = ref<CacheInfo>({ size: 0, files: 0 })
+  const cacheInfo = ref<CacheInfo>({ size: 0, unit: 'MB', files: 0 })
   const scoopEnv = ref<ScoopEnv>({ scoop: '', global: '' })
   const proxy = ref<ProxyConfig>({ enabled: false, address: '', type: 'http' })
   const diskSpace = ref<{ Used: number; Free: number; Name?: string } | null>(null)
@@ -25,7 +25,7 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       cacheInfo.value = await window.scoopAPI.cache()
     } catch {
-      cacheInfo.value = { size: 0, files: 0 }
+      cacheInfo.value = { size: 0, unit: 'MB', files: 0 }
     }
   }
 
