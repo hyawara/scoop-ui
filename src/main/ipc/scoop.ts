@@ -311,39 +311,40 @@ export function registerScoopIPC(): void {
     return { success: true, package: pkgLabel }
   })
 
-  // Cleanup old versions
-  // ── 旧版本测量脚本（git-bash du 直接取目录大小） ──
-  const MEASURE_OLD_VERSIONS_SCRIPT = `
-    APPS_DIR="\${SCOOP:-\$HOME/scoop}/apps"
-    TOTAL=0
-    for app in "$APPS_DIR"/*/; do
-      [ -d "$app" ] || continue
-      CURRENT="\${app}current"
-      if [ -d "$CURRENT" ]; then
-        CURRENT_RESOLVED=$(realpath "$CURRENT" 2>/dev/null)
-        for ver in "$app"*/; do
-          [ "$(basename "$ver")" = "current" ] && continue
-          if [ -n "$CURRENT_RESOLVED" ]; then
-            VER_RESOLVED=$(realpath "$ver" 2>/dev/null)
-            [ "$VER_RESOLVED" = "$CURRENT_RESOLVED" ] && continue
-          fi
-          SIZE=$(du -sb "$ver" 2>/dev/null | cut -f1)
-          TOTAL=$((TOTAL + (SIZE)))
-        done
-      fi
-    done
-    echo "$TOTAL"
-  `
+  // ── 旧版本测量：PowerShell 解析 junction → git-bash du 算大小 ──
+  async function getOldVersionTotalBytes(): Promise<number> {
+    try {
+      // ① PowerShell：解析 junction target，输出 MSYS2 格式路径
+      const { stdout } = await execPowerShell(`
+        function toMsys2([string]\$p) {
+          if (\$p -match '^([a-z]):(.*)') { return "/" + \$matches[1].ToLower() + "/" + \$matches[2].Replace("\\", "/").Replace("//", "/") }
+          return \$p
+        }
+        \$d = Join-Path (scoop config root_path) "apps"
+        \$r = @()
+        Get-ChildItem \$d -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+          \$a = \$_.FullName; \$c = Join-Path \$a "current"
+          if (Test-Path \$c) {
+            \$t = (Get-Item \$c -ErrorAction SilentlyContinue).Target
+            Get-ChildItem \$a -Directory -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -ne \$t -and \$_.Name -ne "current" } | ForEach-Object { \$r += toMsys2 \$_.FullName }
+          }
+        }
+        \$r -join "|"
+      `)
+      const paths = stdout.trim().split('|').filter(Boolean)
+      if (paths.length === 0) return 0
+      // ② git-bash：du -sb 批量求和
+      const quoted = paths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')
+      const { stdout: sizeOut } = await execGitBash(`du -sb ${quoted} 2>/dev/null | awk '{sum+=\$1} END {print sum}'`)
+      return parseInt(sizeOut.trim()) || 0
+    } catch {
+      return 0
+    }
+  }
 
   ipcMain.handle('scoop:cleanup', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-
-    let beforeBytes = 0
-    try {
-      const { stdout } = await execGitBash(MEASURE_OLD_VERSIONS_SCRIPT)
-      beforeBytes = parseInt(stdout.trim()) || 0
-    } catch { /* ignore */ }
-
+    const beforeBytes = await getOldVersionTotalBytes()
     await execScoop('cleanup --all', (data) => {
       sendProgress(win, {
         type: 'message',
@@ -351,26 +352,14 @@ export function registerScoopIPC(): void {
         message: data.trim(),
       })
     })
-
-    let afterBytes = 0
-    try {
-      const { stdout } = await execGitBash(MEASURE_OLD_VERSIONS_SCRIPT)
-      afterBytes = parseInt(stdout.trim()) || 0
-    } catch { /* ignore */ }
-
-    const released = Math.max(0, beforeBytes - afterBytes)
-    return { released }
+    const afterBytes = await getOldVersionTotalBytes()
+    return { released: Math.max(0, beforeBytes - afterBytes) }
   })
 
   // Measure remaining old versions size
   ipcMain.handle('scoop:measureOldVersions', async () => {
-    try {
-      const { stdout } = await execGitBash(MEASURE_OLD_VERSIONS_SCRIPT)
-      const bytes = parseInt(stdout.trim()) || 0
-      return { bytes }
-    } catch {
-      return { bytes: 0 }
-    }
+    const bytes = await getOldVersionTotalBytes()
+    return { bytes }
   })
 
   // Get cache info
