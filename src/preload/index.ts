@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   listBuckets: () => ipcRenderer.invoke('scoop:listBuckets'),
   addBucket: (name: string, repo?: string) => ipcRenderer.invoke('scoop:addBucket', name, repo),
   removeBucket: (name: string) => ipcRenderer.invoke('scoop:removeBucket', name),
+  switchMirror: (payload: { mirror: string; prefix?: string }) =>
+    ipcRenderer.invoke('scoop:switchMirror', payload),
 
   getProxy: () => ipcRenderer.invoke('scoop:getProxy'),
   setProxy: (proxy: string) => ipcRenderer.invoke('scoop:setProxy', proxy),

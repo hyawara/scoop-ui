@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir } from 'os'
 import { join } from 'path'
-import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from 'fs'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
@@ -33,6 +33,30 @@ function parseFixedWidthTable<T>(
     if (mapped !== null) result.push(mapped)
   }
   return result
+}
+
+/**
+ * 解析 Scoop 安装根目录。优先级：
+ * 1. $SCOOP 环境变量（用户显式设置）
+ * 2. `scoop config root_path`（scoop 自己记录的真实根，展开开头的 ~ 为用户主目录）
+ * 3. 默认 ~/scoop
+ * 解决：非默认路径安装（如 ~/install/scoop）且 $SCOOP 为空时，换源误判 buckets 目录不存在。
+ */
+async function resolveScoopRoot(): Promise<string> {
+  const envRoot = (process.env['SCOOP'] || '').trim()
+  if (envRoot) return envRoot
+  try {
+    const { stdout } = await execPowerShell('scoop config root_path')
+    let p = stdout.trim()
+    if (p) {
+      // 展开开头的 ~ / ~\ / ~/ 为用户主目录（scoop config 常返回 ~/install/scoop 形式）
+      if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) {
+        p = join(homedir(), p.slice(1))
+      }
+      return p
+    }
+  } catch { /* 读取失败，走默认 */ }
+  return join(homedir(), 'scoop')
 }
 
 /**
@@ -723,5 +747,127 @@ export function registerScoopIPC(): void {
     }
     const safeValue = value.includes(' ') ? `"${value}"` : value
     return execScoop(`config ${key} ${safeValue}`)
+  })
+
+  // ============================================
+  // Switch Mirror — 无损换源：git remote set-url（保留本地已拉取的 manifest，秒切不重拉）
+  // 绝不使用 bucket rm/add（有损：删目录 + 重新 clone，慢且掉 aria2 语境）
+  // ============================================
+
+  // 官方标准 bucket 的 GitHub 仓库地址（大小写严格匹配 scoop 官方组织）
+  const OFFICIAL_BUCKET_REPOS: Record<string, string> = {
+    main: 'https://github.com/ScoopInstaller/Main.git',
+    extras: 'https://github.com/ScoopInstaller/Extras.git',
+    versions: 'https://github.com/ScoopInstaller/Versions.git',
+    nirsoft: 'https://github.com/ScoopInstaller/Nirsoft.git',
+    java: 'https://github.com/ScoopInstaller/Java.git',
+    games: 'https://github.com/Calinou/scoop-games.git',
+  }
+
+  /**
+   * 依据镜像方案，为单个官方 bucket 计算目标 remote url。
+   * @param name    bucket 名（小写）
+   * @param mirror  'official' | 'ghproxy' | 'custom'
+   * @param prefix  ghproxy/custom 的代理前缀（如 https://gh-proxy.com/）
+   */
+  function resolveBucketUrl(name: string, mirror: string, prefix: string): string | null {
+    const officialUrl = OFFICIAL_BUCKET_REPOS[name]
+    if (!officialUrl) return null // 非官方 bucket（用户自建）不动它
+    if (mirror === 'official') return officialUrl
+    // ghproxy / custom：在官方 GitHub 地址前注入代理前缀
+    return `${prefix}${officialUrl}`
+  }
+
+  /**
+   * 无缝切换镜像源。
+   * payload: { mirror: 'official'|'ghproxy'|'custom', prefix?: string }
+   * - official: remote 恢复为 github.com 官方地址
+   * - ghproxy / custom: remote 改为 <prefix>https://github.com/ScoopInstaller/Xxx.git
+   * 仅改写 origin remote url，不 clone、不删目录，本地 manifest 完整保留。
+   */
+  ipcMain.handle('scoop:switchMirror', async (_event, payload: { mirror: string; prefix?: string }) => {
+    const mirror = payload?.mirror || 'official'
+    let prefix = (payload?.prefix || '').trim()
+
+    // 前缀基础校验：必须是 https URL，且规范化为以 / 结尾
+    if (mirror !== 'official') {
+      if (!/^https:\/\/[\w.\-]+(:\d+)?\/.*$/.test(prefix) && !/^https:\/\/[\w.\-]+(:\d+)?\/?$/.test(prefix)) {
+        throw new Error('无效的镜像前缀地址（需为 https 开头）')
+      }
+      if (!prefix.endsWith('/')) prefix += '/'
+    }
+
+    // 1. 换源前读取 aria2 状态（仅读取，作为守护基线）
+    let aria2WasEnabled = false
+    try {
+      const { stdout } = await execScoop('config aria2-enabled')
+      aria2WasEnabled = stdout.trim().toLowerCase() === 'true'
+    } catch { /* 未设置视为 false */ }
+
+    // 2. 定位 $SCOOP/buckets 目录，枚举本地实际存在的 bucket
+    const scoopRoot = await resolveScoopRoot()
+    const bucketsDir = join(scoopRoot, 'buckets')
+
+    let localBuckets: string[] = []
+    try {
+      localBuckets = readdirSync(bucketsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && existsSync(join(bucketsDir, d.name, '.git')))
+        .map((d) => d.name)
+    } catch {
+      throw new Error(`未找到 Scoop buckets 目录：${bucketsDir}`)
+    }
+
+    // 3. 逐个 bucket 串行执行 git remote set-url（无损）
+    const results: { bucket: string; ok: boolean; url?: string; error?: string }[] = []
+    for (const name of localBuckets) {
+      const targetUrl = resolveBucketUrl(name.toLowerCase(), mirror, prefix)
+      if (!targetUrl) continue // 跳过非官方 bucket，绝不误伤用户自建源
+
+      const bucketPath = join(bucketsDir, name)
+      // 用 git -C 显式锁定仓库目录，避免 --login 加载 profile 时 cd 漂移
+      const { stderr, code } = await execGitBash(
+        `git -C "${bucketPath}" remote set-url origin "${targetUrl}"`
+      )
+      if (code === 0) {
+        results.push({ bucket: name, ok: true, url: targetUrl })
+      } else {
+        results.push({ bucket: name, ok: false, error: (stderr || '').trim() || `git 退出码 ${code}` })
+      }
+    }
+
+    if (results.length === 0) {
+      throw new Error('未找到可切换的官方 bucket（main/extras 等）')
+    }
+
+    // 4. 换源后再次确认 aria2 状态；若原为开启却意外被重置，则显式恢复（安全隔离）
+    let aria2Restored = false
+    if (aria2WasEnabled) {
+      let stillEnabled = false
+      try {
+        const { stdout } = await execScoop('config aria2-enabled')
+        stillEnabled = stdout.trim().toLowerCase() === 'true'
+      } catch { /* 读取失败按未开启处理 */ }
+      if (!stillEnabled) {
+        try {
+          await execScoop('config aria2-enabled true')
+          aria2Restored = true
+        } catch { /* 恢复失败不阻断换源主流程 */ }
+      }
+    }
+
+    const switched = results.filter((r) => r.ok).length
+    const failed = results.filter((r) => !r.ok)
+    return {
+      success: failed.length === 0,
+      mirror,
+      switched,
+      total: results.length,
+      results,
+      aria2WasEnabled,
+      aria2Restored,
+      error: failed.length > 0
+        ? `${failed.length} 个 bucket 换源失败：${failed.map((f) => f.bucket).join(', ')}`
+        : undefined,
+    }
   })
 }

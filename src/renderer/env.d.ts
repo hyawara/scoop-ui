@@ -57,6 +57,16 @@ interface Window {
     listUpdatable: () => Promise<{ name: string; oldVersion: string; newVersion: string }[]>
     checkAria2: () => Promise<{ installed: boolean; enabled: boolean }>
     setAria2Enabled: (enabled: boolean) => Promise<{ success: boolean }>
+    switchMirror: (payload: { mirror: string; prefix?: string }) => Promise<{
+      success: boolean
+      mirror: string
+      switched: number
+      total: number
+      results: { bucket: string; ok: boolean; url?: string; error?: string }[]
+      aria2WasEnabled: boolean
+      aria2Restored: boolean
+      error?: string
+    }>
     openExternal: (url: string) => Promise<void>
     openPath: (path: string) => Promise<void>
     getConfig: (path?: string) => Promise<any>

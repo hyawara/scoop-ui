@@ -29,8 +29,6 @@ import {
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
 import StorageEnvCard from '@/components/StorageEnvCard.vue'
-import ProxyCard from '@/components/ProxyCard.vue'
-import Aria2Card from '@/components/Aria2Card.vue'
 
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
@@ -1123,11 +1121,9 @@ function openBucketDrawer() {
       </NCard>
     </div>
 
-    <!-- === 右侧列：宽屏自适应撑宽，紧凑时保底 360px，宽屏最多撑到 460px === -->
-    <div class="flex-1 w-full min-w-[360px] max-w-[460px] flex flex-col gap-5 h-full">
+    <!-- === 右侧列：宽屏自适应撑宽，紧凑时保底 420px，宽屏最多撑到 560px === -->
+    <div class="flex-1 w-full min-w-[420px] max-w-[560px] flex flex-col gap-5 h-full">
       <StorageEnvCard />
-      <ProxyCard />
-      <Aria2Card />
     </div>
 
     <BucketDrawer v-model:show="showBucketDrawer" />
