@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
 import { join } from 'path'
-import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, statSync, readlinkSync } from 'fs'
 import { spawn } from 'child_process'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
@@ -311,32 +311,51 @@ export function registerScoopIPC(): void {
     return { success: true, package: pkgLabel }
   })
 
-  // ── 旧版本测量：PowerShell 解析 junction → git-bash du 算大小 ──
+  // ── 旧版本测量：纯 Node.js ──
+  function getDirSize(dirPath: string): number {
+    let total = 0
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry.name)
+        try {
+          if (entry.isDirectory()) {
+            total += getDirSize(fullPath)
+          } else if (entry.isFile()) {
+            total += statSync(fullPath).size
+          }
+        } catch { /* skip unreadable */ }
+      }
+    } catch { /* skip unreadable */ }
+    return total
+  }
+
   async function getOldVersionTotalBytes(): Promise<number> {
     try {
-      // ① PowerShell：解析 junction target，输出 MSYS2 格式路径
-      const { stdout } = await execPowerShell(`
-        function toMsys2([string]\$p) {
-          if (\$p -match '^([a-z]):(.*)') { return "/" + \$matches[1].ToLower() + "/" + \$matches[2].Replace("\\", "/").Replace("//", "/") }
-          return \$p
+      const scoopRoot = await resolveScoopRoot()
+      const appsDir = join(scoopRoot, 'apps')
+      if (!existsSync(appsDir)) return 0
+
+      let total = 0
+      for (const app of readdirSync(appsDir, { withFileTypes: true })) {
+        if (!app.isDirectory()) continue
+        const appDir = join(appsDir, app.name)
+        const currentPath = join(appDir, 'current')
+
+        let currentTarget = ''
+        try {
+          currentTarget = readlinkSync(currentPath)
+          currentTarget = join(appDir, currentTarget)
+        } catch { /* not a junction */ }
+
+        for (const ver of readdirSync(appDir, { withFileTypes: true })) {
+          if (!ver.isDirectory() || ver.name === 'current') continue
+          const verPath = join(appDir, ver.name)
+          if (currentTarget && verPath.toLowerCase() === currentTarget.toLowerCase()) continue
+          total += getDirSize(verPath)
         }
-        \$d = Join-Path (scoop config root_path) "apps"
-        \$r = @()
-        Get-ChildItem \$d -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-          \$a = \$_.FullName; \$c = Join-Path \$a "current"
-          if (Test-Path \$c) {
-            \$t = (Get-Item \$c -ErrorAction SilentlyContinue).Target
-            Get-ChildItem \$a -Directory -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -ne \$t -and \$_.Name -ne "current" } | ForEach-Object { \$r += toMsys2 \$_.FullName }
-          }
-        }
-        \$r -join "|"
-      `)
-      const paths = stdout.trim().split('|').filter(Boolean)
-      if (paths.length === 0) return 0
-      // ② git-bash：du -sb 批量求和
-      const quoted = paths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')
-      const { stdout: sizeOut } = await execGitBash(`du -sb ${quoted} 2>/dev/null | awk '{sum+=\$1} END {print sum}'`)
-      return parseInt(sizeOut.trim()) || 0
+      }
+      return total
     } catch {
       return 0
     }
@@ -356,7 +375,6 @@ export function registerScoopIPC(): void {
     return { released: Math.max(0, beforeBytes - afterBytes) }
   })
 
-  // Measure remaining old versions size
   ipcMain.handle('scoop:measureOldVersions', async () => {
     const bytes = await getOldVersionTotalBytes()
     return { bytes }
