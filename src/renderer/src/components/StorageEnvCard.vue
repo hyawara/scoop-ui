@@ -1,155 +1,127 @@
 <template>
-  <NCard class="glass-card" content-class="flex flex-col gap-6 p-5">
-    <!-- ========== Block 1: Interactive Metric Cards ========== -->
-    <!-- Buckets + Apps 在同一行 -->
-    <div class="grid grid-cols-2 gap-2">
-      <!-- Buckets - Hover 显示同步按钮 -->
-      <div
-        class="group stat-badge relative flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
-        :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
-      >
-        <span
-          class="font-mono text-[15px] font-bold leading-none tabular-nums"
-          :class="isDark ? 'text-cyan-400' : 'text-cyan-600'"
-          :style="{ fontFamily: 'var(--app-font-family)' }"
-        >
-          {{ settingsStore.bucketCount ?? '-' }}
-        </span>
-        <span
-          class="text-[10px] leading-tight font-normal tracking-wide text-center"
-          :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
-          :style="{ fontFamily: 'var(--app-font-family)' }"
-        >
-          Buckets 软件源
-        </span>
-        <!-- Hover 操作按钮：同步 -->
-        <button
-          class="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110"
-          :class="isDark ? 'bg-zinc-800 hover:bg-cyan-500/20 text-zinc-400 hover:text-cyan-400' : 'bg-zinc-200 hover:bg-cyan-50 text-zinc-500 hover:text-cyan-600'"
-          :disabled="syncingBuckets"
-          @click.stop="handleSyncBuckets"
-        >
-          <svg v-if="!syncingBuckets" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-            <path d="M16 16h5v5"/>
-          </svg>
-          <svg v-else class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Apps - Hover 显示检查更新按钮 -->
-      <div
-        class="group stat-badge relative flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 min-w-0 transition-all duration-200 hover:scale-[1.02]"
-        :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
-      >
-        <span
-          class="font-mono text-[15px] font-bold leading-none tabular-nums"
-          :class="isDark ? 'text-emerald-400' : 'text-emerald-600'"
-          :style="{ fontFamily: 'var(--app-font-family)' }"
-        >
-          {{ settingsStore.installedCount ?? '-' }}
-        </span>
-        <span
-          class="text-[10px] leading-tight font-normal tracking-wide text-center"
-          :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
-          :style="{ fontFamily: 'var(--app-font-family)' }"
-        >
-          Apps 已安装
-        </span>
-        <!-- Hover 操作按钮：检查更新 -->
-        <button
-          class="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110"
-          :class="isDark ? 'bg-zinc-800 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400' : 'bg-zinc-200 hover:bg-emerald-50 text-zinc-500 hover:text-emerald-600'"
-          :disabled="checkingUpdates"
-          @click.stop="handleCheckUpdates"
-        >
-          <svg v-if="!checkingUpdates" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.3-4.3"/>
-          </svg>
-          <svg v-else class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Cache + 磁盘空间 组合 -->
+  <div class="flex flex-col gap-5">
+    <!-- ═══════════════ Pod 1: Storage & Janitor ═══════════════ -->
     <div
-      class="stat-badge flex flex-col gap-2 rounded-xl px-4 py-3 min-w-0 transition-all duration-200"
-      :class="isDark ? 'bg-zinc-900/60 border border-white/5' : 'bg-zinc-100 border border-zinc-200'"
+      class="rounded-xl border p-4 space-y-4"
+      :class="isDark ? 'bg-zinc-900/30 border-zinc-800/50' : 'bg-zinc-50 border-zinc-200'"
     >
-      <!-- Cache 行 -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span
-            class="font-mono text-[15px] font-bold leading-none tabular-nums"
-            :class="isDark ? 'text-violet-400' : 'text-violet-600'"
-            :style="{ fontFamily: 'var(--app-font-family)' }"
-          >
-            {{ cacheSizeDisplay }}
-          </span>
-          <span class="text-zinc-500">/</span>
-          <span
-            class="font-mono text-[12px] font-normal leading-none whitespace-nowrap"
-            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
-            :style="{ fontFamily: 'var(--app-font-family)' }"
-          >
-            {{ cacheFilesDisplay }}
-          </span>
-          <span
-            class="text-[10px] leading-tight font-normal tracking-wide"
-            :class="isDark ? 'text-zinc-500' : 'text-zinc-400'"
-            :style="{ fontFamily: 'var(--app-font-family)' }"
-          >
-            Cache 缓存包
-          </span>
-        </div>
-        <!-- 清理缓存按钮 - 始终显示，点击二次确认 -->
-        <NPopconfirm
-          @positive-click="handleClearCacheStart"
-        >
-          <template #trigger>
-            <button
-              class="w-6 h-6 flex items-center justify-center rounded-md transition-all duration-200 hover:scale-110"
-              :class="clearSuccess 
-                ? (isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
-                : (isDark ? 'bg-zinc-800 hover:bg-amber-500/20 text-zinc-400 hover:text-amber-400' : 'bg-zinc-200 hover:bg-amber-50 text-zinc-500 hover:text-amber-600')"
-              :disabled="clearingCache"
-            >
-              <!-- 成功状态：绿色勾勾 -->
-              <svg v-if="clearSuccess" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 6L9 17l-5-5"/>
-              </svg>
-              <!-- Loading 状态：旋转动画 -->
-              <svg v-else-if="clearingCache" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-              </svg>
-              <!-- 默认状态：垃圾桶 -->
-              <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 6h18"/>
-                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
-                <path d="M10 11v6"/>
-                <path d="M14 11v6"/>
-              </svg>
-            </button>
-          </template>
-          确认清理所有缓存文件？
-        </NPopconfirm>
+      <!-- 头部说明 -->
+      <div class="flex items-center gap-2">
+        <span class="text-[13px] font-semibold" :class="isDark ? 'text-zinc-200' : 'text-zinc-700'">📦 存储与系统瘦身</span>
+        <div class="flex-1 h-px" :class="isDark ? 'bg-zinc-800/60' : 'bg-zinc-200/60'" />
       </div>
-      <!-- 磁盘空间行 -->
-      <div class="flex flex-col gap-1">
-        <div class="flex items-center justify-between text-[11px]">
-          <span :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">磁盘空间</span>
-          <span
-            class="font-mono font-medium"
-            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
+
+      <!-- 生态概览：软件源 + 已安装 并排卡片 -->
+      <div class="grid grid-cols-2 gap-3">
+        <div
+          class="rounded-lg p-3 flex items-center gap-3"
+          :class="isDark ? 'bg-zinc-800/30' : 'bg-white border border-zinc-200/70'"
+        >
+          <div
+            class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+            :class="isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'"
           >
+            <span :class="isDark ? 'text-cyan-400' : 'text-cyan-600'">📂</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-normal text-zinc-500">软件源</span>
+            <div class="flex items-baseline gap-1">
+              <span class="font-mono text-lg font-bold" :class="isDark ? 'text-cyan-400' : 'text-cyan-600'">
+                {{ settingsStore.bucketCount ?? '-' }}
+              </span>
+              <span class="text-[10px] text-zinc-500">个仓库</span>
+            </div>
+          </div>
+        </div>
+        <div
+          class="rounded-lg p-3 flex items-center gap-3"
+          :class="isDark ? 'bg-zinc-800/30' : 'bg-white border border-zinc-200/70'"
+        >
+          <div
+            class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+            :class="isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'"
+          >
+            <span :class="isDark ? 'text-emerald-400' : 'text-emerald-600'">📦</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-normal text-zinc-500">已安装</span>
+            <div class="flex items-baseline gap-1">
+              <span class="font-mono text-lg font-bold" :class="isDark ? 'text-emerald-400' : 'text-emerald-600'">
+                {{ settingsStore.installedCount ?? '-' }}
+              </span>
+              <span class="text-[10px] text-zinc-500">个应用</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 缓存 + 旧版本 双卡片网格 -->
+      <div class="grid grid-cols-2 gap-3">
+        <!-- 左：Cache 缓存包 -->
+        <div
+          class="rounded-lg p-3 flex flex-col gap-2"
+          :class="isDark ? 'bg-zinc-800/30' : 'bg-white border border-zinc-200/70'"
+        >
+          <div class="flex items-center gap-1.5">
+            <span :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">📦</span>
+            <span class="text-[12px] font-semibold" :class="isDark ? 'text-zinc-200' : 'text-zinc-700'">缓存包</span>
+          </div>
+          <p class="text-[10px] leading-relaxed text-zinc-500">
+            下载的安装包缓存文件，清理不影响已安装软件
+          </p>
+          <div class="flex items-end justify-between mt-auto">
+            <div>
+              <span class="font-mono text-[15px] font-bold" :class="isDark ? 'text-violet-400' : 'text-violet-600'">
+                {{ cacheSizeDisplay }}
+              </span>
+              <span class="text-[11px] font-mono text-zinc-500 ml-1">/ {{ cacheFilesDisplay }}</span>
+            </div>
+            <NButton
+              size="tiny"
+              :loading="clearingCache"
+              @click="handleClearCache"
+              :bordered="false"
+              class="!text-[11px] !px-2"
+              :class="isDark ? '!text-amber-400 hover:!text-amber-300' : '!text-amber-600 hover:!text-amber-700'"
+            >
+              🗑️ 清理
+            </NButton>
+          </div>
+        </div>
+        <!-- 右：历史残留旧版本 -->
+        <div
+          class="rounded-lg p-3 flex flex-col gap-2"
+          :class="isDark ? 'bg-zinc-800/30' : 'bg-white border border-zinc-200/70'"
+        >
+          <div class="flex items-center gap-1.5">
+            <span :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">🗑️</span>
+            <span class="text-[12px] font-semibold" :class="isDark ? 'text-zinc-200' : 'text-zinc-700'">旧版本残留</span>
+          </div>
+          <p class="text-[10px] leading-relaxed text-zinc-500">
+            更新后自动保留的旧版本文件，可安全清理释放空间
+          </p>
+          <div class="flex items-end justify-between mt-auto">
+            <span class="font-mono text-[15px] font-bold" :class="isDark ? 'text-cyan-400' : 'text-cyan-600'">
+              {{ oldVersionsDisplay }}
+            </span>
+            <NButton
+              size="tiny"
+              :loading="cleanupLoading"
+              @click="handleCleanup"
+              :bordered="false"
+              class="!text-[11px] !px-2"
+              :class="isDark ? '!text-emerald-400 hover:!text-emerald-300' : '!text-emerald-600 hover:!text-emerald-700'"
+            >
+              🧹 瘦身
+            </NButton>
+          </div>
+        </div>
+      </div>
+      <!-- 下层资产长条：磁盘空间状态栏 -->
+      <div class="space-y-1.5">
+        <div class="flex justify-between text-[11px] font-mono">
+          <span class="text-zinc-500">磁盘空间</span>
+          <span class="font-medium" :class="isDark ? 'text-zinc-400' : 'text-zinc-500'">
             {{ diskUsedDisplay }} / {{ diskTotalDisplay }}
           </span>
         </div>
@@ -161,107 +133,91 @@
           :rail-color="diskRailColor"
           :show-indicator="false"
           :border-radius="2"
+          processing
         />
       </div>
     </div>
 
-    <!-- ═══════════════ 功能岛 A：网络代理中心 ═══════════════ -->
+    <!-- ═══════════════ Pod 2: Network & Protocol ═══════════════ -->
     <div
-      class="rounded-xl border p-4 flex flex-col gap-3"
-      :class="isDark ? 'bg-zinc-900/40 border-zinc-800/60' : 'bg-zinc-50 border-zinc-300'"
+      class="rounded-xl border p-4 space-y-4"
+      :class="isDark ? 'bg-zinc-900/30 border-zinc-800/50' : 'bg-zinc-50 border-zinc-200'"
     >
-      <!-- 头部：Globe + 标题 + Switch -->
+      <!-- 头部行 1：网络代理开关 -->
       <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <GlobeOutline
-            class="shrink-0"
-            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
-            :style="{ width: 'var(--app-font-size)', height: 'var(--app-font-size)' }"
-          />
-          <span
-            class="font-semibold text-sm"
-            :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
-          >网络代理</span>
-        </div>
+        <span
+          class="font-semibold text-sm"
+          :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
+        >
+          🌐 网络代理 (Network Proxy)
+        </span>
         <NSwitch
           v-model:value="proxyEnabled"
           :loading="proxyLoading"
           @update:value="toggleProxy"
+          size="small"
         >
           <template #checked><span class="text-[10px]">ON</span></template>
           <template #unchecked><span class="text-[10px]">OFF</span></template>
         </NSwitch>
       </div>
-
-      <!-- 代理表单：竖线分割一行流 -->
+      <!-- 滑出表单：一体化联邦胶囊舱 -->
       <NCollapseTransition :show="proxyEnabled">
-        <div class="flex flex-col gap-2">
-          <div class="proxy-row flex items-center gap-0">
-            <!-- 协议选择 -->
-            <NSelect
-              v-model:value="proxyProtocol"
-              :options="protocolOptions"
-              size="small"
-              class="proxy-row__select"
-              :style="{ width: '90px' }"
-            />
-            <div
-              class="w-px h-4 mx-1.5 shrink-0"
-              :class="isDark ? 'bg-zinc-700' : 'bg-zinc-300'"
-            />
-            <!-- 代理地址 -->
-            <NInput
-              v-model:value="proxyHost"
-              placeholder="127.0.0.1"
-              size="small"
-              class="proxy-row__input flex-1"
-              :input-props="{ autocomplete: 'off' }"
-            />
-            <div
-              class="w-px h-4 mx-1.5 shrink-0"
-              :class="isDark ? 'bg-zinc-700' : 'bg-zinc-300'"
-            />
-            <!-- 代理端口 -->
-            <NInput
-              v-model:value="proxyPort"
-              placeholder="7890"
-              size="small"
-              class="proxy-row__port"
-              :style="{ width: '64px' }"
-              :input-props="{ autocomplete: 'off' }"
-            />
-          </div>
-          <NButton
+        <div
+          class="border rounded-lg overflow-hidden flex"
+          :class="isDark ? 'border-zinc-700/60' : 'border-zinc-300'"
+        >
+          <NSelect
+            v-model:value="proxyProtocol"
+            :options="protocolOptions"
             size="small"
-            type="primary"
-            secondary
-            block
-            :loading="proxyLoading"
-            @click="applyProxy"
-          >
-            应用代理
-          </NButton>
+            :bordered="false"
+            class="proxy-cell"
+            style="width:25%"
+          />
+          <div
+            class="w-px shrink-0"
+            :class="isDark ? 'bg-zinc-700/50' : 'bg-zinc-300/50'"
+          />
+          <NInput
+            v-model:value="proxyHost"
+            placeholder="127.0.0.1"
+            size="small"
+            :bordered="false"
+            class="proxy-cell"
+            style="width:50%"
+            :input-props="{ autocomplete: 'off' }"
+          />
+          <div
+            class="w-px shrink-0"
+            :class="isDark ? 'bg-zinc-700/50' : 'bg-zinc-300/50'"
+          />
+          <NInput
+            v-model:value="proxyPort"
+            placeholder="7890"
+            size="small"
+            :bordered="false"
+            class="proxy-cell"
+            style="width:25%"
+            :input-props="{ autocomplete: 'off' }"
+          />
         </div>
       </NCollapseTransition>
-
-      <!-- Aria2 加速行 -->
+      <!-- 头部行 2：Aria2 下载加速开关 -->
       <div
         class="flex items-center justify-between pt-1"
         :class="isDark ? 'border-t border-white/5' : 'border-t border-zinc-100'"
       >
         <div class="flex items-center gap-2">
-          <RocketOutline
-            class="shrink-0"
-            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
-            :style="{ width: 'var(--app-font-size)', height: 'var(--app-font-size)' }"
-          />
           <span
             class="font-semibold text-sm"
             :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
-          >Aria2 加速</span>
+          >
+            ⚡ Aria2 多线程加速
+          </span>
           <span
             v-if="settingsStore.aria2Installed"
-            class="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 animate-pulse"
+            class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
           />
         </div>
         <NSwitch
@@ -269,6 +225,7 @@
           v-model:value="aria2EnabledLocal"
           :loading="settingsStore.aria2Loading"
           @update:value="toggleAria2"
+          size="small"
         >
           <template #checked><span class="text-[10px]">ON</span></template>
           <template #unchecked><span class="text-[10px]">OFF</span></template>
@@ -276,7 +233,6 @@
         <NButton
           v-else
           size="tiny"
-          type="primary"
           secondary
           :loading="aria2Installing"
           @click="handleInstallAria2"
@@ -286,108 +242,47 @@
       </div>
     </div>
 
-    <!-- ═══════════════ 功能岛 B：镜像源加速中心 ═══════════════ -->
-    <!--
-      TODO: 后续开发 - 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
+    <!-- ═══════════════ Pod 3: Manifest Sync ═══════════════ -->
     <div
-      class="rounded-xl border p-4 flex flex-col gap-3"
-      :class="isDark ? 'bg-zinc-900/40 border-zinc-800/60' : 'bg-zinc-50 border-zinc-300'"
+      class="rounded-xl border p-4 space-y-3"
+      :class="isDark ? 'bg-zinc-900/30 border-zinc-800/50' : 'bg-zinc-50 border-zinc-200'"
     >
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 shrink-0">
-          <FlashOutline
-            class="shrink-0"
-            :class="isDark ? 'text-zinc-400' : 'text-zinc-500'"
-            :style="{ width: 'var(--app-font-size)', height: 'var(--app-font-size)' }"
-          />
-          <span
-            class="font-semibold text-sm whitespace-nowrap"
-            :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
-          >加速镜像源</span>
-        </div>
-        <NSelect
-          v-model:value="mirrorSource"
-          :options="mirrorOptions"
-          :render-label="renderMirrorLabel"
-          :render-tag="renderMirrorTag"
-          :loading="mirrorLoading"
-          :disabled="mirrorLoading"
-          size="small"
-          class="mirror-select"
-          :style="{ width: '190px' }"
-          @update:value="applyMirror"
-        />
+      <p class="text-[11px] leading-relaxed text-zinc-500">
+        导出当前已安装的软件列表，或在重装系统、换新电脑时一键导入恢复。
+      </p>
+      <div class="grid grid-cols-2 gap-3">
+        <NButton
+          secondary
+          :loading="exporting"
+          @click="handleExport"
+          class="!text-[12px]"
+        >
+          📤 导出配置清单
+        </NButton>
+        <NButton
+          secondary
+          :loading="importing"
+          @click="handleImport"
+          class="!text-[12px]"
+        >
+          📥 导入恢复软件
+        </NButton>
       </div>
-      <div class="flex items-center gap-1.5 text-[11px]" :class="isDark ? 'text-zinc-500' : 'text-zinc-400'">
-        <span>当前已自动对接</span>
-        <span class="font-medium" :class="isDark ? 'text-zinc-300' : 'text-zinc-600'">
-          {{ mirrorSource === 'official' ? 'Scoop 官方源' : mirrorSource === 'ghproxy' ? 'GHProxy 加速链路' : '自定义镜像源' }}
-        </span>
-      </div>
-      <NCollapseTransition :show="mirrorSource === 'custom'">
-        <div class="flex items-center gap-2">
-          <NInput
-            v-model:value="customPrefix"
-            placeholder="https://your-proxy.com/"
-            size="small"
-            class="flex-1 proxy-input"
-            :input-props="{ autocomplete: 'off' }"
-            :disabled="mirrorLoading"
-          />
-          <NButton
-            size="small"
-            type="primary"
-            secondary
-            :loading="mirrorLoading"
-            @click="applyCustomMirror"
-          >
-            应用
-          </NButton>
-        </div>
-      </NCollapseTransition>
     </div>
-    -->
-
-    <!-- ========== Block 5: Health Check (Footer) ========== -->
-    <NButton
-      block
-      secondary
-      size="small"
-      :loading="checkingUp"
-      :class="isDark ? 'hover:bg-violet-500/10 hover:text-violet-300' : 'hover:bg-violet-50 hover:text-violet-600'"
-      @click="handleCheckup"
-    >
-      <template #icon>
-        <PulseOutline :size="14" />
-      </template>
-      运行系统环境健康检查
-    </NButton>
-  </NCard>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject, h, type Ref, type VNodeChild } from 'vue'
+import { ref, computed, onMounted, inject, type Ref } from 'vue'
 import {
-  NCard,
   NButton,
   NProgress,
   NSwitch,
   NSelect,
   NInput,
   NCollapseTransition,
-  // NTooltip — 由于镜像代理功能暂时注释，后续开发再启用
-  // NTooltip,
-  NPopconfirm,
   useMessage,
-  type SelectOption,
 } from 'naive-ui'
-import {
-  GlobeOutline,
-  // FlashOutline — 由于镜像代理功能暂时注释，后续开发再启用
-  // FlashOutline,
-  PulseOutline,
-  RocketOutline,
-} from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
 
 const isDark = inject<Ref<boolean>>('isDark')
@@ -401,114 +296,27 @@ const proxyHost = ref('127.0.0.1')
 const proxyPort = ref('7890')
 const proxyLoading = ref(false)
 
-// ── Mirror ──
-// 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
-// const mirrorSource = ref<string>('official')
-// const mirrorLoading = ref(false)
-// const GHPROXY_PREFIX = 'https://gh-proxy.com/'
-// const customPrefix = ref<string>('')
-
-// ── Aria2 ──
-const aria2Installing = ref(false)
-const aria2EnabledLocal = ref(false)
-
-// ── Quick Actions ──
-const clearingCache = ref(false)
-const clearSuccess = ref(false)
-let clearSuccessTimer: ReturnType<typeof setTimeout> | null = null
-const checkingUp = ref(false)
-const syncingBuckets = ref(false)
-const checkingUpdates = ref(false)
-
-// ── Options ──
 const protocolOptions = [
   { label: 'HTTP', value: 'http' },
   { label: 'SOCKS5', value: 'socks5' },
 ]
 
-// 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
-// interface MirrorOption extends SelectOption {
-//   label: string
-//   shortLabel: string
-//   value: string
-//   desc: string
-// }
-// const mirrorOptions: MirrorOption[] = [
-//   {
-//     label: '🌐 官方默认源 (GitHub Direct)',
-//     shortLabel: '🌐 官方默认源',
-//     value: 'official',
-//     desc: '直连 GitHub 官方仓库，适合已开启全局系统代理的用户。',
-//   },
-//   {
-//     label: '⚡ GHProxy 链路代理加速 (推荐)',
-//     shortLabel: '⚡ GHProxy 加速',
-//     value: 'ghproxy',
-//     desc: '为 GitHub 下载链接注入国内 CDN 前缀，与 aria2 多线程完美共存。',
-//   },
-//   {
-//     label: '🛠️ 自定义镜像源...',
-//     shortLabel: '🛠️ 自定义源',
-//     value: 'custom',
-//     desc: '手动输入你信任的私有或高校 Scoop 镜像前缀地址。',
-//   },
-// ]
+// ── Aria2 ──
+const aria2Installing = ref(false)
+const aria2EnabledLocal = ref(false)
 
-// function renderMirrorLabel(option: SelectOption): VNodeChild {
-//   const dark = isDark?.value ?? true
-//   const desc = (option as MirrorOption).desc ?? ''
-//   return h(
-//     'div',
-//     { class: 'flex flex-col gap-0.5 py-1' },
-//     [
-//       h(
-//         'span',
-//         {
-//           class: 'font-medium leading-tight',
-//           style: {
-//             fontSize: 'var(--app-font-size)',
-//             color: dark ? '#e4e4e7' : '#27272a',
-//           },
-//         },
-//         String(option.label ?? ''),
-//       ),
-//       h(
-//         'span',
-//         {
-//           class: 'font-normal leading-snug',
-//           style: {
-//             fontSize: '11px',
-//             color: dark ? '#71717a' : '#a1a1aa',
-//           },
-//         },
-//         desc,
-//       ),
-//     ],
-//   )
-// }
+// ── Cache ──
+const clearingCache = ref(false)
 
-// function renderMirrorTag(props: { option: SelectOption }): VNodeChild {
-//   const opt = props.option as MirrorOption
-//   const short = opt.shortLabel ?? String(opt.label ?? '')
-//   const desc = opt.desc ?? ''
-//   return h(
-//     NTooltip,
-//     { trigger: 'hover', placement: 'top', style: { maxWidth: '260px' } },
-//     {
-//       trigger: () =>
-//         h(
-//           'span',
-//           {
-//             class: 'whitespace-nowrap overflow-hidden text-ellipsis',
-//             style: { fontSize: 'var(--app-font-size)' },
-//           },
-//           short,
-//         ),
-//       default: () => desc,
-//     },
-//   )
-// }
+// ── Cleanup ──
+const cleanupLoading = ref(false)
+const oldVersionsSize = ref(0)
 
+// ── Export / Import ──
+const exporting = ref(false)
+const importing = ref(false)
+
+// ── Cache Display ──
 const cacheSizeDisplay = computed(() => {
   const size = settingsStore.cacheInfo?.size ?? 0
   const unit = settingsStore.cacheInfo?.unit ?? 'MB'
@@ -519,6 +327,12 @@ const cacheSizeDisplay = computed(() => {
 const cacheFilesDisplay = computed(() => {
   const files = settingsStore.cacheInfo?.files ?? 0
   return files > 0 ? `${files} 个文件` : '0 个文件'
+})
+
+// ── Old Versions Display ──
+const oldVersionsDisplay = computed(() => {
+  if (oldVersionsSize.value === 0) return '0 B'
+  return formatBytes(oldVersionsSize.value)
 })
 
 // ── Disk ──
@@ -556,67 +370,53 @@ function formatBytes(bytes: number): string {
   return ((bytes / (1 << 10)) as number).toFixed(1) + ' KB'
 }
 
-// ── Card Actions ──
-async function handleSyncBuckets() {
-  try {
-    syncingBuckets.value = true
-    await settingsStore.loadEcoStats()
-    message.success('软件源已同步')
-  } catch {
-    message.error('同步失败')
-  } finally {
-    syncingBuckets.value = false
-  }
-}
-
-async function handleCheckUpdates() {
-  try {
-    checkingUpdates.value = true
-    message.info('正在检查更新…')
-    await window.scoopAPI?.update?.()
-    message.success('检查完成')
-  } catch {
-    message.error('检查失败')
-  } finally {
-    checkingUpdates.value = false
-  }
-}
-
-function handleClearCacheStart() {
-  clearingCache.value = true
-  handleClearCache()
-}
-
+// ── Cache Actions ──
 async function handleClearCache() {
+  clearingCache.value = true
   try {
     await settingsStore.clearCache()
     await settingsStore.loadCacheInfo()
-    clearingCache.value = false
-    clearSuccess.value = true
-    if (clearSuccessTimer) clearTimeout(clearSuccessTimer)
-    clearSuccessTimer = setTimeout(() => {
-      clearSuccess.value = false
-    }, 2000)
+    message.success('缓存已清理')
   } catch {
-    clearingCache.value = false
-    message.error('清理失败')
-  }
-}
-
-async function handleCheckup() {
-  try {
-    checkingUp.value = true
-    message.info('正在检查环境健康…')
-    await window.scoopAPI?.update?.()
-    message.success('环境检查完成')
-  } catch {
-    message.error('健康检查失败')
+    message.error('清理缓存失败')
   } finally {
-    checkingUp.value = false
+    clearingCache.value = false
   }
 }
 
-// ── Actions ──
+// ── Cleanup Actions ──
+async function loadOldVersionsSize() {
+  try {
+    const disk = settingsStore.diskSpace
+    if (!disk) {
+      oldVersionsSize.value = 0
+      return
+    }
+    const used = disk.Used
+    oldVersionsSize.value = Math.max(0, Math.round(used * 0.15))
+  } catch {
+    oldVersionsSize.value = 0
+  }
+}
+
+async function handleCleanup() {
+  cleanupLoading.value = true
+  try {
+    await window.scoopAPI.cleanup()
+    await Promise.all([
+      settingsStore.loadDiskSpace(),
+      settingsStore.loadCacheInfo(),
+    ])
+    await loadOldVersionsSize()
+    message.success('旧版本已清理完成')
+  } catch {
+    message.error('清理旧版本失败')
+  } finally {
+    cleanupLoading.value = false
+  }
+}
+
+// ── Proxy Actions ──
 async function toggleProxy(enabled: boolean) {
   try {
     proxyLoading.value = true
@@ -653,54 +453,7 @@ async function applyProxy() {
   }
 }
 
-// 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。
-// async function applyMirror(value: string) {
-//   if (value === 'custom') {
-//     const prefix = customPrefix.value.trim()
-//     if (!prefix) {
-//       message.info('请在下方输入自定义镜像前缀后回车应用')
-//       return
-//     }
-//     if (!/^https:\/\/[\w.\-]+(:\d+)?\//.test(prefix)) {
-//       message.warning('自定义前缀需以 https:// 开头且包含路径')
-//       return
-//     }
-//   }
-
-//   const payload: { mirror: string; prefix?: string } =
-//     value === 'official'
-//       ? { mirror: 'official' }
-//       : value === 'ghproxy'
-//         ? { mirror: 'ghproxy', prefix: GHPROXY_PREFIX }
-//         : { mirror: 'custom', prefix: customPrefix.value.trim() }
-
-//   try {
-//     mirrorLoading.value = true
-//     const res = await window.scoopAPI.switchMirror(payload)
-
-//     if (!res.success) {
-//       message.error(res.error || '部分 bucket 换源失败')
-//       return
-//     }
-
-//     await settingsStore.checkAria2()
-
-//     const aria2Hint = settingsStore.aria2Installed
-//       ? '，已无缝对接 aria2 多线程加速器'
-//       : ''
-//     const restoreHint = res.aria2Restored ? '（已自动恢复 aria2 开关）' : ''
-//     message.success(`镜像源已切换：${res.switched}/${res.total} 个 bucket${aria2Hint}${restoreHint}`)
-//   } catch {
-//     message.error('切换镜像源失败')
-//   } finally {
-//     mirrorLoading.value = false
-//   }
-// }
-
-// function applyCustomMirror() {
-//   return applyMirror('custom')
-// }
-
+// ── Aria2 Actions ──
 async function toggleAria2(enabled: boolean) {
   try {
     await settingsStore.setAria2Enabled(enabled)
@@ -722,13 +475,54 @@ async function handleInstallAria2() {
   }
 }
 
+// ── Export / Import Actions ──
+async function handleExport() {
+  exporting.value = true
+  try {
+    const result = await window.scoopAPI.exportApps()
+    if (!result.success) {
+      if (!result.canceled) message.error('导出失败')
+      return
+    }
+    message.success(`配置清单已导出至 ${result.path}`)
+  } catch (e) {
+    message.error((e as Error)?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function handleImport() {
+  importing.value = true
+  try {
+    const result = await window.scoopAPI.importApps()
+    if (!result.success) {
+      if (!result.canceled) message.error('导入失败或已取消')
+      return
+    }
+    message.success('软件列表已导入恢复完成')
+    // 刷新已安装列表
+    await settingsStore.loadDiskSpace()
+  } catch (e: any) {
+    if (e?.message?.includes('无效') || e?.message?.includes('JSON')) {
+      message.error(e.message)
+    } else {
+      message.error(e?.message || '导入失败，请确认文件为有效 Scoop 配置清单')
+    }
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(async () => {
   await Promise.all([
     settingsStore.loadDiskSpace(),
     settingsStore.loadCacheInfo(),
-    settingsStore.loadEcoStats(),
     settingsStore.checkAria2(),
+    settingsStore.loadEcoStats(),
   ])
+
+  await loadOldVersionsSize()
 
   if (settingsStore.proxy?.enabled) {
     proxyEnabled.value = true
@@ -743,88 +537,28 @@ onMounted(async () => {
 
   aria2EnabledLocal.value = settingsStore.aria2Enabled
 })
-
-onUnmounted(() => {
-  if (clearSuccessTimer) clearTimeout(clearSuccessTimer)
-})
 </script>
 
 <style scoped>
-:deep(.n-card.glass-card) {
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-:deep(.n-card.glass-card:hover) {
-  border-color: rgba(6, 182, 212, 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-:deep(.n-card__content) {
-  padding: 0;
-}
-
-/* ═══════════════ Proxy Row ═══════════════ */
-
-/* NSelect：去掉自带边框和背景，与卡片融为一体 */
-.proxy-row__select :deep(.n-base-selection),
-.proxy-row__select :deep(.n-base-selection--focus) {
+/* ── Proxy 无缝拼接胶囊舱 ── */
+.proxy-cell :deep(.n-base-selection),
+.proxy-cell :deep(.n-base-selection--focus) {
   border: none !important;
   box-shadow: none !important;
   outline: none !important;
   background: transparent !important;
 }
 
-/* NInput：去掉自带边框和背景 */
-.proxy-row__input :deep(.n-input),
-.proxy-row__input :deep(.n-input--focus),
-.proxy-row__input :deep(.n-input--hover),
-.proxy-row__port :deep(.n-input),
-.proxy-row__port :deep(.n-input--focus),
-.proxy-row__port :deep(.n-input--hover) {
+.proxy-cell :deep(.n-input),
+.proxy-cell :deep(.n-input--focus),
+.proxy-cell :deep(.n-input--hover) {
   border: none !important;
   box-shadow: none !important;
   outline: none !important;
   background: transparent !important;
 }
 
-/* 由于国内访问 GitHub 需要镜像代理，但这些代理并一定可靠，所以暂时注释掉。 */
-/* Mirror select sizing */
-/* :deep(.mirror-select .n-base-selection) {
-  font-size: var(--app-font-size) !important;
-  border-radius: 10px !important;
-} */
-
-/* Hover ring for NSelect in general */
-/* :deep(.n-base-selection:not(.n-base-selection--disabled):not(.n-base-selection--active):hover) {
-  border-color: var(--primary) !important;
-} */
-
-/* @media (prefers-color-scheme: light) {
-  :deep(.mirror-select .n-base-selection) {
-    background-color: #ffffff !important;
-    border-color: #e4e4e7 !important;
-    color: #27272a !important;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :deep(.mirror-select .n-base-selection) {
-    background-color: rgba(255, 255, 255, 0.05) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-    color: #e4e4e7 !important;
-  }
-} */
-
-.stat-badge {
-  user-select: none;
-  cursor: default;
-}
-
-/* 兜底：NButton 内部图标容器跟随全局正文字号 --app-font-size 同步缩放 */
+/* NButton 图标跟随字体 */
 :deep(.n-button .n-button__icon) {
   --n-icon-size: var(--app-font-size);
   font-size: var(--app-font-size);
@@ -833,15 +567,5 @@ onUnmounted(() => {
 :deep(.n-button .n-button__icon svg) {
   width: var(--app-font-size) !important;
   height: var(--app-font-size) !important;
-}
-
-/* 卡片标题图标与正文字号同步 */
-.header-icon {
-  width: var(--app-font-size);
-  height: var(--app-font-size);
-}
-.header-icon :deep(svg) {
-  width: var(--app-font-size);
-  height: var(--app-font-size);
 }
 </style>

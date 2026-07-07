@@ -1,6 +1,6 @@
-import { ipcMain, BrowserWindow, shell } from 'electron'
+import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
-import { homedir } from 'os'
+import { homedir, tmpdir } from 'os'
 import { join } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from 'fs'
 import { spawn } from 'child_process'
@@ -705,6 +705,65 @@ export function registerScoopIPC(): void {
             })
         }
       )
+    }
+  })
+
+  // Export installed apps list (scoop export)
+  ipcMain.handle('scoop:export', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error('No window')
+
+    const { stdout } = await execScoop('export')
+
+    const { filePath, canceled } = await dialog.showSaveDialog(win, {
+      title: '导出软件配置清单',
+      defaultPath: join(homedir(), 'scoop-apps.json'),
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+
+    if (canceled || !filePath) return { success: false, canceled: true }
+
+    writeFileSync(filePath, stdout, 'utf-8')
+    return { success: true, path: filePath }
+  })
+
+  // Import apps list (scoop import)
+  ipcMain.handle('scoop:import', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error('No window')
+
+    const { filePaths, canceled } = await dialog.showOpenDialog(win, {
+      title: '选择配置清单文件',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
+
+    if (canceled || filePaths.length === 0) return { success: false, canceled: true }
+
+    const filePath = filePaths[0]
+    let content: string
+    try {
+      content = readFileSync(filePath, 'utf-8')
+    } catch {
+      throw new Error('无法读取文件')
+    }
+
+    // 验证是否为合法 JSON
+    try {
+      JSON.parse(content)
+    } catch {
+      throw new Error('无效的配置文件：文件内容不是合法的 JSON 格式')
+    }
+
+    // 写入临时文件供 scoop import 使用
+    const tmpFile = join(tmpdir(), `scoop-import-${Date.now()}.json`)
+    writeFileSync(tmpFile, content, 'utf-8')
+
+    try {
+      await execScoop(`import "${tmpFile}"`)
+      return { success: true, path: filePath }
+    } finally {
+      try { unlinkSync(tmpFile) } catch { /* ignore */ }
     }
   })
 

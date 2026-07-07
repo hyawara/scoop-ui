@@ -277,7 +277,7 @@ const configLoading = ref(false)
 
 const configItems = computed<ConfigItem[]>(() =>
   Object.entries(scoopConfigRaw.value)
-    .filter(([key]) => key !== 'gh_token')
+    .filter(([key]) => key !== 'gh_token' && key !== 'github_token')
     .map(([key, value]) => ({
       key,
       label: configMetaInfo[key]?.label || key,

@@ -82,6 +82,9 @@ interface Window {
     getScoopVersion: () => Promise<{ version: string }>
     getScoopConfig: () => Promise<Record<string, string>>
     setScoopConfig: (key: string, value: string) => Promise<void>
+    exportApps: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>
+    importApps: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>
+
     getAppIcon: (packageName: string) => Promise<{ icon: string | null }>
     clearAppIcon: (packageName: string) => Promise<{ success: boolean }>
     getDiskSpace: () => Promise<any>
