@@ -516,8 +516,8 @@ async function handleImport() {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([
+onMounted(() => {
+  Promise.all([
     settingsStore.loadDiskSpace(),
     settingsStore.loadCacheInfo(),
     settingsStore.checkAria2(),
