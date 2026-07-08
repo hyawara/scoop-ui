@@ -53,25 +53,24 @@ function appendWithCarriageReturn(logs: string[], chunk: string): void {
   const normalized = chunk.replace(/\r\n/g, '\n')
   const segments = normalized.split('\n')
 
+  if (segments.length > 0 && normalized.endsWith('\n')) {
+    segments.pop()
+  }
+
   for (let i = 0; i < segments.length; i++) {
     const raw = segments[i]
     const hasCr = raw.includes('\r')
-    // 只保留最后一个 \r 之后的内容（进度条重绘的最终态）
     const text = hasCr ? raw.slice(raw.lastIndexOf('\r') + 1) : raw
 
     if (i === 0) {
-      // 首段：决定是覆盖末行还是续接
       if (logs.length === 0) {
         logs.push(text)
       } else if (hasCr) {
-        // 带回车 → 覆盖当前末行（进度条刷新）
         logs[logs.length - 1] = text
       } else {
-        // 不带回车 → 视为上一 chunk 未完成行的续接
         logs[logs.length - 1] = logs[logs.length - 1] + text
       }
     } else {
-      // 换行后的新段，各自独立成行
       logs.push(text)
     }
   }
@@ -213,6 +212,7 @@ export function usePackageProgress() {
   }
 
   return {
+    progressMap,
     enqueue,
     enqueueOne,
     startProcessing,

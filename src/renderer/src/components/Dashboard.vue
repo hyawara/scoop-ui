@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch, type Ref } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, inject, type Ref } from 'vue'
 import {
   NCard,
   NTabs,
@@ -33,7 +33,6 @@ import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
 import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
-import TerminalDrawer from '@/components/TerminalDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 import type { DiscoverApp, AppVersion } from '@/types'
 
@@ -47,13 +46,9 @@ const batchUninstallDialogReforge = ref<ReturnType<typeof dialog.warning> | null
 
 // 行内进度系统
 const pkgProgress = usePackageProgress()
-// 批量队列执行进度（顶栏「正在执行 (1/9)」显示用）
+const openTerminal = inject<() => void>('openTerminal', () => {})
 const queueState = ref<{ current: number; total: number }>({ current: 0, total: 0 })
 
-// 单包日志弹窗
-const showPkgLogModal = ref(false)
-const activePkgLogName = ref('')
-const pkgLogContainerRef = ref<HTMLDivElement | null>(null)
 
 // 图标缓存
 const iconMap = ref<Record<string, string | null>>({})
@@ -400,14 +395,6 @@ const selectedPackageNames = computed(() =>
   packagesStore.installed.filter((p: any) => selectedPackages.value.has(p.name)).map((p: any) => p.name)
 )
 
-function scrollLogToBottom() {
-  nextTick(() => {
-    if (pkgLogContainerRef.value) {
-      pkgLogContainerRef.value.scrollTop = pkgLogContainerRef.value.scrollHeight
-    }
-  })
-}
-
 onMounted(() => {
   loadSelectedFromConfig()
   loadPinnedFromConfig()
@@ -417,14 +404,12 @@ onMounted(() => {
   })
 })
 
-// 当已安装列表变化时，异步预加载图标
 watch(() => packagesStore.installed.length, () => {
   if (packagesStore.installed.length > 0) {
     nextTick(preloadIcons)
   }
 }, { immediate: true })
 
-// Sync selected state: remove entries for packages that are no longer installed
 watch(() => packagesStore.installed, (list) => {
   const names = new Set(list.map((p: any) => p.name))
   let changed = false
@@ -441,49 +426,9 @@ watch(() => packagesStore.installed, (list) => {
   }
 }, { deep: true })
 
-function showPkgLogs(name: string) {
-  activePkgLogName.value = name
-  showPkgLogModal.value = true
-  scrollLogToBottom()
+function showPkgLogs(_name: string) {
+  openTerminal()
 }
-
-const activePkgLogLines = computed(() => {
-  if (!activePkgLogName.value) return []
-  const p = pkgProgress.getProgress(activePkgLogName.value)
-  return p ? p.logs : []
-})
-
-// 当前日志包是否处于 error 态（更新失败/版本校验未通过）
-const activePkgErrored = computed(() => {
-  if (!activePkgLogName.value) return false
-  return pkgProgress.getProgress(activePkgLogName.value)?.phase === 'error'
-})
-
-// error 态的错误摘要（通常为末尾3行日志或版本校验失败信息），供弹窗顶部高亮
-const activePkgError = computed(() => {
-  if (!activePkgLogName.value) return ''
-  return pkgProgress.getProgress(activePkgLogName.value)?.error || ''
-})
-
-// 从日志弹窗内重试更新：清理旧 error 态后重新走更新流程
-async function retryUpdateFromLog() {
-  const name = activePkgLogName.value
-  if (!name) return
-  pkgProgress.clearProgress(name)
-  const pkg = packagesStore.updatable.find((p) => p.name === name) || { name }
-  await handleUpdate(pkg)
-}
-
-// 日志弹窗打开时，新日志自动滚底
-watch(() => activePkgLogLines.value.length, () => {
-  if (showPkgLogModal.value) scrollLogToBottom()
-})
-
-// 当前日志包的进度数据（供TerminalDrawer使用）
-const currentPkgProgress = computed(() => {
-  if (!activePkgLogName.value) return null
-  return pkgProgress.getProgress(activePkgLogName.value) || null
-})
 
 // ═══ 热门推荐（空状态用） ═══
 const recommendedPackages = [
@@ -503,6 +448,7 @@ const storeInstallingSet = ref<Set<string>>(new Set())
 
 async function storeQuickInstall(pkgName: string) {
   if (storeInstallingSet.value.has(pkgName)) return
+  openTerminal()
   const s = new Set(storeInstallingSet.value)
   s.add(pkgName)
   storeInstallingSet.value = s
@@ -680,9 +626,8 @@ async function updateSinglePackage(name: string): Promise<boolean> {
 }
 
 async function handleUpdate(pkg: any) {
-  // 已在活跃队列中（queued/downloading/installing）则忽略重复触发
   if (pkgProgress.isActive(pkg.name)) return
-  // 单包也走队列：先入队呈现 queued 态，再由调度器提升为 processing
+  openTerminal()
   pkgProgress.enqueueOne(pkg.name)
   const ok = await updateSinglePackage(pkg.name)
   if (!ok) {
@@ -736,6 +681,7 @@ async function handleUninstall(pkg: any) {
  */
 async function runUpdateQueue(names: string[], flag: Ref<boolean>) {
   if (names.length === 0) return
+  openTerminal()
   flag.value = true
   // ① 即时正反馈：整批同时入队 → 全部呈现 queued 态
   pkgProgress.enqueue(names)
@@ -1144,12 +1090,6 @@ function openBucketDrawer() {
       @install="handleDiscoverInstall"
     />
 
-    <!-- 单包终端日志抽屉 -->
-    <TerminalDrawer
-      v-model:show="showPkgLogModal"
-      :progress="currentPkgProgress"
-      :package-name="activePkgLogName"
-    />
   </div>
 </template>
 

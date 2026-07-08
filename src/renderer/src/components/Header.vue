@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { NButton, NIcon, useMessage } from 'naive-ui'
+import { ref, onMounted, onUnmounted, inject, computed } from 'vue'
+import { NButton, NIcon, NBadge, useMessage } from 'naive-ui'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
+import { usePackageProgress } from '@/composables/usePackageProgress'
 import appIcon from '../../scoop-ui.svg'
 import {
   SearchOutline,
@@ -14,6 +15,7 @@ import {
   ExpandOutline,
   CloseOutline,
   SquareOutline,
+  TerminalOutline,
 } from '@vicons/ionicons5'
 
 const props = defineProps<{
@@ -27,6 +29,10 @@ const emit = defineEmits<{
   search: [query: string]
   'openSettings': []
 }>()
+
+const openTerminal = inject<() => void>('openTerminal', () => {})
+const { progressMap } = usePackageProgress()
+const terminalTaskCount = computed(() => progressMap.size)
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const isMaximized = ref(false)
@@ -139,6 +145,13 @@ async function refreshAll() {
       <NButton text size="small" @click="emit('openSettings')">
         <template #icon>
           <NIcon :component="SettingsOutline" size="16" />
+        </template>
+      </NButton>
+      <NButton text size="small" @click="openTerminal">
+        <template #icon>
+          <NBadge :value="terminalTaskCount" :max="99" :show="terminalTaskCount > 0">
+            <NIcon :component="TerminalOutline" size="16" />
+          </NBadge>
         </template>
       </NButton>
 

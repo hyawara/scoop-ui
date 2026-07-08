@@ -19,6 +19,7 @@ import SearchPanel from '@/components/SearchPanel.vue'
 import Onboarding from '@/components/Onboarding.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
+import TerminalDrawer from '@/components/TerminalDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 import { resolvePreset, DEFAULT_PRESET } from '@/theme/presets'
 
@@ -35,6 +36,7 @@ const colorPreset = ref(DEFAULT_PRESET)
 const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
+const showTerminalDrawer = ref(false)
 const autoCheckUpdate = ref(true)
 
 // Shared update state for UpdateManager + SettingsPanel.
@@ -371,6 +373,8 @@ provide('fontList', fontList)
 provide('fontSize', fontSize)
 provide('colorPreset', colorPreset)
 provide('showSettings', showSettings)
+provide('openTerminal', openTerminal)
+provide('showTerminalDrawer', showTerminalDrawer)
 provide('appDownloading', appDownloading)
 provide('autoCheckUpdate', autoCheckUpdate)
 provide('suppressUpdateToast', suppressUpdateToast)
@@ -509,6 +513,10 @@ function toggleTheme() {
 function openSettings() {
   showSettings.value = true
 }
+
+function openTerminal() {
+  showTerminalDrawer.value = true
+}
 </script>
 
 <template>
@@ -555,6 +563,9 @@ function openSettings() {
         <UpdateManager />
 
         <SettingsPanel v-model:show="showSettings" />
+
+        <!-- 全局终端日志流（单例，关闭不销毁，历史日志永久保留） -->
+        <TerminalDrawer v-model:show="showTerminalDrawer" />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { watch, computed, ref, nextTick } from 'vue'
+import { watch, computed, ref, inject } from 'vue'
 import { NScrollbar, NEmpty, NSkeleton, NButton, useMessage } from 'naive-ui'
 import { SearchOutline, CloudDownloadOutline } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import AppDetail from '@/components/AppDetail.vue'
 import AppListItem from '@/components/AppListItem.vue'
-import TerminalDrawer from '@/components/TerminalDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 
 const props = defineProps<{ query: string }>()
@@ -14,14 +13,9 @@ const message = useMessage()
 const selectedPackage = ref<any>(null)
 const isSearching = ref(false)
 
-// 行内进度系统
 const pkgProgress = usePackageProgress()
+const openTerminal = inject<() => void>('openTerminal', () => {})
 const installingSet = ref<Set<string>>(new Set())
-
-// 单包日志弹窗
-const showPkgLogModal = ref(false)
-const activePkgLogName = ref('')
-const pkgLogContainerRef = ref<HTMLDivElement | null>(null)
 
 const installedNames = computed(() =>
   new Set(packagesStore.installed.map((p: any) => p.name))
@@ -48,42 +42,14 @@ function selectPackage(pkg: any) {
   selectedPackage.value = pkg
 }
 
-function scrollLogToBottom() {
-  nextTick(() => {
-    if (pkgLogContainerRef.value) {
-      pkgLogContainerRef.value.scrollTop = pkgLogContainerRef.value.scrollHeight
-    }
-  })
+function showPkgLogs(_name: string) {
+  openTerminal()
 }
-
-function showPkgLogs(name: string) {
-  activePkgLogName.value = name
-  showPkgLogModal.value = true
-  scrollLogToBottom()
-}
-
-const activePkgLogLines = computed(() => {
-  if (!activePkgLogName.value) return []
-  const p = pkgProgress.getProgress(activePkgLogName.value)
-  return p ? p.logs : []
-})
-
-// 日志弹窗打开时，新日志自动滚底
-watch(() => activePkgLogLines.value.length, () => {
-  if (showPkgLogModal.value) scrollLogToBottom()
-})
-
-// 当前日志包的进度数据（供TerminalDrawer使用）
-const currentPkgProgress = computed(() => {
-  if (!activePkgLogName.value) return null
-  return pkgProgress.getProgress(activePkgLogName.value) || null
-})
 
 async function quickInstall(pkgName: string) {
   if (installingSet.value.has(pkgName)) return
-  const s = new Set(installingSet.value)
-  s.add(pkgName)
-  installingSet.value = s
+  openTerminal()
+  installingSet.value = new Set([...installingSet.value, pkgName])
   pkgProgress.startUpdate(pkgName)
   try {
     // 直接调用 API，绕过 store.install 的全局进度监听（避免冲突）
@@ -177,12 +143,5 @@ const skeletonItems = Array.from({ length: 5 })
         </div>
       </div>
     </div>
-
-    <!-- 单包终端日志抽屉 -->
-    <TerminalDrawer
-      v-model:show="showPkgLogModal"
-      :progress="currentPkgProgress"
-      :package-name="activePkgLogName"
-    />
   </div>
 </template>
