@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder --publish never && node scripts/cleanup-release.mjs",
-    "release": "npm run build && electron-builder --publish always"
+    "release": "npm run build && electron-builder --publish always",
+    "test:old-versions": "node scripts/test-old-versions.cjs"
   },
   "keywords": [
     "scoop",

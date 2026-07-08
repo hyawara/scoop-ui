@@ -772,7 +772,7 @@ function handleUpdateAllConfirm() {
   const count = packagesStore.updatable.length
   if (count === 0) return
   dialog.warning({
-    title: '确认全部更新',
+    title: '确认更新全部',
     content: `是否确定更新全部 ${count} 个软件？这可能会消耗较多网络资源和时间。`,
     positiveText: '立即更新',
     negativeText: '取消',

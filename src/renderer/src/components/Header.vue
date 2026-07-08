@@ -30,6 +30,7 @@ const emit = defineEmits<{
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const isMaximized = ref(false)
+const refreshing = ref(false)
 const message = useMessage()
 
 function handleKeydown(e: KeyboardEvent) {
@@ -56,15 +57,23 @@ function closeWindow() {
 }
 
 async function refreshAll() {
-  const packagesStore = usePackagesStore()
-  const settingsStore = useSettingsStore()
-  await Promise.all([
-    packagesStore.loadInstalled(),
-    packagesStore.loadUpdatable(),
-    settingsStore.loadEnv(),
-    settingsStore.loadCacheInfo(),
-  ])
-  message.success('刷新完成')
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    const packagesStore = usePackagesStore()
+    const settingsStore = useSettingsStore()
+    await Promise.all([
+      packagesStore.loadInstalled(),
+      packagesStore.loadUpdatable(),
+      settingsStore.loadEnv(),
+      settingsStore.loadCacheInfo(),
+      settingsStore.loadDiskSpace(),
+      settingsStore.loadEcoStats(),
+    ])
+    message.success('刷新完成')
+  } finally {
+    refreshing.value = false
+  }
 }
 </script>
 
@@ -117,9 +126,9 @@ async function refreshAll() {
 
     <!-- Right: Actions & Window Controls -->
     <div class="flex items-center gap-0.5 no-drag flex-shrink-0" style="position: relative; z-index: 10; pointer-events: auto;">
-      <NButton text @click="refreshAll" size="small">
+      <NButton text @click="refreshAll" size="small" :disabled="refreshing" :class="refreshing ? 'pointer-events-none' : ''">
         <template #icon>
-          <NIcon :component="RefreshOutline" size="16" />
+          <NIcon :component="RefreshOutline" size="16" :class="refreshing ? 'animate-spin' : ''" />
         </template>
       </NButton>
       <NButton text @click="emit('toggleTheme')" size="small">

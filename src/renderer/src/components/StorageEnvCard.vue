@@ -398,6 +398,7 @@ async function loadOldVersionsSize() {
 
 async function handleCleanup() {
   cleanupLoading.value = true
+  const loadingMsg = message.loading('正在清理旧版本...', { duration: 0 })
   try {
     const result = await window.scoopAPI.cleanup()
     await Promise.all([
@@ -405,6 +406,7 @@ async function handleCleanup() {
       settingsStore.loadCacheInfo(),
     ])
     await loadOldVersionsSize()
+    loadingMsg.destroy()
     const released = result?.released
     if (released && released > 0) {
       message.success(`已释放 ${formatBytes(released)} 磁盘空间`)
@@ -412,6 +414,7 @@ async function handleCleanup() {
       message.success('旧版本已清理完成')
     }
   } catch {
+    loadingMsg.destroy()
     message.error('清理旧版本失败')
   } finally {
     cleanupLoading.value = false

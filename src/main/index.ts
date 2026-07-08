@@ -6,6 +6,12 @@ import { registerScoopIPC } from './ipc/scoop.js'
 import { registerConfigIPC } from './ipc/config.js'
 import { registerUpdaterIPC } from './ipc/updater.js'
 
+// 静默 Node.js v22+ 内部 DEP0180 (fs.Stats constructor) 的无害警告
+process.on('warning', (warning) => {
+  if ((warning as any).code === 'DEP0180') return
+  console.warn(warning)
+})
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null

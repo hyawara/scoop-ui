@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, readlinkSync, promises as fsp } from 'fs'
 import { spawn } from 'child_process'
 
@@ -341,18 +341,18 @@ export function registerScoopIPC(): void {
         const appDir = join(appsDir, app.name)
         const currentPath = join(appDir, 'current')
 
-        let currentTarget = ''
+        let currentVersionName = ''
         try {
-          currentTarget = readlinkSync(currentPath)
-          currentTarget = join(appDir, currentTarget)
+          currentVersionName = basename(readlinkSync(currentPath))
         } catch { /* not a junction */ }
 
         const versions = await fsp.readdir(appDir, { withFileTypes: true })
         const verResults = await Promise.all(versions.map(async (ver) => {
           if (!ver.isDirectory() || ver.name === 'current') return 0
-          const verPath = join(appDir, ver.name)
-          if (currentTarget && verPath.toLowerCase() === currentTarget.toLowerCase()) return 0
-          return await getDirSize(verPath)
+          // junction 破损/不存在时保守处理：不把任何版本计为旧版本，防止误删
+          if (!currentVersionName) return 0
+          if (ver.name.toLowerCase() === currentVersionName.toLowerCase()) return 0
+          return await getDirSize(join(appDir, ver.name))
         }))
         return verResults.reduce((a, b) => a + b, 0)
       }))
