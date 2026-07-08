@@ -365,13 +365,74 @@ export function registerScoopIPC(): void {
   ipcMain.handle('scoop:cleanup', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const beforeBytes = await getOldVersionTotalBytes()
-    await execScoop('cleanup --all', (data) => {
+
+    // 1) 找到有旧版本残留的应用，杀掉正在运行的旧版本进程（如 clash-party 后台进程锁住 app.asar 导致删除失败）
+    const killedApps: { name: string; exeName: string }[] = []
+    try {
+      const scoopRoot = await resolveScoopRoot()
+      const appsDir = join(scoopRoot, 'apps')
+      if (existsSync(appsDir)) {
+        const apps = await fsp.readdir(appsDir, { withFileTypes: true })
+        for (const app of apps) {
+          if (!app.isDirectory()) continue
+          const appDir = join(appsDir, app.name)
+          const currentPath = join(appDir, 'current')
+          let currentVersionName = ''
+          try { currentVersionName = basename(readlinkSync(currentPath)) } catch { /* no junction */ }
+
+          const versions = await fsp.readdir(appDir, { withFileTypes: true })
+          let hasOld = false
+          for (const ver of versions) {
+            if (!ver.isDirectory() || ver.name === 'current') continue
+            if (!currentVersionName) continue
+            if (ver.name.toLowerCase() === currentVersionName.toLowerCase()) continue
+            hasOld = true
+            break
+          }
+          if (!hasOld) continue
+
+          // 查进程名：应用进程名可能 ≠ app name（如 clash-party 进程名可能是 ClashParty）
+          const psScript = `try { (Get-Process -ErrorAction SilentlyContinue | Where-Object { try { \$_.MainModule.FileName -like '${appDir.replace(/\\/g, '\\\\')}\\\\*' } catch { \$false } } | Select-Object -First 1 -ExpandProperty Name) } catch { }`
+          const { stdout } = await execPowerShell(psScript)
+          const exeName = stdout.trim()
+          if (!exeName) continue
+
+          const procName = exeName.endsWith('.exe') ? exeName : `${exeName}.exe`
+          await execPowerShell(`taskkill /f /im "${procName}" 2>'' 3>''`)
+          killedApps.push({ name: app.name, exeName })
+        }
+      }
+    } catch { /* ignore kill errors */ }
+
+    // 给进程退出留时间
+    if (killedApps.length > 0) await new Promise(r => setTimeout(r, 800))
+
+    // 2) 执行 scoop cleanup
+    const { stdout, stderr, code } = await execScoop('cleanup --all', (data) => {
       sendProgress(win, {
         type: 'message',
         package: 'scoop',
         message: data.trim(),
       })
     })
+    if (code !== 0) {
+      throw new Error(stderr || stdout || '清理旧版本失败')
+    }
+
+    // 3) 从 current 目录重启被杀的应用（类似 Scoop PR #6603 forcekill 的 restart 逻辑）
+    for (const ka of killedApps) {
+      try {
+        const appDir = join(await resolveScoopRoot(), 'apps', ka.name)
+        const currentDir = join(appDir, 'current')
+        if (!existsSync(currentDir)) continue
+        const exePath = join(currentDir, ka.exeName.endsWith('.exe') ? ka.exeName : `${ka.exeName}.exe`)
+        if (existsSync(exePath)) {
+          await execPowerShell(`Start-Process "${exePath}"`)
+          sendProgress(win, { type: 'message', package: 'scoop', message: `已重启 ${ka.name}` })
+        }
+      } catch { /* restart failed */ }
+    }
+
     const afterBytes = await getOldVersionTotalBytes()
     return { released: Math.max(0, beforeBytes - afterBytes) }
   })
@@ -999,6 +1060,7 @@ export function registerScoopIPC(): void {
   const ALLOWED_COMMAND_PATTERNS = [
     /^scoop\s+(reset|uninstall|install|update|checkup|cleanup|config|bucket|list|status|search|info|cat|home|prefix|which|shim|export|import|hold|unhold|hold-check|virustotal|help)/i,
     /^(mysqld|nginx|redis-server|redis-cli|node|npm|yarn|pnpm|python|pip|java|javac|gradle|maven|mvn)\s+/i,
+    /^reg\s+(import|export|add|delete|query|copy|save|load|unload|restore|compare)/i,
     /^shim\s+/i,
     /^netsh\s+/i,
     /^Set-ExecutionPolicy\s+/i,

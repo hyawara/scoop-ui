@@ -174,6 +174,31 @@ const POST_ACTION_PATTERNS = [
   /Don't forget to run\s+(.+)/i,
 ]
 
+const COMMAND_LINE_PATTERNS = [
+  /^reg\s+(import|export|add|delete|query|copy|save|load|unload|restore|compare)\s/i,
+  /^scoop\s+/i,
+  /^powershell\s+/i,
+  /^cmd\s+\//i,
+  /^winget\s+/i,
+  /^choco\s+/i,
+  /^pip(\d)?\s+(install|uninstall|list|show|freeze)/i,
+  /^npm\s+(install|uninstall|update|run|start|build)/i,
+  /\.(exe|bat|cmd|ps1|reg|msi)"?\s*$/i,
+]
+
+function isCommandLine(line: string): boolean {
+  return COMMAND_LINE_PATTERNS.some(p => p.test(line.trim()))
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败')
+  }
+}
+
 function extractCaveats(task: TaskLog) {
   if (task.caveats || task.caveatsExecuted) return
   const commands: string[] = []
@@ -408,7 +433,13 @@ const hasRunning = computed(() => runningCount.value > 0)
                 class="terminal-line"
               >
                 <span class="line-number">{{ String(lIdx + 1).padStart(4, '0') }}</span>
-                <span :class="getLogLineClass(line)" class="break-all">{{ line }}</span>
+                <span :class="getLogLineClass(line)" class="break-all selectable">{{ line }}</span>
+                <button
+                  v-if="isCommandLine(line)"
+                  class="terminal-copy-btn"
+                  @click="copyText(line)"
+                  title="复制命令"
+                >复制</button>
               </div>
 
               <div
@@ -492,6 +523,13 @@ const hasRunning = computed(() => runningCount.value > 0)
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   font-size: 13px;
   line-height: 1.5;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .terminal-body {
@@ -502,10 +540,37 @@ const hasRunning = computed(() => runningCount.value > 0)
   display: flex;
   gap: 10px;
   border-radius: 3px;
+  align-items: flex-start;
 }
 
 .terminal-line:hover {
   background: rgba(255, 255, 255, 0.025);
+}
+
+.terminal-copy-btn {
+  display: none;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-family: inherit;
+  line-height: 1.4;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.terminal-line:hover .terminal-copy-btn {
+  display: inline-block;
+}
+
+.terminal-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #e4e4e7;
 }
 
 .line-number {

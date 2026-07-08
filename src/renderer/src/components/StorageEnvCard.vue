@@ -415,9 +415,9 @@ async function handleCleanup() {
     } else {
       message.success('旧版本已清理完成')
     }
-  } catch {
+  } catch (e) {
     loadingMsg.destroy()
-    message.error('清理旧版本失败')
+    message.error(`清理旧版本失败: ${(e as Error)?.message || '未知错误'}`)
   } finally {
     cleanupLoading.value = false
   }
