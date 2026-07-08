@@ -554,7 +554,7 @@ watch(() => props.show, (val) => {
                   </div>
                 </div>
                 <div class="version-badge-group">
-                  <span class="version-badge">v{{ APP_VERSION }}</span>
+                  <span class="version-badge">{{ APP_VERSION }}</span>
                   <!-- 发现新版本时：滑出目标版本可用标签，带呼吸灯 -->
                   <Transition name="version-hint">
                     <span

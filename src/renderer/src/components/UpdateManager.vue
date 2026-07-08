@@ -78,7 +78,7 @@ function installNow() {
           <div class="update-popup-header">
             <NIcon :component="RocketOutline" size="16" class="update-icon" />
             <span class="update-text">
-              发现新版本 <strong class="font-mono">v{{ updateInfo.version }}</strong>
+              发现新版本 <strong class="font-mono">{{ updateInfo.version }}</strong>
             </span>
             <NButton
               text
@@ -143,7 +143,7 @@ function installNow() {
           <div class="update-popup-header">
             <NIcon :component="RocketOutline" size="16" class="update-icon update-icon-success" />
             <span class="update-text update-text-success">
-              新版本 <strong class="font-mono">v{{ updateInfo.version }}</strong> 已下载完成
+              新版本 <strong class="font-mono">{{ updateInfo.version }}</strong> 已下载完成
             </span>
           </div>
           <div class="update-popup-actions">
@@ -170,7 +170,7 @@ function installNow() {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <NIcon :component="RocketOutline" size="18" class="text-indigo-400" />
-            <span class="text-base font-bold text-white">v{{ updateInfo.version }}</span>
+            <span class="text-base font-bold text-white">{{ updateInfo.version }}</span>
           </div>
           <span v-if="updateInfo.releaseDate" class="text-xs text-slate-500">
             {{ new Date(updateInfo.releaseDate).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) }}
