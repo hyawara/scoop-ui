@@ -117,7 +117,7 @@ function installNow() {
           <div class="update-popup-header">
             <div class="update-spinner" />
             <span class="update-text update-text-downloading">
-              下载中... {{ downloadProgress }}%
+              下载中...
             </span>
           </div>
           <div class="update-popup-progress">
@@ -204,7 +204,7 @@ function installNow() {
             立即更新
           </NButton>
           <NButton v-else size="small" type="info" disabled class="!rounded-lg">
-            下载中 {{ downloadProgress }}%
+            下载中
           </NButton>
         </div>
       </div>

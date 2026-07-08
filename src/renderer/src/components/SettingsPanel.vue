@@ -220,6 +220,8 @@ async function handleCheckUpdate() {
 }
 
 async function triggerAppUpgrade() {
+  // 立即切换为下载中状态，消除网络连接等待期的无反馈空洞
+  updateInfo.value.phase = 'downloading'
   try {
     await startDownloadUpdate?.()
   } catch (e) {
@@ -628,7 +630,6 @@ watch(() => props.show, (val) => {
                     <!-- downloading -->
                     <div v-else-if="effectivePhase === 'downloading'" key="downloading" class="flex items-center gap-2">
                       <div class="update-spinner" />
-                      <span class="update-percent">{{ displayPercent }}%</span>
                       <NButton size="small" quaternary disabled class="!rounded-md">正在下载...</NButton>
                     </div>
 
@@ -645,7 +646,11 @@ watch(() => props.show, (val) => {
                 <Transition name="progress-slide">
                   <div v-if="effectivePhase === 'downloading'" class="update-progress-track">
                     <div class="progress-bar-shell">
-                      <div class="progress-bar-fill" :style="{ width: displayPercent + '%' }" />
+                      <div
+                      class="progress-bar-fill"
+                      :class="{ 'progress-bar-fill--idle': displayPercent === 0 }"
+                      :style="{ width: displayPercent + '%' }"
+                    />
                     </div>
                     <span class="progress-meta">
                       {{ formatBytes(displayTransferred) }} / {{ formatBytes(displayTotal) }}
@@ -1196,18 +1201,6 @@ watch(() => props.show, (val) => {
   flex-shrink: 0;
 }
 
-.update-percent {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(16, 185, 129, 0.85);
-  min-width: 2.5em;
-  white-space: nowrap;
-}
-.dark .update-percent {
-  color: rgba(52, 211, 153, 0.9);
-}
-
 /* — 进度条轨道 — */
 .update-progress-track {
   display: flex;
@@ -1237,6 +1230,17 @@ watch(() => props.show, (val) => {
 }
 .dark .progress-bar-fill {
   background: linear-gradient(90deg, #10B981, #6EE7B7);
+}
+
+/* 初始等待期的不确定进度：左→右→左 呼吸扫描，一旦接到真实进度立即被 transition 覆盖 */
+.progress-bar-fill--idle {
+  width: 18% !important;
+  animation: idleSweep 1.5s ease-in-out infinite;
+}
+@keyframes idleSweep {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(420%); }
+  100% { transform: translateX(-100%); }
 }
 
 .progress-meta {
