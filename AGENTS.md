@@ -76,7 +76,7 @@ electron-builder reads `publish: github` from `electron-builder.yml` and automat
 
 1. Bump `version` in `package.json`
 2. Commit and push
-3. Tag: `git tag v1.2.0`
+3. Tag: `git tag 1.2.0`
 4. Push tag: `git push origin v1.2.0`
 5. GitHub Actions builds and publishes the Release automatically
 6. Users' apps detect the update on next launch via `latest.yml`, download only changed blocks (differential), then prompt "restart and install"
