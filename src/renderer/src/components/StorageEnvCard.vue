@@ -333,8 +333,10 @@ const cacheFilesDisplay = computed(() => {
 
 // ── Old Versions Display ──
 const oldVersionsDisplay = computed(() => {
-  if (oldVersionsSize.value === 0) return '0 B'
-  return formatBytes(oldVersionsSize.value)
+  const bytes = oldVersionsSize.value
+  if (bytes === 0) return '0 MB'
+  if (bytes >= 1 << 30) return ((bytes / (1 << 30)) as number).toFixed(2) + ' GB'
+  return ((bytes / (1 << 20)) as number).toFixed(1) + ' MB'
 })
 
 // ── Disk ──
