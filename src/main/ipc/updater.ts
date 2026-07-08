@@ -143,7 +143,7 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── IPC：退出并安装（触发重启）──
-  // 手动启动安装器，不带 --updated 参数不静默，弹出 Windows 原生 NSIS 安装界面
+  // 手动启动安装器，弹出 NSIS 原生差分安装界面
   ipcMain.handle('app:quitAndInstall', () => {
     const installerPath = (autoUpdater as any).downloadedUpdateHelper?.file
     if (installerPath) {

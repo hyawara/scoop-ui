@@ -112,10 +112,8 @@ async function startDownloadUpdate() {
   }
 }
 
-// 下载完成后退出并安装（自动重启）
-// isUpdate=true 表示是更新场景，使用静默安装跳过确认步骤
-function quitAndInstallUpdate(isUpdate = true) {
-  window.scoopAPI.quitAndInstall({ isUpdate })
+function quitAndInstallUpdate() {
+  window.scoopAPI.quitAndInstall()
 }
 
 // 事件流状态机：统一消费主进程推送的 app:updateEvent

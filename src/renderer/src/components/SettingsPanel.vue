@@ -57,7 +57,7 @@ const colorPreset = inject<Ref<string>>('colorPreset')!
 const updateInfo = inject<any>('updateInfo')
 const checkForUpdate = inject<(manual?: boolean) => Promise<void>>('checkForUpdate')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
-const quitAndInstallUpdate = inject<(isUpdate?: boolean) => void>('quitAndInstallUpdate')
+const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
 const autoCheckUpdate = inject<Ref<boolean>>('autoCheckUpdate')!
 
 const APP_VERSION = ref('')
@@ -230,11 +230,11 @@ async function triggerAppUpgrade() {
 }
 
 function installUpdate() {
-  quitAndInstallUpdate?.(true)
+  quitAndInstallUpdate?.()
 }
 
 function restartAndInstall() {
-  quitAndInstallUpdate?.(true)
+  quitAndInstallUpdate?.()
 }
 
 function selectPreset(key: string) {

@@ -19,7 +19,7 @@ const updateInfo = inject<any>('updateInfo')
 const showSettings = inject<any>('showSettings')
 const suppressUpdateToast = inject<any>('suppressUpdateToast')
 const startDownloadUpdate = inject<() => Promise<void>>('startDownloadUpdate')
-const quitAndInstallUpdate = inject<(isUpdate?: boolean) => void>('quitAndInstallUpdate')
+const quitAndInstallUpdate = inject<() => void>('quitAndInstallUpdate')
 
 type BannerState = 'hidden' | 'notified' | 'updating' | 'downloaded'
 const showNotesModal = ref(false)
@@ -61,7 +61,7 @@ async function startDownload() {
 }
 
 function installNow() {
-  quitAndInstallUpdate?.(true)
+  quitAndInstallUpdate?.()
 }
 </script>
 
