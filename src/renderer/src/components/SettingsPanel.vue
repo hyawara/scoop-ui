@@ -194,7 +194,7 @@ const newVersionSubtitle = computed(() => {
   const v = remoteVersion.value
   const size = packageSize.value
   const sizeText = size > 0 ? `，大小约 ${formatBytes(size)}` : ''
-  return `发现新版本 v${v}${sizeText}`
+  return `发现新版本 ${v}${sizeText}`
 })
 
 async function loadScoopVersion() {
@@ -564,7 +564,7 @@ watch(() => props.show, (val) => {
                       class="version-badge-next"
                     >
                       <span class="version-next-arrow">➔</span>
-                      v{{ remoteVersion }} 可用
+                      {{ remoteVersion }} 可用
                     </span>
                   </Transition>
                 </div>

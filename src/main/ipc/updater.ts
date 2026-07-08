@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
+import { spawn } from 'child_process'
 import electronUpdater, { type UpdateInfo, type ProgressInfo } from 'electron-updater'
 
 // electron-updater 是 CJS 包，在 ESM 下必须 default import 再解构，
@@ -142,11 +143,26 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── IPC：退出并安装（触发重启）──
-  ipcMain.handle('app:quitAndInstall', (_, options?: { isUpdate?: boolean }) => {
-    // isSilent: true=静默安装（跳过确认），false=显示安装进度
-    // isForceRunAfter: true=安装后自动拉起应用
-    // 如果是更新场景（isUpdate=true），使用静默安装，跳过"是否为所有人安装"等确认步骤
-    const isSilent = options?.isUpdate ?? false
-    setImmediate(() => autoUpdater.quitAndInstall(isSilent, true))
+  // 手动启动安装器，不带 --updated 参数不静默，弹出 Windows 原生 NSIS 安装界面
+  ipcMain.handle('app:quitAndInstall', () => {
+    const installerPath = (autoUpdater as any).downloadedUpdateHelper?.file
+    if (installerPath) {
+      // 不带 --updated 运行，NSIS 会显示完整的安装向导（含进度条）
+      // --force-run 让安装完成后自动拉起应用
+      const proc = spawn(installerPath, ['--force-run'], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      proc.on('error', (err) => {
+        console.error('[updater] 启动安装器失败:', err)
+        // fallback 到 autoUpdater
+        setImmediate(() => autoUpdater.quitAndInstall(false, true))
+      })
+      proc.unref()
+      setImmediate(() => app.quit())
+    } else {
+      // 拿不到安装包路径时走默认流程
+      setImmediate(() => autoUpdater.quitAndInstall(false, true))
+    }
   })
 }

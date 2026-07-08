@@ -303,7 +303,6 @@ function installNow() {
 .dark .update-text-success {
   color: #34D399;
 }
-
 /* 关闭按钮 */
 .update-close-btn {
   color: #9CA3AF !important;
