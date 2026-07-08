@@ -147,9 +147,9 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
   ipcMain.handle('app:quitAndInstall', () => {
     const installerPath = (autoUpdater as any).downloadedUpdateHelper?.file
     if (installerPath) {
-      // 不带 --updated 运行，NSIS 会显示完整的安装向导（含进度条）
+      // --updated 告诉 NSIS 这是增量更新 → 跳过前置页面，直接显示差分应用进度条
       // --force-run 让安装完成后自动拉起应用
-      const proc = spawn(installerPath, ['--force-run'], {
+      const proc = spawn(installerPath, ['--updated', '--force-run'], {
         detached: true,
         stdio: 'ignore',
       })
