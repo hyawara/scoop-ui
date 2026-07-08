@@ -970,7 +970,7 @@ function openBucketDrawer() {
                         </template>
                         <template v-else>
                           <NIcon :component="DownloadOutline" :size="15" />
-                          更新 ({{ selectedPackageNames.length }})
+                          更新已选 ({{ selectedPackageNames.length }})
                         </template>
                       </button>
                       <button
@@ -982,22 +982,22 @@ function openBucketDrawer() {
                           : 'border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 cursor-pointer'"
                       >
                         <NIcon :component="TrashOutline" :size="15" />
-                        卸载 ({{ selectedPackageNames.length }})
+                        卸载已选 ({{ selectedPackageNames.length }})
                       </button>
                       <button
                         :disabled="packagesStore.updatable.length === 0 || updatingAll || batchUpdating"
                         @click="handleUpdateAllConfirm"
-                        class="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-md border transition-all select-none"
+                        class="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all select-none"
                         :class="packagesStore.updatable.length === 0 || batchUpdating
-                          ? 'dark:border-white/[0.04] border-black/[0.06] bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
-                          : 'border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 cursor-pointer'"
+                          ? 'bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
+                          : 'bg-transparent dark:text-zinc-400 text-gray-400 hover:bg-black/[0.06] dark:hover:bg-white/[0.10] cursor-pointer'"
                       >
                         <template v-if="updatingAll">
                           <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-current rounded-full animate-spin" />
                           执行中 ({{ queueState.current }}/{{ queueState.total }})
                         </template>
                         <template v-else>
-                          全部更新
+                          更新全部
                           <template v-if="packagesStore.updatable.length > 0">
                             ({{ packagesStore.updatable.length }})
                           </template>
