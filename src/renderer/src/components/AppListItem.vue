@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NCheckbox, NButton, NIcon, NPopconfirm } from 'naive-ui'
-import { DownloadOutline, TrashOutline, TerminalOutline, TimeOutline, CheckmarkCircle, CloseCircle, ArrowUpCircleOutline } from '@vicons/ionicons5'
+import { DownloadOutline, TrashOutline, TerminalOutline, CheckmarkCircle, CloseCircle, ArrowUpCircleOutline } from '@vicons/ionicons5'
 
 interface PackageInfo {
   name: string
@@ -10,12 +10,9 @@ interface PackageInfo {
   global?: boolean
 }
 
-/**
- * 行内任务队列状态机相位（与 usePackageProgress 的 PackagePhase 对齐）：
- * queued 排队 · downloading 下载 · installing 安装 · success 成功 · error 失败
- */
+/** 行内极简执行态：Scoop 原生命令接管中 / 终态反馈 */
 export interface ProgressInfo {
-  phase: 'queued' | 'downloading' | 'installing' | 'success' | 'error'
+  phase: 'downloading' | 'installing' | 'success' | 'error'
   percent: number
 }
 
@@ -42,16 +39,13 @@ const emit = defineEmits<{
   (e: 'toggle-pin', name: string): void
 }>()
 
-// 活跃执行中（queued/downloading/installing）：锁定复选框，避免中途改选
+// 活跃执行中：锁定复选框，避免中途改选
 const isProcessing = computed(() =>
   !!props.progress &&
-  (props.progress.phase === 'queued' ||
-    props.progress.phase === 'downloading' ||
-    props.progress.phase === 'installing')
+  (props.progress.phase === 'downloading' || props.progress.phase === 'installing')
 )
 
 // 相位便捷判断（模板 v-if 分支用）
-const isQueued = computed(() => props.progress?.phase === 'queued')
 const isDownloading = computed(() => props.progress?.phase === 'downloading')
 const isInstalling = computed(() => props.progress?.phase === 'installing')
 const isSuccess = computed(() => props.progress?.phase === 'success')
@@ -178,13 +172,7 @@ const ringDashoffset = computed(() => {
           </NButton>
         </div>
 
-        <!-- ═══ 状态 B：queued 排队等待态 ═══ -->
-        <div v-else-if="isQueued" key="queued" class="flex items-center gap-1.5 pr-0.5">
-          <NIcon :component="TimeOutline" size="15" class="text-zinc-400 dark:text-zinc-500 animate-pulse" />
-          <span class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 select-none">等待中</span>
-        </div>
-
-        <!-- ═══ 状态 C：processing 进行态（downloading / installing） ═══ -->
+        <!-- ═══ 状态 B：processing 进行态（downloading / installing） ═══ -->
         <div v-else-if="isDownloading || isInstalling" key="processing" class="flex items-center gap-1.5">
           <!-- 脉冲圆圈 + 环形进度 -->
           <div class="relative flex items-center justify-center w-6 h-6 flex-shrink-0">

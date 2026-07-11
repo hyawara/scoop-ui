@@ -17,6 +17,7 @@ interface ProgressData {
   package: string
   percent?: number
   message: string
+  stream?: 'stdout' | 'stderr'
 }
 
 interface CleanupSkippedDir {
@@ -34,10 +35,11 @@ interface CleanupResult {
 }
 
 // Scoop 包更新结果（与 src/main/ipc/scoop.ts 的 scoop:update handler 返回值保持一致）
-// 后端不再 throw，而是返回结构化结果对象，携带版本双重校验信息，杜绝"伪成功"
+// 更新完成后由 renderer 重新读取 scoop list/status 做终态对齐，不从日志推断单包成败。
 interface UpdateResult {
   success: boolean
   package: string
+  packages?: string[]
   code?: number
   localVersion?: string
   expectedVersion?: string
@@ -63,7 +65,7 @@ interface Window {
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>
-    update: (name?: string) => Promise<UpdateResult>
+    update: (name?: string | string[]) => Promise<UpdateResult>
     updateSelf: () => Promise<{ success: boolean; stdout: string; stderr: string }>
     cleanup: () => Promise<CleanupResult>
     cache: () => Promise<{ size: number; unit: string; files: number }>
@@ -109,6 +111,8 @@ interface Window {
     removeProgressListener: () => void
     onLog: (callback: (data: ProgressData) => void) => void
     removeLogListener: () => void
+    onLogEnd: (callback: (data: { package: string; packages?: string[]; success: boolean; code?: number }) => void) => void
+    removeLogEndListener: () => void
 
     // 内嵌命令执行器 API
     executeCommand: (command: string) => Promise<{ success: boolean }>

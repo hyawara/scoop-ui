@@ -216,6 +216,66 @@ export function execScoop(
   })
 }
 
+
+function bashQuote(arg: string): string {
+  return `'${arg.replace(/'/g, `'\\''`)}'`
+}
+
+/**
+ * Execute a native scoop command with argv-style arguments and stream BOTH stdout/stderr.
+ * This is used by long-running terminal workflows where the renderer wants raw Scoop output,
+ * including carriage returns (\r) for progress-line overwrites.
+ */
+export function execScoopRaw(
+  args: string[],
+  onProgress?: (data: string, stream: 'stdout' | 'stderr') => void,
+  signal?: AbortSignal,
+  cwd?: string
+): Promise<PSResult> {
+  return new Promise((resolve, reject) => {
+    const command = ['scoop', ...args.map(bashQuote)].join(' ')
+    const child: ChildProcess = spawn(BASH_EXE, ['--login', '-c', command], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        cwd: cwd || undefined,
+      }
+    )
+
+    let stdout = ''
+    let stderr = ''
+
+    const stdoutDecoder = iconv.decodeStream('gbk')
+    stdoutDecoder.on('data', (text: string) => {
+      const withCr = stripAnsiKeepCr(text)
+      stdout += withCr.replace(/\r/g, '')
+      onProgress?.(withCr, 'stdout')
+    })
+    child.stdout?.pipe(stdoutDecoder)
+
+    const stderrDecoder = iconv.decodeStream('gbk')
+    stderrDecoder.on('data', (text: string) => {
+      const withCr = stripAnsiKeepCr(text)
+      stderr += withCr.replace(/\r/g, '')
+      onProgress?.(withCr, 'stderr')
+    })
+    child.stderr?.pipe(stderrDecoder)
+
+    child.on('error', (err) => {
+      reject(err)
+    })
+
+    child.on('close', (code) => {
+      resolve({ stdout, stderr, code })
+    })
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        child.kill()
+      })
+    }
+  })
+}
+
 export function execScoopJSON<T>(
   args: string,
   signal?: AbortSignal

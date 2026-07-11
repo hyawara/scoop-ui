@@ -110,7 +110,7 @@ export const usePackagesStore = defineStore('packages', () => {
       window.scoopAPI.onProgress((data: ProgressData) => {
         progress.value = data
       })
-      // 后端带版本双重校验，返回结构化结果而非抛异常；失败时主动抛出让调用方感知，杜绝"伪成功"
+      // 后端返回原生命令退出结果；随后重新读取 list/status 做终态对齐
       const result = await window.scoopAPI.update(name)
       await loadInstalled()
       await loadUpdatable()

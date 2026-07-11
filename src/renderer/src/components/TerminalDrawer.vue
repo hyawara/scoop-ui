@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, watchEffect, nextTick, onMounted, inject } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
+  NButton,
   NDrawer,
   NDrawerContent,
-  NButton,
-  NSelect,
   useMessage,
 } from 'naive-ui'
-import type { PackagePhase } from '@/composables/usePackageProgress'
-import { usePackageProgress } from '@/composables/usePackageProgress'
+import { usePackagesStore } from '@/stores/packages'
 
 const props = defineProps<{
   show: boolean
@@ -19,338 +17,235 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
-const { progressMap } = usePackageProgress()
+const packagesStore = usePackagesStore()
 const fontFamily = inject<string>('fontFamily', '')
-const scrollContainer = ref<HTMLElement | null>(null)
+const rawLines = ref<string[]>([])
 
-type TaskStatus = 'pending' | 'running' | 'success' | 'error'
-
-interface TaskLog {
-  id: string
-  status: TaskStatus
-  logs: string[]
-  caveats?: string[]
-  caveatsExecuted?: boolean
+interface LogLine {
+  text: string
+  type: 'normal' | 'success' | 'error'
 }
 
-interface EmbeddedExecution {
-  taskId: string
-  command: string
-  logs: Array<{ type: 'stdout' | 'stderr'; content: string }>
-  status: 'running' | 'completed' | 'failed'
+interface AppChapter {
+  appName: string
+  isHeader: boolean
+  versionInfo?: string
+  type: 'update' | 'install' | 'general'
+  lines: LogLine[]
 }
+
+const MAX_LINES = 5000
 
 const visible = computed({
   get: () => props.show,
   set: (val) => emit('update:show', val),
 })
 
-const capturedNames = new Set<string>()
-const taskStream = ref<TaskLog[]>([])
+const rawLogs = computed(() => rawLines.value.join('\n'))
+const hasLogs = computed(() => rawLines.value.some(line => line.trim().length > 0))
 
-function phaseToStatus(phase: PackagePhase): TaskStatus {
-  switch (phase) {
-    case 'queued': return 'pending'
-    case 'downloading':
-    case 'installing': return 'running'
-    case 'success': return 'success'
-    case 'error': return 'error'
-  }
-}
+// ─────────────────────────────────────────────────────────────
+// 🧠 噪音净化规则：所有下载进度 / 长链接 / 计量信息在此被彻底拦截
+// ─────────────────────────────────────────────────────────────
+const ansiPattern = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
+const downloadUrlPattern = /\bDownloading\s+https?:\/\/\S+/i
+const longUrlPattern = /https?:\/\/\S{64,}/i
+const percentPattern = /(?:^|\s)\d{1,3}(?:\.\d+)?%|\b\d{1,3}\s*%\b/
+const progressBarPattern = /\[[\s.=#>-]{6,}\]|[=━─■□▰▱█▓▒░]{5,}\s*(?:>|➔|=>)?/
+const transferMetricPattern = /\b\d+(?:\.\d+)?\s*(?:KiB|MiB|GiB|KB|MB|GB)\s*\/\s*s\b|\b(?:KiB|MiB|GiB|KB|MB|GB)\/s\b/i
+const sizeOnlyPattern = /\(\s*\d+(?:\.\d+)?\s*(?:KiB|MiB|GiB|KB|MB|GB)\s*\)/i
+const carriageRefreshPattern = /^\s*(?:\d{1,3}(?:\.\d+)?%|\[[\s.=#>-]{3,}\]|[=━─■□▰▱█▓▒░]{3,})\s*$/
+const updateHeaderPattern = /^Updating\s+'([^']+)'\s+\((.+)\)\s*$/i
+const installHeaderPattern = /^Installing\s+'([^']+)'(?:\s+\((.+)\))?\s*$/i
+const successPattern = /\bwas\s+(?:installed|updated|uninstalled)\s+successfully!?\b|\bsuccessfully!?$/i
+const errorPattern = /^(?:ERROR:|Failed\b)/i
+const lifecyclePattern = /^(?:Checking hash of|Extracting|Unlinking|Linking)\b/i
 
-function ensureTask(name: string, progress: { phase: PackagePhase; logs: string[] }) {
-  if (capturedNames.has(name)) return
-  capturedNames.add(name)
-  taskStream.value.push({
-    id: name,
-    status: phaseToStatus(progress.phase),
-    logs: [...progress.logs],
-  })
-}
+// 📦 章节卡片解析：按行拆解 rawLogs，过滤噪音后归类为 AppChapter[]
+const parsedChapters = computed<AppChapter[]>(() => {
+  const chapters: AppChapter[] = []
+  let current: AppChapter | null = null
 
-function syncTask(name: string, progress: { phase: PackagePhase; logs: string[] }) {
-  const task = taskStream.value.find((t) => t.id === name)
-  if (!task) return
-  task.status = phaseToStatus(progress.phase)
-  if (progress.logs.length > task.logs.length) {
-    task.logs.push(...progress.logs.slice(task.logs.length))
-  }
-}
-
-let lastSyncTick = 0
-const syncSkipCount = 2
-
-function safeSync() {
-  lastSyncTick++
-  if (lastSyncTick % syncSkipCount !== 0) return
-  for (const [name, p] of progressMap) {
-    ensureTask(name, p)
-    syncTask(name, p)
-  }
-}
-
-watchEffect(() => {
-  for (const [name] of progressMap) void name
-  void progressMap.size
-  safeSync()
-})
-
-watchEffect(() => {
-  for (const [, p] of progressMap) void p.phase
-  safeSync()
-})
-
-watchEffect(() => {
-  for (const [, p] of progressMap) void p.logs.length
-  safeSync()
-})
-
-const taskCount = computed(() => taskStream.value.length)
-const completedCount = computed(() => taskStream.value.filter((t) => t.status === 'success').length)
-const runningCount = computed(() => taskStream.value.filter((t) => t.status === 'running' || t.status === 'pending').length)
-
-const batchProgressText = computed(() => {
-  if (taskCount.value === 0) return ''
-  if (taskCount.value === 1) {
-    const task = taskStream.value[0]
-    return task.status === 'running' ? '执行中...' : task.status === 'success' ? '已完成' : task.status === 'error' ? '执行失败' : '等待中'
-  }
-  if (runningCount.value > 0) return `执行中 (${completedCount.value}/${taskCount.value})`
-  return `全部完成 (${completedCount.value}/${taskCount.value})`
-})
-
-const jumpValue = ref<string | null>(null)
-const jumpOptions = computed(() =>
-  taskStream.value.map((t) => {
-    const icon = t.status === 'success' ? '🟢' : t.status === 'error' ? '🔴' : t.status === 'running' ? '🟡' : '⚪'
-    return {
-      label: `${icon} ${t.id}`,
-      value: t.id,
+  const pushCurrent = () => {
+    if (current && (current.isHeader || current.lines.length > 0)) {
+      chapters.push(current)
     }
-  })
-)
-
-function jumpToTask(pkgName: string) {
-  const el = document.getElementById(`task-block-${pkgName}`)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    current = null
   }
-  jumpValue.value = null
-}
 
-function scrollToBottom() {
-  nextTick(() => {
-    if (scrollContainer.value) {
-      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
-    }
-  })
-}
-
-function statusColor(status: TaskStatus) {
-  switch (status) {
-    case 'success': return { bg: 'bg-emerald-500/15', text: 'text-emerald-500', label: '成功' }
-    case 'error': return { bg: 'bg-red-500/15', text: 'text-red-500', label: '失败' }
-    case 'running': return { bg: 'bg-amber-500/15', text: 'text-amber-500', label: '执行中' }
-    default: return { bg: 'bg-zinc-500/10', text: 'text-zinc-500', label: '等待中' }
-  }
-}
-
-function getLogLineClass(log: string): string {
-  if (log.includes('ERROR') || log.includes('[error]')) return 'terminal-error'
-  if (log.includes('WARN') || log.includes('[warn]')) return 'terminal-warn'
-  if (log.includes('SUCCESS') || log.includes('done') || log.includes('installed')) return 'terminal-success'
-  return 'terminal-info'
-}
-
-const POST_ACTION_PATTERNS = [
-  /Please run\s+(.+)/i,
-  /To configure\s+(.+)/i,
-  /run\s+'(.+)'/i,
-  /Notes:\s*(.+)/i,
-  /You may need to run\s+(.+)/i,
-  /After installation\s+(.+)/i,
-  /Setup complete\.?\s*(.+)/i,
-  /You should run\s+(.+)/i,
-  /Don't forget to run\s+(.+)/i,
-]
-
-const COMMAND_LINE_PATTERNS = [
-  /^reg\s+(import|export|add|delete|query|copy|save|load|unload|restore|compare)\s/i,
-  /^scoop\s+/i,
-  /^powershell\s+/i,
-  /^cmd\s+\//i,
-  /^winget\s+/i,
-  /^choco\s+/i,
-  /^pip(\d)?\s+(install|uninstall|list|show|freeze)/i,
-  /^npm\s+(install|uninstall|update|run|start|build)/i,
-  /\.(exe|bat|cmd|ps1|reg|msi)"?\s*$/i,
-]
-
-function isCommandLine(line: string): boolean {
-  return COMMAND_LINE_PATTERNS.some(p => p.test(line.trim()))
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    message.success('已复制到剪贴板')
-  } catch {
-    message.error('复制失败')
-  }
-}
-
-function extractCaveats(task: TaskLog) {
-  if (task.caveats || task.caveatsExecuted) return
-  const commands: string[] = []
-  for (const line of task.logs) {
-    for (const pattern of POST_ACTION_PATTERNS) {
-      const match = line.match(pattern)
-      if (match && match[1]) {
-        const cmd = match[1].trim()
-        if (cmd.length < 200 && !cmd.includes('http') && !cmd.includes('://')) {
-          commands.push(cmd)
-        }
+  const ensureGeneralChapter = () => {
+    if (!current) {
+      current = {
+        appName: 'Scoop',
+        isHeader: false,
+        type: 'general',
+        lines: [],
       }
     }
+    return current
   }
-  const unique = [...new Set(commands)]
-  if (unique.length > 0) {
-    task.caveats = unique
-  }
-}
 
-watch(
-  () => taskStream.value.filter((t) => t.status === 'success' || t.status === 'error').map((t) => t.id),
-  () => {
-    for (const task of taskStream.value) {
-      if (task.status === 'success' || task.status === 'error') {
-        extractCaveats(task)
+  const appendLine = (text: string) => {
+    const target = current ?? ensureGeneralChapter()
+    const type: LogLine['type'] = errorPattern.test(text)
+      ? 'error'
+      : successPattern.test(text)
+        ? 'success'
+        : 'normal'
+
+    target.lines.push({ text, type })
+  }
+
+  for (const rawLine of rawLogs.value.split(/\r?\n|\r/g)) {
+    const text = rawLine.replace(ansiPattern, '').trim()
+    // 🚫 纯 \r 触发的空行 / 原地刷新行：直接丢弃
+    if (!text || carriageRefreshPattern.test(text)) continue
+
+    // 📦 章节卡片头部锚点：Updating / Installing
+    const updateMatch = text.match(updateHeaderPattern)
+    if (updateMatch) {
+      pushCurrent()
+      current = {
+        appName: updateMatch[1],
+        isHeader: true,
+        versionInfo: updateMatch[2].replace(/\s*->\s*/g, ' → '),
+        type: 'update',
+        lines: [],
       }
+      continue
     }
-  },
-  { deep: true }
-)
 
-const embeddedExecutions = ref<EmbeddedExecution[]>([])
-const runningExecMap = new Map<string, EmbeddedExecution>()
+    const installMatch = text.match(installHeaderPattern)
+    if (installMatch) {
+      pushCurrent()
+      current = {
+        appName: installMatch[1],
+        isHeader: true,
+        versionInfo: installMatch[2],
+        type: 'install',
+        lines: [],
+      }
+      continue
+    }
 
-async function copyCommand(cmd: string) {
-  try {
-    await navigator.clipboard.writeText(cmd)
-    message.success('命令已复制到剪贴板')
-  } catch {
-    message.error('复制失败')
+    // 是否为对用户有知情权的核心生命周期行
+    const isCoreLifecycleLine = lifecyclePattern.test(text)
+      || errorPattern.test(text)
+      || successPattern.test(text)
+
+    // 🚫 噪音拦截器：下载链接 / 进度百分比 / 进度条 / 速度计量 / 纯文件大小
+    const isNoisyDownloadLine = downloadUrlPattern.test(text)
+      || longUrlPattern.test(text)
+      || percentPattern.test(text)
+      || progressBarPattern.test(text)
+      || transferMetricPattern.test(text)
+      || (sizeOnlyPattern.test(text) && !isCoreLifecycleLine)
+
+    if (isNoisyDownloadLine) continue
+
+    // 其余非进度常规提示文本（normal）一并保留
+    appendLine(text)
   }
+
+  pushCurrent()
+  return chapters
+})
+
+const renderedLogs = computed(() => rawLogs.value)
+const hasVisibleLogs = computed(() => parsedChapters.value.some(chapter => chapter.lines.length > 0 || chapter.isHeader))
+const visibleLineCount = computed(() => parsedChapters.value.reduce((sum, chapter) => sum + chapter.lines.length + (chapter.isHeader ? 1 : 0), 0))
+
+function commitLines(lines: string[]) {
+  while (lines.length > 1 && lines[0] === '') lines.shift()
+  if (lines.length > MAX_LINES) {
+    lines = lines.slice(lines.length - MAX_LINES)
+  }
+  rawLines.value = lines
 }
 
-async function executeCaveat(task: TaskLog, cmd: string) {
-  if (!window.scoopAPI?.executeCommand) {
-    message.error('内嵌执行功能不可用')
+function replaceLastLine(text: string) {
+  const lines = rawLines.value.length > 0 ? [...rawLines.value] : ['']
+  lines[lines.length - 1] = text
+  commitLines(lines)
+}
+
+function appendRawChunk(chunk: string) {
+  if (!chunk) return
+  const normalized = chunk.replace(/\r\n/g, '\n')
+
+  // Scoop/Aria2 下载进度常用 \r 重绘同一行；若本块没有换行，直接覆盖末行，避免刷屏。
+  if (normalized.includes('\r') && !normalized.includes('\n')) {
+    replaceLastLine(normalized.slice(normalized.lastIndexOf('\r') + 1))
     return
   }
-  const execution: EmbeddedExecution = {
-    taskId: task.id,
-    command: cmd,
-    logs: [],
-    status: 'running',
+
+  const lines = rawLines.value.length > 0 ? [...rawLines.value] : ['']
+  let current = lines.pop() ?? ''
+
+  for (const ch of normalized) {
+    if (ch === '\r') {
+      current = ''
+      continue
+    }
+    if (ch === '\n') {
+      lines.push(current)
+      current = ''
+      continue
+    }
+    current += ch
   }
-  embeddedExecutions.value.push(execution)
-  runningExecMap.set(cmd, execution)
-  await nextTick()
-  scrollToBottom()
-  try {
-    await window.scoopAPI.executeCommand(cmd)
-    execution.status = 'completed'
-    runningExecMap.delete(cmd)
-    message.success('命令执行完成')
-  } catch (error: any) {
-    execution.status = 'failed'
-    runningExecMap.delete(cmd)
-    message.error('命令执行失败')
-  }
-  await nextTick()
-  scrollToBottom()
+
+  lines.push(current)
+  commitLines(lines)
 }
 
-function setupExecuteLogListener() {
-  if (window.scoopAPI?.onExecuteCommandLog) {
-    window.scoopAPI.onExecuteCommandLog((data: { command: string; type: 'stdout' | 'stderr'; content: string }) => {
-      const exec = runningExecMap.get(data.command)
-      if (exec) {
-        exec.logs.push({ type: data.type, content: data.content })
-        nextTick(() => scrollToBottom())
-      }
-    })
-  }
+function handleClear() {
+  rawLines.value = []
+  message.info('终端已清空')
 }
 
-function handleExportLogs() {
-  const lines: string[] = [
-    `=== Scoop UI 批量执行日志 ===`,
-    `导出时间: ${new Date().toLocaleString()}`,
-    `任务总数: ${taskCount.value} | 成功: ${completedCount.value}`,
-    '',
-  ]
-  for (const task of taskStream.value) {
-    const s = statusColor(task.status)
-    const separator = '─'.repeat(60)
-    lines.push(`[${s.label}] ${task.id} ${separator}`)
-    lines.push('')
-    for (const log of task.logs) {
-      lines.push(`  ${log}`)
-    }
-    if (task.caveats && task.caveats.length > 0) {
-      lines.push('')
-      lines.push('  ⚠ 后置命令建议:')
-      for (const cmd of task.caveats) {
-        lines.push(`    > ${cmd}`)
-      }
-    }
-    const relatedExecs = embeddedExecutions.value.filter((e) => e.taskId === task.id)
-    if (relatedExecs.length > 0) {
-      lines.push('')
-      lines.push('  ── 内嵌执行记录 ──')
-      for (const exec of relatedExecs) {
-        lines.push(`    # ${exec.command} (${exec.status})`)
-        for (const l of exec.logs) {
-          lines.push(`      ${l.content}`)
-        }
-      }
-    }
-    lines.push('')
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+function handleExport() {
+  const blob = new Blob([
+    `=== Scoop UI 原生日志 ===\n导出时间: ${new Date().toLocaleString()}\n\n${renderedLogs.value}`,
+  ], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  a.download = `scoop-batch-log-${dateStr}.txt`
+  a.download = `scoop-raw-log-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.txt`
   a.click()
   URL.revokeObjectURL(url)
   message.success('日志已导出')
-}
-
-function handleClearStream() {
-  taskStream.value = []
-  embeddedExecutions.value = []
-  capturedNames.clear()
-  runningExecMap.clear()
-  message.info('日志流已清空')
 }
 
 function handleClose() {
   visible.value = false
 }
 
-onMounted(() => setupExecuteLogListener())
+// ⚙️ 终态对齐：spawn 进程 close 后，静默触发全局数据刷新，主列表与真实安装状态对齐
+function handleLogEnd() {
+  packagesStore.loadInstalled()
+  packagesStore.loadUpdatable()
+}
 
-const hasRunning = computed(() => runningCount.value > 0)
+onMounted(() => {
+  window.scoopAPI.onLog((data) => {
+    if (typeof data?.message === 'string') {
+      appendRawChunk(data.message)
+    }
+  })
+  window.scoopAPI.onLogEnd(() => handleLogEnd())
+})
+
+onBeforeUnmount(() => {
+  window.scoopAPI.removeLogListener()
+  window.scoopAPI.removeLogEndListener()
+})
 </script>
 
 <template>
   <NDrawer
     v-model:show="visible"
-    :width="720"
+    :width="760"
     placement="right"
     :mask-closable="true"
     :close-on-esc="true"
@@ -362,140 +257,73 @@ const hasRunning = computed(() => runningCount.value > 0)
       <template #header>
         <div class="flex items-center justify-between w-full">
           <div class="flex items-center gap-3">
-            <div
+            <span
               class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              :class="{
-                'bg-green-500': !hasRunning && taskCount > 0,
-                'bg-amber-500 animate-pulse': hasRunning,
-                'bg-zinc-400 dark:bg-zinc-600': taskCount === 0,
-              }"
+              :class="hasLogs ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-500'"
             />
-            <span class="font-mono text-sm font-semibold">终端日志流</span>
-            <span v-if="batchProgressText" class="text-xs opacity-60 font-mono tabular-nums">
-              {{ batchProgressText }}
-            </span>
+            <span class="font-mono text-sm font-semibold">Scoop 生命周期</span>
+            <span class="text-xs opacity-50 font-mono">极简流 · {{ visibleLineCount }} 行</span>
           </div>
         </div>
       </template>
 
       <div
-        v-if="taskCount > 1"
-        class="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
-        style="border-color: var(--n-border-color); background: var(--n-color-embedded)"
+        class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden terminal-scroll bg-zinc-950 text-zinc-300 font-mono text-[13px]"
       >
-        <span class="text-xs opacity-60 font-mono">
-          {{ batchProgressText }}
-        </span>
-        <NSelect
-          v-model:value="jumpValue"
-          :options="jumpOptions"
-          placeholder="快速跳转至..."
-          size="tiny"
-          class="w-48"
-          @update:value="(val: string) => jumpToTask(val)"
-        />
-      </div>
+        <div v-if="!hasVisibleLogs" class="terminal-empty">
+          等待 Scoop 输出... 开始更新后，这里将显示纯净的生命周期日志。
+        </div>
 
-      <div
-        ref="scrollContainer"
-        class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 terminal-scroll"
-      >
-        <div class="terminal-viewport flex flex-col justify-start items-stretch min-h-full" :style="{ fontFamily }">
-          <div v-if="taskStream.length === 0" class="flex-1 flex items-start justify-center pt-24">
-            <p class="terminal-dim font-mono text-sm">等待任务输入...</p>
+        <div v-else class="flex flex-col justify-start p-4 space-y-4">
+          <div
+            v-for="(chapter, ci) in parsedChapters"
+            :key="ci"
+            class="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-4"
+          >
+            <!-- 章节头部锚点 -->
+            <div v-if="chapter.isHeader" class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="text-zinc-400 flex-shrink-0">📦</span>
+                <span class="text-zinc-100 font-semibold truncate">
+                  {{ chapter.type === 'install' ? '正在安装' : '正在更新' }} {{ chapter.appName }}
+                </span>
+              </div>
+              <span
+                v-if="chapter.versionInfo"
+                class="bg-zinc-800 text-zinc-400 text-[11px] px-2 py-0.5 rounded-md flex-shrink-0 whitespace-nowrap"
+              >
+                {{ chapter.versionInfo }}
+              </span>
+            </div>
+            <div v-else class="flex items-center gap-2">
+              <span class="text-zinc-500 text-[11px] uppercase tracking-wider">Scoop</span>
+            </div>
+
+            <div v-if="chapter.isHeader" class="border-b border-zinc-800/50 my-2.5" />
+
+            <!-- 行级精细染色 -->
+            <div class="space-y-0.5">
+              <div
+                v-for="(line, li) in chapter.lines"
+                :key="li"
+                :class="{
+                  'text-zinc-400': line.type === 'normal',
+                  'text-emerald-400 font-medium bg-emerald-500/5 px-1 rounded': line.type === 'success',
+                  'text-red-400 bg-red-500/10 px-2 py-1.5 rounded-lg border-l-2 border-red-500 my-1 font-sans': line.type === 'error',
+                }"
+              >{{ line.text }}</div>
+            </div>
           </div>
-
-          <template v-for="(task, tIdx) in taskStream" :key="task.id">
-            <div
-              :id="`task-block-${task.id}`"
-              :class="statusColor(task.status).bg"
-              class="flex items-center gap-2 px-4 py-1.5 border-b border-[#27272a]"
-            >
-              <span
-                :class="statusColor(task.status).text"
-                class="text-xs font-mono font-semibold tracking-wide"
-              >
-                {{ statusColor(task.status).label }} &middot; {{ task.id }}
-              </span>
-              <span class="flex-1 border-b border-dashed border-zinc-700/50 mx-1" />
-              <span class="text-[11px] font-mono text-zinc-500">
-                {{ task.logs.length }} 行
-              </span>
-            </div>
-
-            <div class="terminal-body">
-              <template v-if="task.logs.length === 0 && task.status === 'pending'">
-                <p class="terminal-dim text-sm pl-4 py-3 italic">排队等待调度...</p>
-              </template>
-              <div
-                v-for="(line, lIdx) in task.logs"
-                :key="lIdx"
-                class="terminal-line"
-              >
-                <span class="line-number">{{ String(lIdx + 1).padStart(4, '0') }}</span>
-                <span :class="getLogLineClass(line)" class="break-all selectable">{{ line }}</span>
-                <button
-                  v-if="isCommandLine(line)"
-                  class="terminal-copy-btn"
-                  @click="copyText(line)"
-                  title="复制命令"
-                >复制</button>
-              </div>
-
-              <div
-                v-if="task.caveats && task.caveats.length > 0"
-                class="caveats-card mt-4 mx-3"
-              >
-                <div class="flex items-center gap-2 mb-3">
-                  <span class="text-amber-400 text-sm font-mono">&#9888;</span>
-                  <span class="text-amber-400 text-xs font-semibold font-mono">后置配置建议</span>
-                </div>
-                <div
-                  v-for="(cmd, cIdx) in task.caveats"
-                  :key="cIdx"
-                  class="caveat-row"
-                >
-                  <code class="caveat-command">{{ cmd }}</code>
-                  <div class="caveat-actions">
-                    <NButton size="tiny" quaternary @click="copyCommand(cmd)">复制</NButton>
-                    <NButton size="tiny" type="primary" @click="executeCaveat(task, cmd)">&#128640; 执行</NButton>
-                  </div>
-                </div>
-              </div>
-
-              <span
-                v-if="task.status === 'running'"
-                class="terminal-cursor"
-              />
-            </div>
-
-            <template v-for="exec in embeddedExecutions.filter(e => e.taskId === task.id)" :key="'exec-' + exec.command">
-              <div class="embedded-block">
-                <div class="embedded-cmd">
-                  <span class="text-cyan-400 font-mono text-xs">&#8250; 内嵌执行:</span>
-                  <code class="text-zinc-200 ml-2 text-xs font-mono">{{ exec.command }}</code>
-                </div>
-                <div v-for="(l, ei) in exec.logs" :key="ei" class="embedded-line">
-                  <span :class="l.type === 'stderr' ? 'terminal-error' : 'terminal-default'" class="font-mono text-xs">{{ l.content }}</span>
-                </div>
-                <div class="embedded-status">
-                  <span v-if="exec.status === 'running'" class="text-cyan-400 text-xs font-mono">&#9679; 执行中...</span>
-                  <span v-else-if="exec.status === 'completed'" class="terminal-success font-mono text-xs">&#10003; 完成</span>
-                  <span v-else class="terminal-error text-xs font-mono">&#10007; 失败</span>
-                </div>
-              </div>
-            </template>
-          </template>
         </div>
       </div>
 
       <template #footer>
         <div class="flex items-center justify-between w-full">
           <div class="flex items-center gap-2">
-            <NButton @click="handleClearStream" quaternary size="small">清空流</NButton>
-            <NButton @click="handleExportLogs" quaternary size="small" :disabled="taskStream.length === 0">导出日志</NButton>
+            <NButton quaternary size="small" @click="handleClear">清空</NButton>
+            <NButton quaternary size="small" :disabled="!hasLogs" @click="handleExport">导出日志</NButton>
           </div>
-          <NButton @click="handleClose" type="primary">关闭窗口</NButton>
+          <NButton type="primary" @click="handleClose">关闭窗口</NButton>
         </div>
       </template>
     </NDrawerContent>
@@ -517,153 +345,10 @@ const hasRunning = computed(() => runningCount.value > 0)
   background: #52525b;
 }
 
-.terminal-viewport {
-  background: #09090b;
-  color: #d4d4d8;
+.terminal-empty {
+  padding-top: 96px;
+  text-align: center;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.selectable {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.terminal-body {
-  padding: 6px 14px 12px;
-}
-
-.terminal-line {
-  display: flex;
-  gap: 10px;
-  border-radius: 3px;
-  align-items: flex-start;
-}
-
-.terminal-line:hover {
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.terminal-copy-btn {
-  display: none;
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-family: inherit;
-  line-height: 1.4;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #a1a1aa;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s, color 0.15s;
-}
-
-.terminal-line:hover .terminal-copy-btn {
-  display: inline-block;
-}
-
-.terminal-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #e4e4e7;
-}
-
-.line-number {
-  color: #3f3f46;
-  user-select: none;
-  min-width: 38px;
-  text-align: right;
-  flex-shrink: 0;
-  font-size: 11px;
-}
-
-.terminal-info { color: #a3e635; }
-.terminal-success { color: #34d399; }
-.terminal-warn { color: #fbbf24; }
-.terminal-error { color: #f87171; }
-.terminal-dim { color: #52525b; }
-.terminal-default { color: #a1a1aa; }
-
-.terminal-cursor {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
-  background: rgba(52, 211, 153, 0.7);
-  margin-left: 4px;
-  animation: blink 1s step-end infinite;
-  vertical-align: text-bottom;
-}
-
-@keyframes blink {
-  50% { opacity: 0; }
-}
-
-.caveats-card {
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  background: rgba(245, 158, 11, 0.08);
-  border-radius: 8px;
-  padding: 14px 16px;
-}
-
-.caveat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  margin-top: 8px;
-}
-
-.caveat-row:first-child {
-  margin-top: 0;
-}
-
-.caveat-command {
-  color: #fbbf24;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 4px 8px;
-  border-radius: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.caveat-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.embedded-block {
-  margin: 4px 16px 12px;
-  border-left: 2px solid rgba(34, 211, 238, 0.4);
-  padding: 10px 14px;
-  background: rgba(34, 211, 238, 0.04);
-  border-radius: 0 6px 6px 0;
-}
-
-.embedded-cmd {
-  margin-bottom: 6px;
-}
-
-.embedded-line {
-  padding: 1px 0;
-  opacity: 0.85;
-}
-
-.embedded-status {
-  margin-top: 6px;
+  color: #52525b;
 }
 </style>

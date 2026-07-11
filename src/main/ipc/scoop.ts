@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
-import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
+import { execPowerShell, execGitBash, execScoop, execScoopJSON, execScoopRaw } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
 import { join, basename, resolve, relative, isAbsolute } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, promises as fsp } from 'fs'
@@ -58,22 +58,6 @@ async function resolveScoopRoot(): Promise<string> {
     }
   } catch { /* 读取失败，走默认 */ }
   return join(homedir(), 'scoop')
-}
-
-/**
- * 从 scoop list 输出中解析指定包的本地实际安装版本号。
- * 用于更新后的版本双重校验，杜绝"伪成功"。
- * @param listStdout `scoop list` 原始输出
- * @param pkgName 目标包名（大小写不敏感匹配）
- * @returns 本地实际版本号；未找到返回 null
- */
-function parseInstalledVersion(listStdout: string, pkgName: string): string | null {
-  const rows = parseFixedWidthTable(listStdout, (fields) => {
-    if (fields.length < 2 || !fields[0] || !fields[1]) return null
-    return { name: fields[0].trim(), version: fields[1].trim() }
-  })
-  const row = rows.find((r) => r.name.toLowerCase() === pkgName.toLowerCase())
-  return row ? row.version : null
 }
 
 function buildInstallScript(scoopPath: string, globalPath: string): string {
@@ -229,25 +213,37 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // Update packages —— 带 close code 判定 + 版本双重校验，杜绝"伪成功"
-  ipcMain.handle('scoop:update', async (event, name?: string) => {
-    if (name && !/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
-      throw new Error('Invalid package name')
+  // Update packages —— 原生批量：一次 spawn 执行 `scoop update a b c`，日志只做 raw stream 转发
+  ipcMain.handle('scoop:update', async (event, target?: string | string[]) => {
+    const names = Array.isArray(target) ? target : (target ? [target] : [])
+    const invalid = names.find((name) => !/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name))
+    if (invalid) {
+      throw new Error(`Invalid package name: ${invalid}`)
     }
-    const args = name ? `update ${name}` : 'update --all'
-    const win = BrowserWindow.fromWebContents(event.sender)
-    const pkgLabel = name || '*'
 
-    // 步骤1：执行更新，onProgress 保留 \r（不 trim），让前端识别进度条回车覆盖
-    const { stdout, stderr, code } = await execScoop(args, (data) => {
+    const args = names.length > 0 ? ['update', ...names] : ['update', '--all']
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const pkgLabel = names.length === 1 ? names[0] : (names.length > 1 ? names.join(' ') : '*')
+
+    const { stdout, stderr, code } = await execScoopRaw(args, (data, stream) => {
       sendProgress(win, {
         type: 'update',
         package: pkgLabel,
+        stream,
         message: data,
       })
     })
 
-    // 抓取末尾3行非空日志作为错误摘要
+    // spawn 进程 close 后，通知渲染层批量命令已结束，触发终态数据刷新
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('scoop:logEnd', {
+        package: pkgLabel,
+        packages: names,
+        success: code === 0,
+        code,
+      })
+    }
+
     const tailLog = (): string =>
       (stderr || stdout)
         .split('\n')
@@ -256,59 +252,15 @@ export function registerScoopIPC(): void {
         .slice(-3)
         .join('\n')
 
-    // 进程退出码非 0 → 直接判定失败
-    if (code !== 0) {
-      return {
-        success: false,
-        package: pkgLabel,
-        code,
-        error: tailLog() || '更新进程异常退出',
-      }
+    return {
+      success: code === 0,
+      package: pkgLabel,
+      packages: names,
+      code,
+      stdout,
+      stderr,
+      error: code === 0 ? undefined : (tailLog() || `scoop update exited with code ${code}`),
     }
-
-    // 步骤2：仅单包更新做版本双重校验（--all 无法逐一断言，按 code 通过）
-    if (name) {
-      try {
-        const [{ stdout: listStdout }, manifest] = await Promise.all([
-          execScoop('list'),
-          execScoopJSON<{ version?: string }>(`cat ${name}`),
-        ])
-        const localVersion = parseInstalledVersion(listStdout, name)
-        const expectedVersion = manifest?.version?.trim() || ''
-
-        // 两个版本都取到才断言；任一缺失则降级为通过但记录 verifyError
-        if (localVersion && expectedVersion) {
-          if (localVersion !== expectedVersion) {
-            return {
-              success: false,
-              package: pkgLabel,
-              code,
-              localVersion,
-              expectedVersion,
-              error: `版本校验失败：本地实际版本 ${localVersion}，期望最新版本 ${expectedVersion}`,
-            }
-          }
-          return { success: true, package: pkgLabel, localVersion, expectedVersion }
-        }
-
-        return {
-          success: true,
-          package: pkgLabel,
-          localVersion: localVersion || '',
-          expectedVersion,
-          verifyError: '未能获取完整版本信息，已跳过版本校验',
-        }
-      } catch (e) {
-        // 校验逻辑自身异常 → 不冤枉更新结果，降级为通过但记录
-        return {
-          success: true,
-          package: pkgLabel,
-          verifyError: `版本校验执行异常：${(e as Error).message}`,
-        }
-      }
-    }
-
-    return { success: true, package: pkgLabel }
   })
 
   // 启动自检：执行 `scoop update`（无参）更新 scoop 自身与所有 buckets，

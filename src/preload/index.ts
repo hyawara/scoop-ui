@@ -60,6 +60,14 @@ contextBridge.exposeInMainWorld('scoopAPI', {
     ipcRenderer.removeAllListeners('scoop:log')
   },
 
+  // 批量命令（spawn）执行完毕信号，用于触发终态数据刷新
+  onLogEnd: (callback: (data: any) => void) => {
+    ipcRenderer.on('scoop:logEnd', (_event, data) => callback(data))
+  },
+  removeLogEndListener: () => {
+    ipcRenderer.removeAllListeners('scoop:logEnd')
+  },
+
   // 内嵌命令执行器 API
   executeCommand: (command: string) => ipcRenderer.invoke('scoop:executeCommand', command),
   onExecuteCommandLog: (callback: (data: { command: string; type: 'stdout' | 'stderr'; content: string }) => void) => {

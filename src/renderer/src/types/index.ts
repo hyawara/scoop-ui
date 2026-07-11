@@ -28,6 +28,7 @@ export interface ProgressData {
   package: string
   percent?: number
   message: string
+  stream?: 'stdout' | 'stderr'
 }
 
 export interface CacheInfo {

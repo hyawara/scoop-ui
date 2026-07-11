@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch, inject, type Ref } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, inject } from 'vue'
 import {
   NCard,
   NTabs,
@@ -47,7 +47,7 @@ const batchUninstallDialogReforge = ref<ReturnType<typeof dialog.warning> | null
 // 行内进度系统
 const pkgProgress = usePackageProgress()
 const openTerminal = inject<() => void>('openTerminal', () => {})
-const queueState = ref<{ current: number; total: number }>({ current: 0, total: 0 })
+const nativeUpdateCount = ref(0)
 
 
 // 图标缓存
@@ -590,55 +590,96 @@ async function handleDiscoverInstall(manifestName: string) {
   }
 }
 
-/**
- * 更新单个包的核心逻辑（单包/批量/全部更新共用）。
- * 执行 scoop update → 清除图标缓存 → 零延迟原地改写版本号 → 移除更新态 → 追踪行内进度。
- * @returns 更新是否成功
- */
-async function updateSinglePackage(name: string): Promise<boolean> {
-  // 调度器激活：queued → downloading（processing 起点）
-  pkgProgress.startProcessing(name)
-  try {
-    // 后端带版本双重校验，返回结构化结果而非抛异常；伪成功已被拦截
-    const result = await window.scoopAPI.update(name)
-    if (!result.success) {
-      // 更新进程失败或版本校验未通过 → error 态常驻，带错误摘要供弹窗高亮
-      pkgProgress.failUpdate(name, result.error)
-      return false
+async function refreshAfterNativeUpdate(names: string[]) {
+  await Promise.all([
+    packagesStore.loadInstalled(),
+    packagesStore.loadUpdatable(),
+  ])
+
+  const stillUpdatable = new Set(packagesStore.updatable.map((p: any) => p.name))
+  for (const name of names) {
+    if (stillUpdatable.has(name)) {
+      pkgProgress.failUpdate(name, '命令已结束，但本地状态显示仍可更新')
+    } else {
+      pkgProgress.finishUpdate(name)
     }
-    // 清除图标缓存，更新后重新提取（删除 key 以触发 fetchIcon 重新获取）
-    await window.scoopAPI.clearAppIcon(name)
-    const { [name]: _removed, ...restIcons } = iconMap.value
-    iconMap.value = restIcons
-    // 零延迟闪变：优先用校验回传的实际版本号，回退到列表预期版本
-    const newVer = result.localVersion || getNewVersion(name)
-    const pkgInList = packagesStore.installed.find((p) => p.name === name)
-    if (pkgInList && newVer) pkgInList.version = newVer
-    // 本地移除更新态（不等 reload）
-    packagesStore.updatable = packagesStore.updatable.filter((p) => p.name !== name)
-    pkgProgress.finishUpdate(name)
-    return true
+    window.scoopAPI.clearAppIcon(name).catch(() => {})
+    fetchIcon(name)
+  }
+
+  return names.filter((name) => stillUpdatable.has(name))
+}
+
+/**
+ * 原生批量更新：不再由前端循环调度，直接一次 IPC → 一次 spawn → `scoop update a b c`。
+ * 完成后只按 `scoop status/list` 的真实结果做终态对齐，不从日志里猜成功失败。
+ */
+async function runNativeUpdate(names: string[], flag: { value: boolean }) {
+  const uniqueNames = [...new Set(names)].filter(Boolean)
+  if (uniqueNames.length === 0 || flag.value) return
+
+  openTerminal()
+  flag.value = true
+  nativeUpdateCount.value = uniqueNames.length
+  for (const name of uniqueNames) {
+    pkgProgress.startUpdate(name)
+  }
+
+  try {
+    const result = await window.scoopAPI.update(uniqueNames)
+    const failedByStatus = await refreshAfterNativeUpdate(uniqueNames)
+
+    if (failedByStatus.length > 0) {
+      message.error(result.error || `${failedByStatus.length} 个软件仍显示可更新，请查看终端日志`)
+      return
+    }
+    if (!result.success) {
+      message.warning(result.error || '命令退出码异常，但本地状态已完成对齐')
+      return
+    }
+    message.success(uniqueNames.length === 1 ? `${uniqueNames[0]} 更新完成` : `已完成 ${uniqueNames.length} 个软件更新`)
   } catch (e) {
-    // IPC 通道异常等兜底
-    pkgProgress.failUpdate(name, (e as Error)?.message)
-    return false
+    for (const name of uniqueNames) {
+      pkgProgress.failUpdate(name, (e as Error)?.message)
+    }
+    await Promise.allSettled([
+      packagesStore.loadInstalled(),
+      packagesStore.loadUpdatable(),
+    ])
+    message.error((e as Error)?.message || '更新失败')
+  } finally {
+    flag.value = false
+    nativeUpdateCount.value = 0
   }
 }
 
 async function handleUpdate(pkg: any) {
   if (pkgProgress.isActive(pkg.name)) return
-  openTerminal()
-  pkgProgress.enqueueOne(pkg.name)
-  const ok = await updateSinglePackage(pkg.name)
-  if (!ok) {
-    message.error(`更新 ${pkg.name} 失败`)
+  await runNativeUpdate([pkg.name], batchUpdating)
+}
+
+function handleBatchUpdate() {
+  const names = selectedPackageNames.value
+  if (names.length === 0) {
+    message.warning('请先勾选需要更新的软件')
     return
   }
-  // 后台静默刷新（不阻塞 UI 反馈）
-  packagesStore.loadInstalled()
-  packagesStore.loadUpdatable()
-  // 异步重新获取图标
-  fetchIcon(pkg.name)
+  runNativeUpdate(names, batchUpdating)
+}
+
+function handleUpdateAllConfirm() {
+  const count = packagesStore.updatable.length
+  if (count === 0) return
+  dialog.warning({
+    title: '确认更新全部',
+    content: `是否确定更新全部 ${count} 个软件？Scoop 将以原生命令一次性批量执行。`,
+    positiveText: '立即更新',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      const names = packagesStore.updatable.map((p) => p.name)
+      runNativeUpdate(names, updatingAll)
+    },
+  })
 }
 
 async function handleUninstall(pkg: any) {
@@ -648,8 +689,6 @@ async function handleUninstall(pkg: any) {
   uninstallingSet.value = s
   try {
     await window.scoopAPI.uninstall(pkg.name, pkg.global)
-    // 成功时静默处理：卡片滑出动画本身就是最好的反馈
-    // Exit animation then remove from list
     const r = new Set(removingSet.value)
     r.add(pkg.name)
     removingSet.value = r
@@ -657,7 +696,6 @@ async function handleUninstall(pkg: any) {
     await packagesStore.loadInstalled()
     await packagesStore.loadUpdatable()
   } catch (e: any) {
-    // 仅在失败时显示错误通知
     message.error(e.message || `卸载 ${pkg.name} 失败`)
   } finally {
     const s2 = new Set(uninstallingSet.value)
@@ -667,66 +705,6 @@ async function handleUninstall(pkg: any) {
     r2.delete(pkg.name)
     removingSet.value = r2
   }
-}
-
-/**
- * 串行任务队列调度器（勾选更新 / 全部更新 / 单包共用）。
- *
- * 核心正反馈：点击瞬间把整批包一次性标记为 queued（UI 立刻呈现"系统已接管 N 个任务"），
- * 再由调度器 for...await 逐个提升为 processing 执行底层 scoop update，
- * 完成一个自动激活下一个 queued，全程驱动 queueState 供顶栏「正在执行 (x/N)」显示。
- *
- * @param names 待更新的包名列表
- * @param flag 对应的加载态 ref（batchUpdating 或 updatingAll）
- */
-async function runUpdateQueue(names: string[], flag: Ref<boolean>) {
-  if (names.length === 0) return
-  openTerminal()
-  flag.value = true
-  // ① 即时正反馈：整批同时入队 → 全部呈现 queued 态
-  pkgProgress.enqueue(names)
-  queueState.value = { current: 0, total: names.length }
-  try {
-    // ② 串行调度：逐个提升 processing → 执行 → 成功后激活下一个
-    for (let i = 0; i < names.length; i++) {
-      queueState.value = { current: i + 1, total: names.length }
-      await updateSinglePackage(names[i])
-    }
-    // ③ 后台静默刷新
-    packagesStore.loadInstalled()
-    packagesStore.loadUpdatable()
-    // 异步重新获取所有更新包的图标
-    for (const name of names) {
-      fetchIcon(name)
-    }
-  } finally {
-    flag.value = false
-    queueState.value = { current: 0, total: 0 }
-  }
-}
-
-function handleBatchUpdate() {
-  const names = selectedPackageNames.value
-  if (names.length === 0) {
-    message.warning('请先勾选需要更新的软件')
-    return
-  }
-  runUpdateQueue(names, batchUpdating)
-}
-
-function handleUpdateAllConfirm() {
-  const count = packagesStore.updatable.length
-  if (count === 0) return
-  dialog.warning({
-    title: '确认更新全部',
-    content: `是否确定更新全部 ${count} 个软件？这可能会消耗较多网络资源和时间。`,
-    positiveText: '立即更新',
-    negativeText: '取消',
-    onPositiveClick: () => {
-      const names = packagesStore.updatable.map((p) => p.name)
-      runUpdateQueue(names, updatingAll)
-    },
-  })
 }
 
 function handleBatchUninstall() {
@@ -912,7 +890,7 @@ function openBucketDrawer() {
                       >
                         <template v-if="batchUpdating">
                           <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-indigo-400 rounded-full animate-spin" />
-                          正在执行 ({{ queueState.current }}/{{ queueState.total }})
+                          Scoop 执行中 ({{ nativeUpdateCount }})
                         </template>
                         <template v-else>
                           <NIcon :component="DownloadOutline" :size="15" />
@@ -940,7 +918,7 @@ function openBucketDrawer() {
                       >
                         <template v-if="updatingAll">
                           <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-current rounded-full animate-spin" />
-                          执行中 ({{ queueState.current }}/{{ queueState.total }})
+                          Scoop 执行中 ({{ nativeUpdateCount }})
                         </template>
                         <template v-else>
                           更新全部
