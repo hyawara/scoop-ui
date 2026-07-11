@@ -1,8 +1,8 @@
 import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON } from '../utils/powershell.js'
 import { homedir, tmpdir } from 'os'
-import { join, basename } from 'path'
-import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, readlinkSync, promises as fsp } from 'fs'
+import { join, basename, resolve, relative, isAbsolute } from 'path'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, promises as fsp } from 'fs'
 import { spawn } from 'child_process'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
@@ -311,130 +311,259 @@ export function registerScoopIPC(): void {
     return { success: true, package: pkgLabel }
   })
 
-  // ── 旧版本测量：纯 Node.js（异步并发） ──
-  async function getDirSize(dirPath: string): Promise<number> {
-    let total = 0
-    try {
-      const entries = await fsp.readdir(dirPath, { withFileTypes: true })
-      const sizes = await Promise.all(entries.map(async (entry) => {
-        const fullPath = join(dirPath, entry.name)
-        try {
-          if (entry.isDirectory()) return await getDirSize(fullPath)
-          if (entry.isFile()) return (await fsp.stat(fullPath)).size
-        } catch { /* skip */ }
-        return 0
-      }))
-      total = sizes.reduce((a, b) => a + b, 0)
-    } catch { /* skip */ }
-    return total
-  }
-
-  async function getOldVersionTotalBytes(): Promise<number> {
-    try {
-      const scoopRoot = await resolveScoopRoot()
-      const appsDir = join(scoopRoot, 'apps')
-      if (!existsSync(appsDir)) return 0
-
-      const apps = await fsp.readdir(appsDir, { withFileTypes: true })
-      const appResults = await Promise.all(apps.map(async (app) => {
-        if (!app.isDirectory()) return 0
-        const appDir = join(appsDir, app.name)
-        const currentPath = join(appDir, 'current')
-
-        let currentVersionName = ''
-        try {
-          currentVersionName = basename(readlinkSync(currentPath))
-        } catch { /* not a junction */ }
-
-        const versions = await fsp.readdir(appDir, { withFileTypes: true })
-        const verResults = await Promise.all(versions.map(async (ver) => {
-          if (!ver.isDirectory() || ver.name === 'current') return 0
-          // junction 破损/不存在时保守处理：不把任何版本计为旧版本，防止误删
-          if (!currentVersionName) return 0
-          if (ver.name.toLowerCase() === currentVersionName.toLowerCase()) return 0
-          return await getDirSize(join(appDir, ver.name))
-        }))
-        return verResults.reduce((a, b) => a + b, 0)
-      }))
-      return appResults.reduce((a, b) => a + b, 0)
-    } catch {
-      return 0
-    }
-  }
-
-  ipcMain.handle('scoop:cleanup', async (event) => {
+  // 启动自检：执行 `scoop update`（无参）更新 scoop 自身与所有 buckets，
+  // 不更新已安装应用。完成后由前端再跑 scoop status 同步可更新列表。
+  ipcMain.handle('scoop:updateSelf', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const beforeBytes = await getOldVersionTotalBytes()
-
-    // 1) 找到有旧版本残留的应用，杀掉正在运行的旧版本进程（如 clash-party 后台进程锁住 app.asar 导致删除失败）
-    const killedApps: { name: string; exeName: string }[] = []
-    try {
-      const scoopRoot = await resolveScoopRoot()
-      const appsDir = join(scoopRoot, 'apps')
-      if (existsSync(appsDir)) {
-        const apps = await fsp.readdir(appsDir, { withFileTypes: true })
-        for (const app of apps) {
-          if (!app.isDirectory()) continue
-          const appDir = join(appsDir, app.name)
-          const currentPath = join(appDir, 'current')
-          let currentVersionName = ''
-          try { currentVersionName = basename(readlinkSync(currentPath)) } catch { /* no junction */ }
-
-          const versions = await fsp.readdir(appDir, { withFileTypes: true })
-          let hasOld = false
-          for (const ver of versions) {
-            if (!ver.isDirectory() || ver.name === 'current') continue
-            if (!currentVersionName) continue
-            if (ver.name.toLowerCase() === currentVersionName.toLowerCase()) continue
-            hasOld = true
-            break
-          }
-          if (!hasOld) continue
-
-          // 查进程名：应用进程名可能 ≠ app name（如 clash-party 进程名可能是 ClashParty）
-          const psScript = `try { (Get-Process -ErrorAction SilentlyContinue | Where-Object { try { \$_.MainModule.FileName -like '${appDir.replace(/\\/g, '\\\\')}\\\\*' } catch { \$false } } | Select-Object -First 1 -ExpandProperty Name) } catch { }`
-          const { stdout } = await execPowerShell(psScript)
-          const exeName = stdout.trim()
-          if (!exeName) continue
-
-          const procName = exeName.endsWith('.exe') ? exeName : `${exeName}.exe`
-          await execPowerShell(`taskkill /f /im "${procName}" 2>'' 3>''`)
-          killedApps.push({ name: app.name, exeName })
-        }
-      }
-    } catch { /* ignore kill errors */ }
-
-    // 给进程退出留时间
-    if (killedApps.length > 0) await new Promise(r => setTimeout(r, 800))
-
-    // 2) 执行 scoop cleanup
-    const { stdout, stderr, code } = await execScoop('cleanup --all', (data) => {
+    const { stdout, stderr, code } = await execScoop('update', (data) => {
       sendProgress(win, {
         type: 'message',
         package: 'scoop',
         message: data.trim(),
       })
     })
-    if (code !== 0) {
-      throw new Error(stderr || stdout || '清理旧版本失败')
+    return { success: code === 0, stdout, stderr }
+  })
+
+  // ── 旧版本测量：纯 Node.js（异步并发） ──
+  async function getDirSize(dirPath: string): Promise<number> {
+    try {
+      // 用 git-bash 的 du 直接算目录大小（MiB），绕开 Electron 的 fs，
+      // 避免把 .asar 归档当目录递归进入并持有句柄，导致 cleanup 时文件被本进程锁定。
+      // du 把 .asar 视为普通文件，不会进入归档内部，既不持锁也能拿到准确大小。
+      const msysPath = dirPath.replace(/\\/g, '/')
+      const { stdout, code } = await execGitBash(`du -sm "${msysPath}"`)
+      if (code !== 0) return 0
+      const mb = parseInt(stdout.trim().split(/\s+/)[0], 10)
+      if (isNaN(mb)) return 0
+      // 转回字节数，保持对外接口（bytes）不变，显示层 MB/GB 旧逻辑无需改动
+      return mb * 1024 * 1024
+    } catch {
+      return 0
+    }
+  }
+
+  type OldVersionDir = {
+    appName: string
+    versionName: string
+    appDir: string
+    dir: string
+    currentVersionName: string
+  }
+
+  type CleanupSkippedDir = {
+    appName: string
+    versionName: string
+    path: string
+    lockedPath?: string
+    reason: string
+  }
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
+  }
+
+  function normalizePathKey(path: string): string {
+    return resolve(path).replace(/[\\\/]+$/, '').toLowerCase()
+  }
+
+  function isPathInside(parent: string, child: string): boolean {
+    const rel = relative(resolve(parent), resolve(child))
+    return rel === '' || (!!rel && !rel.startsWith('..') && !isAbsolute(rel))
+  }
+
+  function isDirectChild(parent: string, child: string): boolean {
+    const rel = relative(resolve(parent), resolve(child))
+    return !!rel && !rel.startsWith('..') && !isAbsolute(rel) && rel.split(/[\\\/]/).length === 1
+  }
+
+  function bashQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\''`)}'`
+  }
+
+  function toGitBashPath(path: string): string {
+    return path.replace(/\\/g, '/')
+  }
+
+  function parseLockedPath(text: string): string {
+    const patterns = [
+      /rm:\s+cannot remove ['"]([^'"]+)['"]:\s*(.+)/i,
+      /cannot access the file '([^']+)'/i,
+      /process cannot access the file '([^']+)'/i,
+      /because it is being used by another process[\s\S]*?'([^']+)'/i,
+      /另一个程序正在使用此文件，进程无法访问。?[\s\S]*?'([^']+)'/i,
+    ]
+    for (const pattern of patterns) {
+      const match = text.match(pattern)
+      if (match?.[1]) return match[1]
+    }
+    return ''
+  }
+
+  function getCurrentTarget(_appDir: string, currentPath: string): string | null {
+    try {
+      return resolve(realpathSync(currentPath))
+    } catch {
+      return null
+    }
+  }
+
+  function isSafeOldVersionDir(
+    appsDir: string,
+    appDir: string,
+    versionDir: string,
+    currentPath: string,
+    currentTarget: string
+  ): boolean {
+    const appDirResolved = resolve(appDir)
+    const versionDirResolved = resolve(versionDir)
+
+    if (!isPathInside(appsDir, appDirResolved)) return false
+    if (!isPathInside(appDirResolved, currentTarget)) return false
+    if (!isDirectChild(appDirResolved, versionDirResolved)) return false
+    if (normalizePathKey(versionDirResolved) === normalizePathKey(currentPath)) return false
+    if (normalizePathKey(versionDirResolved) === normalizePathKey(currentTarget)) return false
+
+    return true
+  }
+
+  async function getOldVersionDirs(): Promise<OldVersionDir[]> {
+    try {
+      const scoopRoot = await resolveScoopRoot()
+      const appsDir = join(scoopRoot, 'apps')
+      if (!existsSync(appsDir)) return []
+
+      const apps = await fsp.readdir(appsDir, { withFileTypes: true })
+      const nested = await Promise.all(apps.map(async (app): Promise<OldVersionDir[]> => {
+        if (!app.isDirectory()) return []
+
+        const appDir = join(appsDir, app.name)
+        const currentPath = join(appDir, 'current')
+        const currentTarget = getCurrentTarget(appDir, currentPath)
+
+        // current junction 缺失、破损、或指向 app 目录外时，整包跳过，绝不猜测删除。
+        if (!currentTarget || !existsSync(currentTarget) || !isPathInside(appDir, currentTarget)) return []
+
+        const currentVersionName = basename(currentTarget)
+        if (!currentVersionName) return []
+
+        const versions = await fsp.readdir(appDir, { withFileTypes: true })
+        return versions
+          .filter((ver) => {
+            if (!ver.isDirectory() || ver.name === 'current') return false
+            if (ver.name.toLowerCase() === currentVersionName.toLowerCase()) return false
+
+            const versionDir = join(appDir, ver.name)
+            return isSafeOldVersionDir(appsDir, appDir, versionDir, currentPath, currentTarget)
+          })
+          .map((ver) => ({
+            appName: app.name,
+            versionName: ver.name,
+            appDir,
+            dir: join(appDir, ver.name),
+            currentVersionName,
+          }))
+      }))
+
+      return nested.flat()
+    } catch {
+      return []
+    }
+  }
+
+  async function getOldVersionTotalBytes(): Promise<number> {
+    const oldDirs = await getOldVersionDirs()
+    const sizes = await Promise.all(oldDirs.map((item) => getDirSize(item.dir)))
+    return sizes.reduce((a, b) => a + b, 0)
+  }
+
+  async function removeOldVersionDir(
+    item: OldVersionDir,
+    win: BrowserWindow | null
+  ): Promise<{ success: true } | { success: false; lockedPath?: string; reason: string }> {
+    if (!existsSync(item.dir)) return { success: true }
+
+    const maxAttempts = 5
+    let lastReason = ''
+    let lastLockedPath = ''
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // 删除前再取一次 current 目标，防止清理过程中 app 被更新/切换版本。
+      const currentTarget = getCurrentTarget(item.appDir, join(item.appDir, 'current'))
+      if (!currentTarget) {
+        return { success: false, reason: 'current junction 不存在或不可读取，已跳过以避免误删。' }
+      }
+      if (normalizePathKey(item.dir) === normalizePathKey(currentTarget)) {
+        return { success: false, reason: '目标目录已成为 current 版本，已跳过以避免误删。' }
+      }
+
+      const quotedPath = bashQuote(toGitBashPath(item.dir))
+      const { stdout, stderr, code } = await execGitBash(`rm -rf -- ${quotedPath}`)
+      if (!existsSync(item.dir)) return { success: true }
+
+      lastReason = stderr || stdout || `rm exited with code ${code}`
+      lastLockedPath = parseLockedPath(lastReason)
+
+      if (attempt < maxAttempts) {
+        const lockedHint = lastLockedPath ? `（被占用：${lastLockedPath}）` : ''
+        sendProgress(win, {
+          type: 'message',
+          package: item.appName,
+          message: `清理 ${item.appName}@${item.versionName} 遇到文件占用${lockedHint}，稍候重试 ${attempt + 1}/${maxAttempts}…`,
+        })
+        await sleep(700 * attempt + 500)
+      }
     }
 
-    // 3) 从 current 目录重启被杀的应用（类似 Scoop PR #6603 forcekill 的 restart 逻辑）
-    for (const ka of killedApps) {
-      try {
-        const appDir = join(await resolveScoopRoot(), 'apps', ka.name)
-        const currentDir = join(appDir, 'current')
-        if (!existsSync(currentDir)) continue
-        const exePath = join(currentDir, ka.exeName.endsWith('.exe') ? ka.exeName : `${ka.exeName}.exe`)
-        if (existsSync(exePath)) {
-          await execPowerShell(`Start-Process "${exePath}"`)
-          sendProgress(win, { type: 'message', package: 'scoop', message: `已重启 ${ka.name}` })
-        }
-      } catch { /* restart failed */ }
+    return {
+      success: false,
+      lockedPath: lastLockedPath || undefined,
+      reason: lastReason || '旧版本目录仍存在，已保守跳过。',
+    }
+  }
+
+  ipcMain.handle('scoop:cleanup', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const beforeBytes = await getOldVersionTotalBytes()
+    const oldVersionDirs = await getOldVersionDirs()
+    const skipped: CleanupSkippedDir[] = []
+    let removedVersions = 0
+
+    // 逐个旧版本目录清理，而不是调用 `scoop cleanup --all`。
+    // 原生命令遇到一个被锁目录就整体失败；这里将失败目录记录为 skipped，继续处理其它旧版本。
+    for (const item of oldVersionDirs) {
+      sendProgress(win, {
+        type: 'message',
+        package: item.appName,
+        message: `正在清理 ${item.appName}@${item.versionName}…`,
+      })
+
+      const result = await removeOldVersionDir(item, win)
+      if (result.success) {
+        removedVersions += 1
+        continue
+      }
+
+      skipped.push({
+        appName: item.appName,
+        versionName: item.versionName,
+        path: item.dir,
+        lockedPath: result.lockedPath,
+        reason: result.reason,
+      })
+      sendProgress(win, {
+        type: 'message',
+        package: item.appName,
+        message: `已跳过 ${item.appName}@${item.versionName}：${result.lockedPath || result.reason}`,
+      })
     }
 
     const afterBytes = await getOldVersionTotalBytes()
-    return { released: Math.max(0, beforeBytes - afterBytes) }
+    return {
+      released: Math.max(0, beforeBytes - afterBytes),
+      removedVersions,
+      skipped,
+    }
   })
 
   ipcMain.handle('scoop:measureOldVersions', async () => {

@@ -465,12 +465,15 @@ onMounted(async () => {
   if (appStore.scoopStatus.installed) {
     await Promise.all([
       packagesStore.loadInstalled(),
-      packagesStore.loadUpdatable(),
       settingsStore.loadEnv(),
       settingsStore.loadCacheInfo(),
       settingsStore.checkAria2(),
       settingsStore.loadProxy(),
     ])
+
+    // 异步自检：先执行 scoop update（更新 scoop 自身与 buckets），
+    // 再执行 scoop status 同步可更新列表。整体异步，不阻塞初始渲染。
+    packagesStore.refreshUpdatable()
 
     // 根据配置决定是否自动检查应用更新
     if (autoCheckUpdate.value) {

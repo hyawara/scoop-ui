@@ -19,6 +19,20 @@ interface ProgressData {
   message: string
 }
 
+interface CleanupSkippedDir {
+  appName: string
+  versionName: string
+  path: string
+  lockedPath?: string
+  reason: string
+}
+
+interface CleanupResult {
+  released: number
+  removedVersions: number
+  skipped: CleanupSkippedDir[]
+}
+
 // Scoop 包更新结果（与 src/main/ipc/scoop.ts 的 scoop:update handler 返回值保持一致）
 // 后端不再 throw，而是返回结构化结果对象，携带版本双重校验信息，杜绝"伪成功"
 interface UpdateResult {
@@ -50,7 +64,8 @@ interface Window {
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>
     update: (name?: string) => Promise<UpdateResult>
-    cleanup: () => Promise<{ released: number }>
+    updateSelf: () => Promise<{ success: boolean; stdout: string; stderr: string }>
+    cleanup: () => Promise<CleanupResult>
     cache: () => Promise<{ size: number; unit: string; files: number }>
     clearCache: () => Promise<void>
     listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>

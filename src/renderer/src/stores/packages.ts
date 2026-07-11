@@ -29,6 +29,17 @@ export const usePackagesStore = defineStore('packages', () => {
     }
   }
 
+  // 启动自检：先异步执行 `scoop update`（更新 scoop 自身与 buckets），
+  // 再执行 `scoop status` 同步可更新列表。update 失败不阻断 status 同步。
+  async function refreshUpdatable() {
+    try {
+      await window.scoopAPI.updateSelf()
+    } catch {
+      // 更新 scoop/buckets 失败（如网络问题）不阻断，仍尝试同步 status
+    }
+    await loadUpdatable()
+  }
+
   async function search(query: string) {
     if (!query.trim()) {
       searchResults.value = []
@@ -114,6 +125,6 @@ export const usePackagesStore = defineStore('packages', () => {
 
   return {
     installed, updatable, searchResults, loading, progress, descriptionsLoading,
-    loadInstalled, loadUpdatable, search, install, uninstall, update
+    loadInstalled, loadUpdatable, refreshUpdatable, search, install, uninstall, update
   }
 })

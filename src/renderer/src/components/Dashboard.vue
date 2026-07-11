@@ -827,7 +827,7 @@ function openBucketDrawer() {
 
           <NTabPane name="installed" class="flex-1 overflow-hidden">
             <template #tab>
-              <span class="text-[13px]">已安装</span>
+              <span class="text-[14px]">已安装</span>
             </template>
 
             <!-- 初始加载状态 -->
@@ -979,7 +979,10 @@ function openBucketDrawer() {
             </NScrollbar>
           </NTabPane>
 
-          <NTabPane name="discover" tab="软件发现" class="flex-1 overflow-hidden">
+          <NTabPane name="discover" class="flex-1 overflow-hidden">
+            <template #tab>
+              <span class="text-[14px]">软件发现</span>
+            </template>
             <div class="flex h-full overflow-hidden">
               <!-- ═══ 左侧分类导航 ═══ -->
               <div class="w-[140px] flex-shrink-0 border-r dark:border-white/[0.04] border-zinc-200 py-2 overflow-y-auto custom-scrollbar">

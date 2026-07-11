@@ -410,7 +410,12 @@ async function handleCleanup() {
     await loadOldVersionsSize()
     loadingMsg.destroy()
     const released = result?.released
-    if (released && released > 0) {
+    const skipped = result?.skipped || []
+    if (skipped.length > 0) {
+      const firstLocked = skipped[0]?.lockedPath || skipped[0]?.path
+      const releasedText = released && released > 0 ? `已释放 ${formatBytes(released)}，` : ''
+      message.warning(`${releasedText}${skipped.length} 个旧版本被占用，已安全跳过。稍后重试即可${firstLocked ? `：${firstLocked}` : ''}`)
+    } else if (released && released > 0) {
       message.success(`已释放 ${formatBytes(released)} 磁盘空间`)
     } else {
       message.success('旧版本已清理完成')
