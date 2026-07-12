@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('scoopAPI', {
 
   search: (query: string) => ipcRenderer.invoke('scoop:search', query),
   searchRaw: (query: string) => ipcRenderer.invoke('scoop:searchRaw', query),
+  // 惰性按需同步：静默 scoop search <app> → 解析全量版本 → 回写 config.appVersionMaps，返回最新数组
+  syncAppVersions: (appName: string) => ipcRenderer.invoke('scoop:syncAppVersions', appName),
+  // 只读关联版本缓存（秒开用），不触发搜索
+  getAppVersions: (appName: string) => ipcRenderer.invoke('scoop:getAppVersions', appName),
   fetchPackageInfo: (name: string) => ipcRenderer.invoke('scoop:info', name),
   install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) =>
     ipcRenderer.invoke('scoop:install', name, options),

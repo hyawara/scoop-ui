@@ -23,6 +23,7 @@ const props = defineProps<{
   installedNames: Set<string>
   installingSet: Set<string>
   loading?: boolean
+  refreshing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -100,6 +101,12 @@ async function copyMainCmd() {
         <div class="flex items-center gap-2">
           <span class="text-base font-semibold text-white/90">软件详情</span>
           <span v-if="app" class="px-1.5 py-0.5 text-[11px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-400 text-gray-500 rounded-md font-mono leading-none">{{ app.versions.length }} 个版本</span>
+          <!-- 后台静默刷新：微型转圈，缓存秒开后无感同步最新版本 -->
+          <span
+            v-if="refreshing"
+            class="ml-0.5 w-3.5 h-3.5 border-[1.5px] border-t-transparent border-indigo-400/80 rounded-full animate-spin"
+            title="正在同步最新版本…"
+          />
         </div>
       </template>
 
@@ -142,27 +149,23 @@ async function copyMainCmd() {
               <span class="px-1.5 py-0.5 text-[10px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-500 text-gray-500 rounded-md font-mono">{{ versionsWithStatus.length }}</span>
             </div>
 
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col">
             <div
               v-for="ver in versionsWithStatus"
               :key="`${ver.bucket}-${ver.manifestName}`"
-              class="group flex items-start gap-3 px-3.5 py-3 rounded-lg border dark:border-white/[0.04] border-black/[0.06] dark:bg-white/[0.01] bg-black/[0.02] dark:hover:bg-white/[0.03] hover:bg-black/[0.04] transition-all duration-150"
+              class="group bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-3 mb-2 flex justify-between items-center hover:border-zinc-700 transition-all cursor-pointer"
+              @click="handleInstall(ver)"
             >
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-semibold text-white/90 font-mono">{{ ver.version }}</span>
-                  <NTag size="tiny" :bordered="false" class="!text-[10px] !h-5 !px-1.5 leading-none"
-                    :class="ver.bucket === 'main'
-                      ? '!bg-emerald-900/30 !text-emerald-400'
-                      : '!bg-violet-900/40 !text-violet-300'"
-                  >{{ ver.bucket }}</NTag>
-                </div>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <span class="text-[11px] text-gray-600 font-mono">{{ ver.manifestName }}</span>
-                </div>
+              <!-- 左侧：版本号 + 微型 Bucket 标签 -->
+              <div class="flex items-center min-w-0">
+                <span class="text-zinc-100 font-semibold font-mono truncate">{{ ver.version }}</span>
+                <span class="bg-zinc-800 text-zinc-400 text-[10px] px-1.5 py-0.5 rounded ml-2 flex-shrink-0 font-mono leading-none">{{ ver.bucket }}</span>
               </div>
 
-              <div class="flex-shrink-0 flex items-center gap-1 pt-0.5">
+              <!-- 右侧：真实 Scoop 内部包名 + 操作 -->
+              <div class="flex items-center gap-2 flex-shrink-0 pl-3">
+                <span class="text-zinc-500 text-[12px] font-mono truncate max-w-[120px]">{{ ver.manifestName }}</span>
+
                 <template v-if="ver.isInstalled">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
                   <span class="text-[11px] text-emerald-500/80 font-mono hidden sm:inline">已安装</span>
@@ -173,8 +176,8 @@ async function copyMainCmd() {
                     size="tiny"
                     :loading="installingSet.has(getInstallName(ver))"
                     :disabled="installingSet.has(getInstallName(ver))"
-                    class="!text-gray-500 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                    @click="handleInstall(ver)"
+                    class="!text-zinc-500 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                    @click.stop="handleInstall(ver)"
                   >
                     <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
                   </NButton>
@@ -182,7 +185,7 @@ async function copyMainCmd() {
                 <NButton
                   text
                   size="tiny"
-                  class="!text-gray-600 hover:!text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                  class="!text-zinc-600 hover:!text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
                   @click.stop="copyCmd(ver)"
                 >
                   <template #icon>

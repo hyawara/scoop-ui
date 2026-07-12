@@ -34,7 +34,7 @@ import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
 import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
-import type { DiscoverApp, AppVersion } from '@/types'
+import type { DiscoverApp, AppVersion, AppVersionEntry } from '@/types'
 
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
@@ -216,6 +216,8 @@ function preloadIcons() {
 
 // ═══ 多版本发现数据 ═══
 const discoverLoading = ref(false)
+// 后台静默同步态：缓存已展示、正在向 scoop search 拉取最新版本时为 true（驱动抽屉右上角微型转圈）
+const discoverRefreshing = ref(false)
 
 const appWebsites: Record<string, string> = {
   'git': 'https://git-scm.com/',
@@ -281,11 +283,35 @@ function getMVEnabled(app: StoreApp): boolean {
 }
 async function toggleMV(app: StoreApp) {
   const set = new Set(multiVersionPref.value)
-  if (set.has(app.name)) set.delete(app.name)
-  else set.add(app.name)
+  const enabling = !set.has(app.name)
+  if (enabling) set.add(app.name)
+  else set.delete(app.name)
   multiVersionPref.value = [...set]
   await window.scoopAPI.setConfig('discover.multiVersionPrefs', [...set])
-  if (set.has(app.name)) openDiscoverDrawer(app)
+  if (enabling) {
+    // 开启多版本 → 后台静默 syncAppVersions（scoop search → 解析 → 回写
+    // config.appVersionMaps[app.name]），下次打开抽屉即命中缓存秒开。
+    // 不强制弹抽屉，避免打断浏览；如需即时查看，点卡片或魔方图标打开抽屉。
+    prefetchAppVersions(app)
+  }
+}
+
+/**
+ * 静默预取指定软件的关联版本并回写配置。
+ * 供"开启多版本"时调用——解析一次即缓存，下次打开秒开。
+ * 若抽屉此刻恰好正展示此软件，顺带无缝刷新其版本列表。
+ */
+async function prefetchAppVersions(app: StoreApp) {
+  try {
+    const latest = await window.scoopAPI.syncAppVersions(app.name)
+    const count = Array.isArray(latest) ? latest.length : 0
+    if (count > 0 && selectedDiscoverApp.value?.id === app.name) {
+      selectedDiscoverApp.value = buildDiscoverApp(app, toAppVersions(latest, app.name))
+    }
+    message.success(count > 0 ? `已开启多版本，已同步 ${count} 个版本` : '已开启多版本')
+  } catch {
+    message.info('已开启多版本')
+  }
 }
 loadMVPrefs()
 
@@ -469,40 +495,6 @@ async function storeQuickInstall(pkgName: string) {
 }
 
 // ═══ 多版本发现抽屉 ═══
-interface SearchVersionItem {
-  manifestName: string
-  version: string
-  bucket: string
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function parseAndCleanSearch(rawText: string, baseName: string): SearchVersionItem[] {
-  if (!rawText) return []
-  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-  const results: SearchVersionItem[] = []
-  const escaped = escapeRegExp(baseName)
-  const cleanRegex = new RegExp(`^${escaped}$|^${escaped}\\d+$|^${escaped}-(lts|nightly|current|rc)$`, 'i')
-  const lineRegex = /^([\w.\-+]+)\s+(\S+)\s+(\S+)/
-  let startParsing = false
-  for (const line of lines) {
-    if (/^-{3,}/.test(line)) { startParsing = true; continue }
-    if (!startParsing) continue
-    const m = line.match(lineRegex)
-    if (!m) continue
-    const [, manifestName, version, bucket] = m
-    if (!cleanRegex.test(manifestName)) continue
-    results.push({ manifestName, version, bucket })
-  }
-  return results.sort((a, b) => {
-    if (a.manifestName.toLowerCase() === baseName.toLowerCase()) return -1
-    if (b.manifestName.toLowerCase() === baseName.toLowerCase()) return 1
-    return b.version.localeCompare(a.version, undefined, { numeric: true })
-  })
-}
-
 function buildFallbackDiscoverApp(app: StoreApp): DiscoverApp {
   const baseName = app.name
   return {
@@ -521,39 +513,84 @@ function buildFallbackDiscoverApp(app: StoreApp): DiscoverApp {
   }
 }
 
-async function openDiscoverDrawer(app: StoreApp) {
-  showDiscoverDrawer.value = true
-  discoverLoading.value = true
-  selectedDiscoverApp.value = {
+// 将配置缓存里的 { name, version, bucket } 转为抽屉所需 AppVersion（补 manifestName + 实时 isInstalled）
+// 并按"主包优先 → 版本号降序"排序，与后端解析后展示顺序保持一致。
+function toAppVersions(entries: AppVersionEntry[], baseName: string): AppVersion[] {
+  const base = baseName.toLowerCase()
+  return entries
+    .map(e => ({
+      version: e.version,
+      bucket: e.bucket,
+      manifestName: e.name,
+      isInstalled: installedNames.value.has(e.name),
+    }))
+    .sort((a, b) => {
+      if (a.manifestName.toLowerCase() === base) return -1
+      if (b.manifestName.toLowerCase() === base) return 1
+      return b.version.localeCompare(a.version, undefined, { numeric: true })
+    })
+}
+
+function buildDiscoverApp(app: StoreApp, versions: AppVersion[]): DiscoverApp {
+  return {
     id: app.name,
     name: app.name,
     description: app.desc,
     icon: app.icon,
     gradient: app.gradient,
     website: appWebsites[app.name] || '',
-    versions: [],
+    versions,
   }
+}
+
+/**
+ * 打开多版本发现抽屉 —— 三步走受控交互：
+ *   1. 优先读本地 config.appVersionMaps 缓存，命中即刻渲染，实现秒开、零延迟；
+ *   2. 无论有无缓存，后台静默唤醒 scoop:syncAppVersions（scoop search → 解析 → 回写）；
+ *   3. IPC 返回最新全量版本后，无缝更新响应式变量刷新 UI。
+ */
+async function openDiscoverDrawer(app: StoreApp) {
+  showDiscoverDrawer.value = true
+
+  // ── 第一步：秒开——先读缓存 ──
+  let hasCache = false
   try {
-    const rawText = await window.scoopAPI.searchRaw(app.name)
-    const cleaned = parseAndCleanSearch(rawText, app.name)
-    selectedDiscoverApp.value = {
-      id: app.name,
-      name: app.name,
-      description: app.desc,
-      icon: app.icon,
-      gradient: app.gradient,
-      website: appWebsites[app.name] || '',
-      versions: cleaned.map(r => ({
-        version: r.version,
-        bucket: r.bucket,
-        manifestName: r.manifestName,
-        isInstalled: installedNames.value.has(r.manifestName),
-      })),
+    const cached = await window.scoopAPI.getAppVersions(app.name)
+    if (Array.isArray(cached) && cached.length > 0) {
+      selectedDiscoverApp.value = buildDiscoverApp(app, toAppVersions(cached, app.name))
+      hasCache = true
+    }
+  } catch { /* 读缓存失败，走无缓存分支 */ }
+
+  if (!hasCache) {
+    // 无缓存：展示骨架占位，用整屏 loading 态
+    selectedDiscoverApp.value = buildDiscoverApp(app, [])
+    discoverLoading.value = true
+  } else {
+    // 有缓存：整屏不 loading，仅右上角微型转圈提示后台刷新
+    discoverLoading.value = false
+    discoverRefreshing.value = true
+  }
+
+  // ── 第二步：后台静默同步最新版本 ──
+  try {
+    const latest = await window.scoopAPI.syncAppVersions(app.name)
+    // 用户可能已切到别的软件，回填前校验当前抽屉仍是此 app，避免串数据
+    if (selectedDiscoverApp.value?.id !== app.name) return
+    // ── 第三步：无缝刷新 ──
+    if (Array.isArray(latest) && latest.length > 0) {
+      selectedDiscoverApp.value = buildDiscoverApp(app, toAppVersions(latest, app.name))
+    } else if (!hasCache) {
+      // 既无缓存又同步无果（如网络异常）→ 兜底单版本，避免空抽屉
+      selectedDiscoverApp.value = buildFallbackDiscoverApp(app)
     }
   } catch {
-    selectedDiscoverApp.value = buildFallbackDiscoverApp(app)
+    if (!hasCache && selectedDiscoverApp.value?.id === app.name) {
+      selectedDiscoverApp.value = buildFallbackDiscoverApp(app)
+    }
   } finally {
     discoverLoading.value = false
+    discoverRefreshing.value = false
   }
 }
 
@@ -1068,6 +1105,7 @@ function openBucketDrawer() {
       :installed-names="installedNames"
       :installing-set="storeInstallingSet"
       :loading="discoverLoading"
+      :refreshing="discoverRefreshing"
       @install="handleDiscoverInstall"
     />
 

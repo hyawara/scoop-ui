@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON, execScoopRaw } from '../utils/powershell.js'
+import { getAppVersionMap, setAppVersionMap, type AppVersionEntry } from '../utils/config.js'
 import { homedir, tmpdir } from 'os'
 import { join, basename, resolve, relative, isAbsolute } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, promises as fsp } from 'fs'
@@ -163,6 +164,201 @@ export function registerScoopIPC(): void {
       }
     }
     return result
+  })
+
+  // ============================================
+  // 惰性按需同步：解析 `scoop search <app>` 全量版本并回写 ~/.scoop-ui/config.json
+  // ============================================
+
+  /** 转义正则元字符，供动态构建包名变体匹配（notepad++ / c++ 等含特殊字符名亦安全）。 */
+  function escapeReMain(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  // 版本线 / 发布通道 / 架构 语义后缀白名单（用于识别 base-<suffix> 形态的变体）
+  const VARIANT_SUFFIXES =
+    'lts|nightly|current|rc|beta|alpha|dev|devel|preview|insider|insiders|canary|stable|latest|edge|msvc|gnu|full|light|portable|np|x86|x64|x86_64|arm64|aarch64|jre|jdk'
+
+  /**
+   * 生态关联别名：少数软件的"多版本"跨命名，无法从主名推断（如 openjdk 生态含 zulu-jdk / temurin / corretto）。
+   * 命中此表的包名也视为该 base 的关联版本。可按需扩展键值。
+   */
+  const ECOSYSTEM_ALIASES: Record<string, RegExp> = {
+    // JDK / Java 生态：各发行版（可带版本号后缀）
+    openjdk: /^(?:openjdk|ojdkbuild|zulu(?:-jdk)?|temurin|corretto|liberica(?:-(?:full|jdk|jre))?|microsoft-jdk|ms-openjdk|graalvm(?:-jdk|-nik)?|sapmachine|dragonwell|semeru|adopt(?:ium|openjdk)?|oraclejdk)(?:[-_]?\d[\w.\-]*)?$/i,
+    java: /^(?:openjdk|ojdkbuild|zulu(?:-jdk)?|temurin|corretto|liberica|microsoft-jdk|ms-openjdk|graalvm|sapmachine|dragonwell|semeru|adopt(?:ium|openjdk)?|oraclejdk)(?:[-_]?\d[\w.\-]*)?$/i,
+  }
+
+  /**
+   * 判定包名 name 是否为软件 base 的"版本变体"（精确形状匹配，取代宽松 includes）：
+   *   - 完全同名：nodejs === nodejs
+   *   - base + 数字（可点分、可分隔符）：nodejs22 / python311 / openjdk21 / go1 / php8.2
+   *   - base + 分隔符 + 语义后缀：nodejs-lts / rust-msvc / python-nightly
+   *   - base + 数字 + 语义后缀：openjdk17-jre 之类（放宽兼容）
+   * 一律锚定开头，杜绝 mongodb(中间含 go) / google-chrome(以 go 开头) 等噪音混入。
+   */
+  function isVersionVariant(name: string, base: string): boolean {
+    const n = name.toLowerCase()
+    const b = base.toLowerCase()
+    if (n === b) return true
+    const esc = escapeReMain(b)
+    if (new RegExp(`^${esc}[-_.]?\\d+(?:\\.\\d+)*$`).test(n)) return true
+    if (new RegExp(`^${esc}[-_](?:${VARIANT_SUFFIXES})$`).test(n)) return true
+    if (new RegExp(`^${esc}[-_.]?\\d+(?:\\.\\d+)*[-_](?:${VARIANT_SUFFIXES})$`).test(n)) return true
+    return false
+  }
+
+  /** 综合关联判定：版本变体 或 命中生态别名表。 */
+  function isRelevantPackage(name: string, base: string): boolean {
+    if (isVersionVariant(name, base)) return true
+    const alias = ECOSYSTEM_ALIASES[base.toLowerCase()]
+    return alias ? alias.test(name) : false
+  }
+
+  /**
+   * 从包名抽取"主版本号"用于排序：nodejs22 → 22；openjdk21 → 21；
+   * 主包（同名）→ +Infinity 永远置顶；无数字的别名 → -1 沉底。
+   */
+  function variantMajor(name: string, base: string): number {
+    const b = base.toLowerCase()
+    const n = name.toLowerCase()
+    if (n === b) return Number.POSITIVE_INFINITY
+    const rest = n.startsWith(b) ? n.slice(b.length) : n
+    const m = rest.match(/\d+/)
+    return m ? parseInt(m[0], 10) : -1
+  }
+
+  /** 统一排序：主包优先 → 变体主版本号降序 → 具体版本号降序 → 名称字典序。 */
+  function sortVersions(list: AppVersionEntry[], base: string): AppVersionEntry[] {
+    return list.sort((a, b) => {
+      const ma = variantMajor(a.name, base)
+      const mb = variantMajor(b.name, base)
+      if (ma !== mb) return mb - ma
+      const vc = b.version.localeCompare(a.version, undefined, { numeric: true })
+      if (vc !== 0) return vc
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  /**
+   * 鲁棒解析 `scoop search` 原始输出，提取每一行的 name / version / bucket。
+   * 兼容两种呈现形态：
+   *   1) 表格型（新版 scoop）：分隔线 ---- 之后，列以 2+ 空格切分：Name  Version  Source  Description
+   *   2) 分组型（旧版 / 部分镜像）："'main' bucket:" 分组标题下，行首缩进 "name (version)"
+   * 自动过滤干扰行：bucket 标题、分隔线、汇总行、空行、"No matches found" 等。
+   *
+   * @param stdout  scoop search 原始 stdout
+   * @param appName 用户点击的软件基名，用于关键字关联过滤（仅保留含该关键字的包）
+   */
+  function parseSearchVersions(stdout: string, appName: string): AppVersionEntry[] {
+    const seen = new Set<string>()
+    const result: AppVersionEntry[] = []
+
+    const push = (name: string, version: string, bucket: string) => {
+      const cleanName = name.trim()
+      const cleanVersion = (version || '').trim()
+      const cleanBucket = (bucket || '').trim()
+      if (!cleanName || !cleanBucket) return
+      // 精准关联：只收"版本变体"或命中生态别名的包，杜绝 mongodb/google-chrome 之类噪音
+      if (!isRelevantPackage(cleanName, appName)) return
+      // 去重键仅用 name：同名包若在多个 bucket 出现，保留首个（bucket 优先级由输出顺序决定）
+      const dedupeKey = cleanName.toLowerCase()
+      if (seen.has(dedupeKey)) return
+      seen.add(dedupeKey)
+      result.push({ name: cleanName, version: cleanVersion, bucket: cleanBucket })
+    }
+
+    const lines = stdout.split('\n')
+
+    // ── 形态判定：是否存在表格分隔线 ----  ----
+    let tableHeaderIdx = -1
+    for (let i = 0; i < lines.length; i++) {
+      if (/^-{3,}\s+-{3,}/.test(lines[i].trim())) {
+        tableHeaderIdx = i
+        break
+      }
+    }
+
+    if (tableHeaderIdx >= 0) {
+      // ── 表格型解析 ──
+      for (let i = tableHeaderIdx + 1; i < lines.length; i++) {
+        const trimmed = lines[i].trim()
+        if (!trimmed) continue
+        // 过滤汇总行 / 提示行
+        if (/^(Results|No matches|No results|Name\s+Version)/i.test(trimmed)) continue
+        // 列以 2+ 空格切分：Name  Version  Source[  Description]
+        const fields = trimmed.split(/\s{2,}/)
+        if (fields.length < 3) continue
+        const [name, version, bucket] = fields
+        // 校验 name 合法（排除误入的描述行）
+        if (!/^[\w.\-+]+$/.test(name)) continue
+        push(name, version, bucket)
+      }
+      return sortVersions(result, appName)
+    }
+
+    // ── 分组型解析（无表格分隔线）──
+    // 结构示例：
+    //   'main' bucket:
+    //       nodejs (26.5.0)
+    //       nodejs-lts (24.18.0)
+    //
+    //   'versions' bucket:
+    //       nodejs22 (22.23.1)
+    let currentBucket = ''
+    const bucketHeader = /^'?([\w.\-+]+)'?\s+bucket:\s*$/i
+    const groupLine = /^([\w.\-+]+)\s+\(([^)]+)\)/
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (!line) continue
+      if (/^-{3,}/.test(line)) continue
+      if (/^(No matches|No results)/i.test(line)) continue
+
+      const bh = line.match(bucketHeader)
+      if (bh) {
+        currentBucket = bh[1]
+        continue
+      }
+      const gl = line.match(groupLine)
+      if (gl && currentBucket) {
+        push(gl[1], gl[2], currentBucket)
+      }
+    }
+    return sortVersions(result, appName)
+  }
+
+  /**
+   * 惰性按需同步指定软件的关联版本：
+   *   1. 静默执行 scoop search <appName>
+   *   2. 鲁棒解析出全量 { name, version, bucket }
+   *   3. 覆盖回写 config.appVersionMaps[appName]，返回最新数组
+   * 若解析结果为空（如网络异常 / 无匹配），保留旧缓存不覆盖，返回旧缓存兜底。
+   */
+  ipcMain.handle('scoop:syncAppVersions', async (_event, appName: string) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(appName)) {
+      throw new Error('Invalid app name')
+    }
+    try {
+      const { stdout } = await execScoop(`search ${appName}`)
+      const versions = parseSearchVersions(stdout, appName)
+      if (versions.length === 0) {
+        // 解析不到任何版本时不污染缓存，回退旧数据
+        return getAppVersionMap(appName)
+      }
+      setAppVersionMap(appName, versions)
+      return versions
+    } catch {
+      // 执行失败（scoop 未装 / 网络问题）返回旧缓存，保证前端仍有数据可展示
+      return getAppVersionMap(appName)
+    }
+  })
+
+  // 只读取缓存，不触发搜索——供前端"秒开"读取本地已同步的关联版本
+  ipcMain.handle('scoop:getAppVersions', async (_event, appName: string) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-]{0,100}$/.test(appName)) {
+      return []
+    }
+    return getAppVersionMap(appName)
   })
 
   // Fetch package info (manifest) via scoop cat

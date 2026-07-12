@@ -62,6 +62,10 @@ interface Window {
     installScoop: (options?: { scoopPath?: string; globalPath?: string }) => Promise<void>
     search: (query: string) => Promise<{ name: string; version: string; description: string; bucket: string }[]>
     searchRaw: (query: string) => Promise<string>
+    // 惰性按需同步：静默 scoop search <app> → 解析全量版本 → 回写 config，返回最新数组
+    syncAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
+    // 只读本地缓存，不触发搜索（供秒开读取）
+    getAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
     uninstall: (name: string, global?: boolean) => Promise<void>

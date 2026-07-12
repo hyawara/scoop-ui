@@ -61,6 +61,16 @@ export interface AppVersion {
   isInstalled: boolean
 }
 
+/**
+ * 关联版本缓存项：与主进程 config.ts 的 AppVersionEntry 结构一致。
+ * 存储在 ~/.scoop-ui/config.json 的 appVersionMaps[appName] 数组下。
+ */
+export interface AppVersionEntry {
+  name: string
+  version: string
+  bucket: string
+}
+
 export interface DiscoverApp {
   id: string
   name: string

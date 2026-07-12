@@ -9,10 +9,19 @@ const CONFIG_DIR = join(homedir(), '.scoop-ui')
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json')
 const TEMPLATE_PATH = join(__dirname, 'config.default.json')
 
+/** 单个关联版本项：Scoop 内部真实包名 + 版本号 + 所属 bucket */
+export interface AppVersionEntry {
+  name: string
+  version: string
+  bucket: string
+}
+
 export interface AppConfig {
   discover: {
     multiVersionPrefs: string[]
   }
+  /** 惰性按需同步的关联版本缓存：key 为用户点击的软件基名，value 为解析出的全量版本数组 */
+  appVersionMaps: Record<string, AppVersionEntry[]>
   packages: {
     selectedPackages: string[]
     pinnedPackages: string[]
@@ -32,6 +41,7 @@ const DEFAULT_CONFIG: AppConfig = {
   discover: {
     multiVersionPrefs: ['openjdk', 'go', 'rust', 'nodejs'],
   },
+  appVersionMaps: {},
   packages: {
     selectedPackages: [],
     pinnedPackages: [],
@@ -121,5 +131,31 @@ export function setConfigPath(path: string, value: any): void {
     obj = obj[keys[i]]
   }
   obj[keys[keys.length - 1]] = value
+  writeConfig(config)
+}
+
+/**
+ * 读取指定软件基名的关联版本缓存。无缓存时返回空数组。
+ * @param appName 用户点击查看详情的软件基名（如 nodejs / openjdk）
+ */
+export function getAppVersionMap(appName: string): AppVersionEntry[] {
+  const config = readConfig()
+  const maps = config.appVersionMaps || {}
+  const entry = maps[appName]
+  return Array.isArray(entry) ? entry : []
+}
+
+/**
+ * 覆盖写入指定软件基名的关联版本数组（全量替换，确保拿到最新数据）。
+ * 只读改一次配置，避免并发写入丢失其它 key。
+ * @param appName  软件基名
+ * @param versions 解析出的最新全量版本数组
+ */
+export function setAppVersionMap(appName: string, versions: AppVersionEntry[]): void {
+  const config = readConfig()
+  if (!config.appVersionMaps || typeof config.appVersionMaps !== 'object') {
+    config.appVersionMaps = {}
+  }
+  config.appVersionMaps[appName] = versions
   writeConfig(config)
 }
