@@ -14,8 +14,8 @@ win:
   icon: build/icons/icon.ico
   compression: normal
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
+  allowToChangeInstallationDirectory: false
   differentialPackage: true
 publish:
   - provider: github

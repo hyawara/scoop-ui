@@ -1,5 +1,4 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
-import { spawn } from 'child_process'
 import electronUpdater, { type UpdateInfo, type ProgressInfo } from 'electron-updater'
 
 // electron-updater 是 CJS 包，在 ESM 下必须 default import 再解构，
@@ -143,26 +142,9 @@ export function registerUpdaterIPC(getWindow: () => BrowserWindow | null): void 
   })
 
   // ── IPC：退出并安装（触发重启）──
-  // 手动启动安装器，弹出 NSIS 原生差分安装界面
+  // 交给 electron-updater 传递 --updated / --force-run。
+  // NSIS 的 oneClick 配置会跳过安装对象和安装目录等向导页，仅保留安装过程窗口。
   ipcMain.handle('app:quitAndInstall', () => {
-    const installerPath = (autoUpdater as any).downloadedUpdateHelper?.file
-    if (installerPath) {
-      // --updated 告诉 NSIS 这是增量更新 → 跳过前置页面，直接显示差分应用进度条
-      // --force-run 让安装完成后自动拉起应用
-      const proc = spawn(installerPath, ['--updated', '--force-run'], {
-        detached: true,
-        stdio: 'ignore',
-      })
-      proc.on('error', (err) => {
-        console.error('[updater] 启动安装器失败:', err)
-        // fallback 到 autoUpdater
-        setImmediate(() => autoUpdater.quitAndInstall(false, true))
-      })
-      proc.unref()
-      setImmediate(() => app.quit())
-    } else {
-      // 拿不到安装包路径时走默认流程
-      setImmediate(() => autoUpdater.quitAndInstall(false, true))
-    }
+    setImmediate(() => autoUpdater.quitAndInstall(false, true))
   })
 }
