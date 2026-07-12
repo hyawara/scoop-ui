@@ -16,6 +16,8 @@ win:
 nsis:
   oneClick: true
   allowToChangeInstallationDirectory: false
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
   differentialPackage: true
 publish:
   - provider: github

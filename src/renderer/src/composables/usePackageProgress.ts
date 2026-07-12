@@ -1,125 +1,59 @@
-import { reactive } from 'vue'
+import { ref } from 'vue'
 
 /**
- * 极简行内状态：只表达“正在由 Scoop 原生命令接管 / 已结束”。
- * 终端日志不再挂在这里，成功失败也不从日志解析，而由命令结束后的 list/status 真实状态对齐。
+ * 极简全局执行态：不再计算百分比、不再逐包散列进度。
+ *
+ * 只维护两盏灯：
+ *   - isProcessing：是否有 Scoop 原生命令正在后台流动（驱动顶部 2px 呼吸条）
+ *   - currentProcessingPackageName：当前正被 Scoop 接管的软件名（驱动列表行高亮随动）
+ *
+ * 成功 / 失败不再从日志正则解析，一律由命令结束后的 list/status 真实状态对齐。
  */
-export type PackagePhase = 'downloading' | 'installing' | 'success' | 'error'
 
-export interface PackageProgress {
-  phase: PackagePhase
-  percent: number
-  error?: string
-}
-
-const progressMap = reactive<Map<string, PackageProgress>>(new Map())
-const archiveTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const SUCCESS_ARCHIVE_MS = 2000
-const PATTERN_PERCENT = /\((\d+)%\)/
-const PATTERN_PERCENT_ALT = /(\d+)%/
-
-function parsePercent(line: string): number | null {
-  let m = PATTERN_PERCENT.exec(line)
-  if (m) return parseInt(m[1], 10)
-  m = PATTERN_PERCENT_ALT.exec(line)
-  if (m) return parseInt(m[1], 10)
-  return null
-}
+// 模块级单例：多次 usePackageProgress() 调用共享同一份响应式状态
+const isProcessing = ref(false)
+const currentProcessingPackageName = ref<string | null>(null)
 
 export function usePackageProgress() {
-  function clearTimer(name: string) {
-    const t = archiveTimers.get(name)
-    if (t) {
-      clearTimeout(t)
-      archiveTimers.delete(name)
-    }
+  /** 开始一段批量/单包流程：亮起呼吸条 */
+  function startProcessing(firstName?: string) {
+    isProcessing.value = true
+    currentProcessingPackageName.value = firstName ?? null
   }
 
-  function startUpdate(name: string) {
-    clearTimer(name)
-    progressMap.set(name, { phase: 'downloading', percent: 0 })
+  /**
+   * 进程流中捕获到软件名关键字时切换激活行。
+   * 仅通过日志中的 Installing/Updating 头部锚点提取包名，绝不解析百分比。
+   */
+  function setCurrent(name: string | null) {
+    currentProcessingPackageName.value = name
   }
 
-  function handleLog(name: string, message: string) {
-    const p = progressMap.get(name)
-    if (!p || (p.phase !== 'downloading' && p.phase !== 'installing')) return
-
-    const lastLine = message.replace(/\r\n/g, '\n').split('\n').pop()?.split('\r').pop() ?? ''
-    const pct = parsePercent(lastLine)
-    if (pct !== null) p.percent = pct
-
-    const lower = message.toLowerCase()
-    if (
-      lower.includes('installing') ||
-      lower.includes('extracting') ||
-      lower.includes('unzip') ||
-      lower.includes('running post-install') ||
-      lower.includes('linking')
-    ) {
-      p.phase = 'installing'
-    }
+  /** 从一整块日志里嗅探当前正在处理的软件名（Installing '<name>' / Updating '<name>'） */
+  function handleLog(message: string) {
+    if (!isProcessing.value) return
+    const m = /(?:Installing|Updating|Uninstalling)\s+'([^']+)'/i.exec(message)
+    if (m) currentProcessingPackageName.value = m[1]
   }
 
-  function finishUpdate(name: string) {
-    clearTimer(name)
-    const p = progressMap.get(name)
-    if (p) {
-      p.phase = 'success'
-      p.percent = 100
-    } else {
-      progressMap.set(name, { phase: 'success', percent: 100 })
-    }
-    archiveTimers.set(name, setTimeout(() => {
-      progressMap.delete(name)
-      archiveTimers.delete(name)
-    }, SUCCESS_ARCHIVE_MS))
+  /** 全流程收尾：熄灭呼吸条 + 清除所有行高亮 */
+  function finishProcessing() {
+    isProcessing.value = false
+    currentProcessingPackageName.value = null
   }
 
-  function failUpdate(name: string, errorSummary?: string) {
-    clearTimer(name)
-    const p = progressMap.get(name)
-    if (p) {
-      p.phase = 'error'
-      p.error = errorSummary
-    } else {
-      progressMap.set(name, { phase: 'error', percent: 0, error: errorSummary })
-    }
-  }
-
-  function getProgress(name: string): PackageProgress | undefined {
-    return progressMap.get(name)
-  }
-
-  function hasProgress(name: string): boolean {
-    return progressMap.has(name)
-  }
-
-  function isActive(name: string): boolean {
-    const p = progressMap.get(name)
-    return !!p && (p.phase === 'downloading' || p.phase === 'installing')
-  }
-
-  function clearProgress(name: string) {
-    clearTimer(name)
-    progressMap.delete(name)
-  }
-
-  function clearAll() {
-    for (const t of archiveTimers.values()) clearTimeout(t)
-    archiveTimers.clear()
-    progressMap.clear()
+  /** 判断某行是否为当前激活行 */
+  function isCurrent(name: string): boolean {
+    return currentProcessingPackageName.value === name
   }
 
   return {
-    progressMap,
-    startUpdate,
+    isProcessing,
+    currentProcessingPackageName,
+    startProcessing,
+    setCurrent,
     handleLog,
-    finishUpdate,
-    failUpdate,
-    getProgress,
-    hasProgress,
-    isActive,
-    clearProgress,
-    clearAll,
+    finishProcessing,
+    isCurrent,
   }
 }

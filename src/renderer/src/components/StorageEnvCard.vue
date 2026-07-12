@@ -79,11 +79,15 @@
             <NButton
               size="tiny"
               :loading="clearingCache"
+              :disabled="cacheSuccess"
               @click="handleClearCache"
               :bordered="false"
               class="!text-[11px] !px-2"
-              :class="isDark ? '!text-amber-400 hover:!text-amber-300' : '!text-amber-600 hover:!text-amber-700'"
+              :class="cacheSuccess
+                ? '!text-emerald-500'
+                : (isDark ? '!text-amber-400 hover:!text-amber-300' : '!text-amber-600 hover:!text-amber-700')"
             >
+              <template v-if="cacheSuccess" #icon><NIcon :component="CheckmarkCircle" /></template>
               🗑️ 清理
             </NButton>
           </div>
@@ -107,11 +111,15 @@
             <NButton
               size="tiny"
               :loading="cleanupLoading"
+              :disabled="cleanupSuccess"
               @click="handleCleanup"
               :bordered="false"
               class="!text-[11px] !px-2"
-              :class="isDark ? '!text-emerald-400 hover:!text-emerald-300' : '!text-emerald-600 hover:!text-emerald-700'"
+              :class="cleanupSuccess
+                ? '!text-emerald-500'
+                : (isDark ? '!text-emerald-400 hover:!text-emerald-300' : '!text-emerald-600 hover:!text-emerald-700')"
             >
+              <template v-if="cleanupSuccess" #icon><NIcon :component="CheckmarkCircle" /></template>
               🧹 瘦身
             </NButton>
           </div>
@@ -140,17 +148,20 @@
 
     <!-- ═══════════════ Pod 2: Network & Protocol ═══════════════ -->
     <div
-      class="rounded-xl border p-4 space-y-4"
+      class="rounded-xl border p-5"
       :class="isDark ? 'bg-zinc-900/30 border-zinc-800/50' : 'bg-zinc-50 border-zinc-200'"
     >
       <!-- 头部行 1：网络代理开关 -->
-      <div class="flex items-center justify-between">
-        <span
-          class="font-semibold text-sm"
-          :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
-        >
-          🌐 网络代理 (Network Proxy)
-        </span>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-[14px] leading-none">🌐</span>
+          <span
+            class="font-semibold text-sm truncate"
+            :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
+          >
+            网络代理 (Network Proxy)
+          </span>
+        </div>
         <NSwitch
           v-model:value="proxyEnabled"
           :loading="proxyLoading"
@@ -164,40 +175,42 @@
       <!-- 滑出表单：一体化联邦胶囊舱 -->
       <NCollapseTransition :show="proxyEnabled">
         <div
-          class="border rounded-lg overflow-hidden flex"
-          :class="isDark ? 'border-zinc-700/60' : 'border-zinc-300'"
+          class="proxy-shell flex items-center h-10 p-1 rounded-lg border transition-colors"
+          :class="isDark
+            ? 'proxy-shell--dark bg-[#101012] border-white/[0.06]'
+            : 'proxy-shell--light bg-white border-gray-200/80 shadow-sm'"
         >
           <NSelect
             v-model:value="proxyProtocol"
             :options="protocolOptions"
             size="small"
             :bordered="false"
-            class="proxy-cell"
+            class="proxy-cell h-8"
             style="width:25%"
           />
           <div
-            class="w-px shrink-0"
-            :class="isDark ? 'bg-zinc-700/50' : 'bg-zinc-300/50'"
+            class="h-4 w-px shrink-0 mx-1"
+            :class="isDark ? 'bg-white/[0.08]' : 'bg-gray-200'"
           />
           <NInput
             v-model:value="proxyHost"
             placeholder="127.0.0.1"
             size="small"
             :bordered="false"
-            class="proxy-cell"
+            class="proxy-cell h-8"
             style="width:50%"
             :input-props="{ autocomplete: 'off' }"
           />
           <div
-            class="w-px shrink-0"
-            :class="isDark ? 'bg-zinc-700/50' : 'bg-zinc-300/50'"
+            class="h-4 w-px shrink-0 mx-1"
+            :class="isDark ? 'bg-white/[0.08]' : 'bg-gray-200'"
           />
           <NInput
             v-model:value="proxyPort"
             placeholder="7890"
             size="small"
             :bordered="false"
-            class="proxy-cell"
+            class="proxy-cell h-8"
             style="width:25%"
             :input-props="{ autocomplete: 'off' }"
           />
@@ -205,19 +218,20 @@
       </NCollapseTransition>
       <!-- 头部行 2：Aria2 下载加速开关 -->
       <div
-        class="flex items-center justify-between pt-1"
+        class="flex items-center justify-between mt-5 pt-1"
         :class="isDark ? 'border-t border-white/5' : 'border-t border-zinc-100'"
       >
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-[14px] leading-none">⚡</span>
           <span
-            class="font-semibold text-sm"
+            class="font-semibold text-sm truncate"
             :class="isDark ? 'text-zinc-200' : 'text-zinc-700'"
           >
-            ⚡ Aria2 多线程加速
+            Aria2 多线程加速
           </span>
           <span
             v-if="settingsStore.aria2Installed"
-            class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
+            class="ml-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"
           />
         </div>
         <NSwitch
@@ -254,17 +268,23 @@
         <NButton
           secondary
           :loading="exporting"
+          :disabled="exportSuccess"
           @click="handleExport"
           class="!text-[12px]"
+          :class="exportSuccess ? '!text-emerald-500' : ''"
         >
+          <template v-if="exportSuccess" #icon><NIcon :component="CheckmarkCircle" /></template>
           📤 导出配置清单
         </NButton>
         <NButton
           secondary
           :loading="importing"
+          :disabled="importSuccess"
           @click="handleImport"
           class="!text-[12px]"
+          :class="importSuccess ? '!text-emerald-500' : ''"
         >
+          <template v-if="importSuccess" #icon><NIcon :component="CheckmarkCircle" /></template>
           📥 导入恢复软件
         </NButton>
       </div>
@@ -276,6 +296,7 @@
 import { ref, computed, onMounted, watch, inject, type Ref } from 'vue'
 import {
   NButton,
+  NIcon,
   NProgress,
   NSwitch,
   NSelect,
@@ -283,6 +304,7 @@ import {
   NCollapseTransition,
   useMessage,
 } from 'naive-ui'
+import { CheckmarkCircle } from '@vicons/ionicons5'
 import { useSettingsStore } from '@/stores/settings'
 import { usePackagesStore } from '@/stores/packages'
 
@@ -317,6 +339,20 @@ const oldVersionsSize = ref(0)
 // ── Export / Import ──
 const exporting = ref(false)
 const importing = ref(false)
+
+// ── 按钮变身报捷：操作成功后短暂显示翠色打勾圆环，无声报捷（取代 message 飘言） ──
+const SUCCESS_FLASH_MS = 1600
+const cacheSuccess = ref(false)
+const cleanupSuccess = ref(false)
+const exportSuccess = ref(false)
+const importSuccess = ref(false)
+
+function flashSuccess(flag: Ref<boolean>) {
+  flag.value = true
+  setTimeout(() => {
+    flag.value = false
+  }, SUCCESS_FLASH_MS)
+}
 
 // ── Cache Display ──
 const cacheSizeDisplay = computed(() => {
@@ -380,7 +416,7 @@ async function handleClearCache() {
   try {
     await settingsStore.clearCache()
     await settingsStore.loadCacheInfo()
-    message.success('缓存已清理')
+    flashSuccess(cacheSuccess)
   } catch {
     message.error('清理缓存失败')
   } finally {
@@ -400,7 +436,6 @@ async function loadOldVersionsSize() {
 
 async function handleCleanup() {
   cleanupLoading.value = true
-  const loadingMsg = message.loading('正在清理旧版本...', { duration: 0 })
   try {
     const result = await window.scoopAPI.cleanup()
     await Promise.all([
@@ -408,20 +443,16 @@ async function handleCleanup() {
       settingsStore.loadCacheInfo(),
     ])
     await loadOldVersionsSize()
-    loadingMsg.destroy()
-    const released = result?.released
     const skipped = result?.skipped || []
     if (skipped.length > 0) {
+      const released = result?.released
       const firstLocked = skipped[0]?.lockedPath || skipped[0]?.path
       const releasedText = released && released > 0 ? `已释放 ${formatBytes(released)}，` : ''
       message.warning(`${releasedText}${skipped.length} 个旧版本被占用，已安全跳过。稍后重试即可${firstLocked ? `：${firstLocked}` : ''}`)
-    } else if (released && released > 0) {
-      message.success(`已释放 ${formatBytes(released)} 磁盘空间`)
     } else {
-      message.success('旧版本已清理完成')
+      flashSuccess(cleanupSuccess)
     }
   } catch (e) {
-    loadingMsg.destroy()
     message.error(`清理旧版本失败: ${(e as Error)?.message || '未知错误'}`)
   } finally {
     cleanupLoading.value = false
@@ -496,7 +527,7 @@ async function handleExport() {
       if (!result.canceled) message.error('导出失败')
       return
     }
-    message.success(`配置清单已导出至 ${result.path}`)
+    flashSuccess(exportSuccess)
   } catch (e) {
     message.error((e as Error)?.message || '导出失败')
   } finally {
@@ -512,7 +543,7 @@ async function handleImport() {
       if (!result.canceled) message.error('导入失败或已取消')
       return
     }
-    message.success('软件列表已导入恢复完成')
+    flashSuccess(importSuccess)
     // 刷新已安装列表
     await settingsStore.loadDiskSpace()
   } catch (e: any) {
@@ -571,8 +602,27 @@ watch([() => packagesStore.installed.length, () => packagesStore.updatable.lengt
 
 <style scoped>
 /* ── Proxy 无缝拼接胶囊舱 ── */
+.proxy-shell {
+  --proxy-text: #3f3f46;
+  --proxy-placeholder: #a1a1aa;
+}
+.proxy-shell--dark {
+  --proxy-text: #d1d5db;
+  --proxy-placeholder: #71717a;
+}
+.proxy-shell--light {
+  --proxy-text: #3f3f46;
+  --proxy-placeholder: #a1a1aa;
+}
+
+.proxy-cell {
+  height: 32px;
+}
+
 .proxy-cell :deep(.n-base-selection),
 .proxy-cell :deep(.n-base-selection--focus) {
+  height: 32px !important;
+  min-height: 32px !important;
   border: none !important;
   box-shadow: none !important;
   outline: none !important;
@@ -582,10 +632,30 @@ watch([() => packagesStore.installed.length, () => packagesStore.updatable.lengt
 .proxy-cell :deep(.n-input),
 .proxy-cell :deep(.n-input--focus),
 .proxy-cell :deep(.n-input--hover) {
+  height: 32px !important;
+  min-height: 32px !important;
   border: none !important;
   box-shadow: none !important;
   outline: none !important;
   background: transparent !important;
+}
+
+.proxy-cell :deep(.n-base-selection-label),
+.proxy-cell :deep(.n-base-selection-input),
+.proxy-cell :deep(.n-input-wrapper) {
+  height: 32px !important;
+  line-height: 32px !important;
+}
+
+.proxy-cell :deep(.n-base-selection-label),
+.proxy-cell :deep(.n-base-selection-input),
+.proxy-cell :deep(.n-input__input-el) {
+  color: var(--proxy-text) !important;
+}
+
+.proxy-cell :deep(.n-input__placeholder),
+.proxy-cell :deep(.n-base-selection-placeholder) {
+  color: var(--proxy-placeholder) !important;
 }
 
 /* NButton 图标跟随字体 */

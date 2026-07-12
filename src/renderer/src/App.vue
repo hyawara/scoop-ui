@@ -451,10 +451,10 @@ onMounted(async () => {
     window.scoopAPI.setConfig('theme.dark', val)
   })
 
-  // 全局持久化日志监听器：始终路由到共享 progressMap，跨 tab 不丢失
+  // 全局持久化日志监听器：只从流中嗅探软件名切换激活行，不解析任何百分比，跨 tab 不丢失
   window.scoopAPI.onLog((data) => {
-    if (data?.package && data?.message) {
-      pkgProgress.handleLog(data.package, data.message)
+    if (data?.message) {
+      pkgProgress.handleLog(data.message)
     }
   })
 

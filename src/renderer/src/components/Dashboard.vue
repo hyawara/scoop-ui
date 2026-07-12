@@ -472,22 +472,29 @@ async function handleInstall(name: string) {
 // ═══ 商店行内安装 ═══
 const storeInstallingSet = ref<Set<string>>(new Set())
 
+const scoopIsProcessing = computed(() =>
+  pkgProgress.isProcessing.value
+  || batchUpdating.value
+  || updatingAll.value
+  || storeInstallingSet.value.size > 0
+  || uninstallingSet.value.size > 0
+)
+
 async function storeQuickInstall(pkgName: string) {
   if (storeInstallingSet.value.has(pkgName)) return
   openTerminal()
   const s = new Set(storeInstallingSet.value)
   s.add(pkgName)
   storeInstallingSet.value = s
-  pkgProgress.startUpdate(pkgName)
+  pkgProgress.startProcessing(pkgName)
   try {
     await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
-    pkgProgress.finishUpdate(pkgName)
     message.success(`${pkgName} 安装完成`)
     packagesStore.loadInstalled()
   } catch {
-    pkgProgress.failUpdate(pkgName)
     message.error(`${pkgName} 安装失败`)
   } finally {
+    pkgProgress.finishProcessing()
     const next = new Set(storeInstallingSet.value)
     next.delete(pkgName)
     storeInstallingSet.value = next
@@ -607,10 +614,9 @@ async function handleDiscoverInstall(manifestName: string) {
   const s = new Set(storeInstallingSet.value)
   s.add(manifestName)
   storeInstallingSet.value = s
-  pkgProgress.startUpdate(manifestName)
+  pkgProgress.startProcessing(manifestName)
   try {
     await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false })
-    pkgProgress.finishUpdate(manifestName)
     message.success(`${manifestName} 安装完成`)
     packagesStore.loadInstalled()
     // 刷新 drawer 内的已安装状态
@@ -618,9 +624,9 @@ async function handleDiscoverInstall(manifestName: string) {
       selectedDiscoverApp.value = { ...selectedDiscoverApp.value }
     }
   } catch {
-    pkgProgress.failUpdate(manifestName)
     message.error(`${manifestName} 安装失败`)
   } finally {
+    pkgProgress.finishProcessing()
     const next = new Set(storeInstallingSet.value)
     next.delete(manifestName)
     storeInstallingSet.value = next
@@ -633,13 +639,10 @@ async function refreshAfterNativeUpdate(names: string[]) {
     packagesStore.loadUpdatable(),
   ])
 
+  // 仅按 scoop status/list 真实结果判定哪些仍可更新（用于文案提示），
+  // 不再逐包写入 success/error 行内态——行高亮由全局 currentProcessingPackageName 驱动。
   const stillUpdatable = new Set(packagesStore.updatable.map((p: any) => p.name))
   for (const name of names) {
-    if (stillUpdatable.has(name)) {
-      pkgProgress.failUpdate(name, '命令已结束，但本地状态显示仍可更新')
-    } else {
-      pkgProgress.finishUpdate(name)
-    }
     window.scoopAPI.clearAppIcon(name).catch(() => {})
     fetchIcon(name)
   }
@@ -658,9 +661,8 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
   openTerminal()
   flag.value = true
   nativeUpdateCount.value = uniqueNames.length
-  for (const name of uniqueNames) {
-    pkgProgress.startUpdate(name)
-  }
+  // 亮起全局呼吸条；先把首个软件设为激活行，随后由日志流嗅探自动随动切换
+  pkgProgress.startProcessing(uniqueNames[0])
 
   try {
     const result = await window.scoopAPI.update(uniqueNames)
@@ -676,22 +678,21 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
     }
     message.success(uniqueNames.length === 1 ? `${uniqueNames[0]} 更新完成` : `已完成 ${uniqueNames.length} 个软件更新`)
   } catch (e) {
-    for (const name of uniqueNames) {
-      pkgProgress.failUpdate(name, (e as Error)?.message)
-    }
     await Promise.allSettled([
       packagesStore.loadInstalled(),
       packagesStore.loadUpdatable(),
     ])
     message.error((e as Error)?.message || '更新失败')
   } finally {
+    // 全流程收尾：熄灭呼吸条 + 清除所有行高亮
+    pkgProgress.finishProcessing()
     flag.value = false
     nativeUpdateCount.value = 0
   }
 }
 
 async function handleUpdate(pkg: any) {
-  if (pkgProgress.isActive(pkg.name)) return
+  if (pkgProgress.isProcessing.value) return
   await runNativeUpdate([pkg.name], batchUpdating)
 }
 
@@ -969,6 +970,13 @@ function openBucketDrawer() {
                 </div>
               </div>
 
+              <!-- 顶部 2px 流动呼吸条：Scoop 执行时显现；闲置时仅保留极弱分割线 -->
+              <div class="shimmer-slot">
+                <Transition name="shimmer-fade">
+                  <div v-show="scoopIsProcessing" class="shimmer-bar" />
+                </Transition>
+              </div>
+
               <!-- 已安装列表（纯净单色流风格） -->
               <div class="flex flex-col pt-2 pb-4">
                 <TransitionGroup name="list" tag="div" class="flex flex-col">
@@ -981,7 +989,7 @@ function openBucketDrawer() {
                     :disabled="uninstallingSet.has(pkg.name)"
                     :pinned="isPinned(pkg.name)"
                     :new-version="getNewVersion(pkg.name)"
-                    :progress="pkgProgress.getProgress(pkg.name)"
+                    :active="pkgProgress.isCurrent(pkg.name)"
                     :icon="getIcon(pkg.name)"
                     @toggle-check="toggleSelect"
                     @update="handleUpdate"
@@ -1113,6 +1121,50 @@ function openBucketDrawer() {
 </template>
 
 <style scoped>
+/* ═══ 顶部 2px 流动呼吸条：闲置静默，执行时纯流光循环位移 ═══ */
+.shimmer-slot {
+  position: relative;
+  height: 1px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background-color: rgb(39 39 42 / 0.18);
+}
+.dark .shimmer-slot {
+  background-color: rgb(255 255 255 / 0.04);
+}
+.shimmer-bar {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(16 185 129 / 0.15) 20%,
+    rgb(16 185 129 / 0.9) 50%,
+    rgb(16 185 129 / 0.15) 80%,
+    transparent 100%
+  );
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer-slide 1.4s linear infinite;
+}
+@keyframes shimmer-slide {
+  0% {
+    background-position: -60% 0;
+  }
+  100% {
+    background-position: 160% 0;
+  }
+}
+/* 呼吸条显隐淡入淡出 */
+.shimmer-fade-enter-active,
+.shimmer-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.shimmer-fade-enter-from,
+.shimmer-fade-leave-to {
+  opacity: 0;
+}
+
 /* 零延迟原地蒸发 + 列表精准补位 */
 .list-leave-active {
   position: absolute;

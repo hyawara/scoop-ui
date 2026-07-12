@@ -31,8 +31,7 @@ const emit = defineEmits<{
 }>()
 
 const openTerminal = inject<() => void>('openTerminal', () => {})
-const { progressMap } = usePackageProgress()
-const terminalTaskCount = computed(() => progressMap.size)
+const { isProcessing } = usePackageProgress()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const isMaximized = ref(false)
@@ -149,7 +148,7 @@ async function refreshAll() {
       </NButton>
       <NButton text size="small" @click="openTerminal">
         <template #icon>
-          <NBadge :value="terminalTaskCount" :max="99" :show="terminalTaskCount > 0">
+          <NBadge dot :show="isProcessing" :processing="isProcessing">
             <NIcon :component="TerminalOutline" size="16" />
           </NBadge>
         </template>

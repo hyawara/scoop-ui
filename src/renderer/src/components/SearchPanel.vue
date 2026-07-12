@@ -50,19 +50,17 @@ async function quickInstall(pkgName: string) {
   if (installingSet.value.has(pkgName)) return
   openTerminal()
   installingSet.value = new Set([...installingSet.value, pkgName])
-  pkgProgress.startUpdate(pkgName)
+  pkgProgress.startProcessing(pkgName)
   try {
     // 直接调用 API，绕过 store.install 的全局进度监听（避免冲突）
     await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
-    // 安装成功：瞬间完成，不设 success 延迟
-    pkgProgress.finishUpdate(pkgName)
     message.success(`${pkgName} 安装完成`)
     // 刷新已安装列表（静默）
     packagesStore.loadInstalled()
   } catch {
-    pkgProgress.failUpdate(pkgName)
     message.error(`${pkgName} 安装失败`)
   } finally {
+    pkgProgress.finishProcessing()
     const next = new Set(installingSet.value)
     next.delete(pkgName)
     installingSet.value = next
@@ -110,7 +108,7 @@ const skeletonItems = Array.from({ length: 5 })
             :is-selected="selectedPackage?.name === pkg.name"
             :is-installed="installedNames.has(pkg.name)"
             :disabled="installingSet.has(pkg.name)"
-            :progress="pkgProgress.getProgress(pkg.name)"
+            :active="pkgProgress.isCurrent(pkg.name)"
             @select="selectPackage"
             @install="quickInstall"
             @show-logs="showPkgLogs"
