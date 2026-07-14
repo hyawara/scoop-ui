@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   // 只读关联版本缓存（秒开用），不触发搜索
   getAppVersions: (appName: string) => ipcRenderer.invoke('scoop:getAppVersions', appName),
   fetchPackageInfo: (name: string) => ipcRenderer.invoke('scoop:info', name),
+  checkverLatest: (name: string) => ipcRenderer.invoke('scoop:checkverLatest', name),
   install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) =>
     ipcRenderer.invoke('scoop:install', name, options),
   reset: (appName: string) => ipcRenderer.invoke('scoop:reset', appName),

@@ -6,6 +6,8 @@ import { homedir, tmpdir } from 'os'
 import { join, basename, resolve, relative, isAbsolute } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, promises as fsp } from 'fs'
 import { spawn } from 'child_process'
+import { request as httpRequest } from 'http'
+import { request as httpsRequest } from 'https'
 
 function sendProgress(win: BrowserWindow | null, data: any) {
   if (win && !win.isDestroyed()) {
@@ -185,6 +187,236 @@ async function readJsonManifest(path: string): Promise<Record<string, any> | nul
   } catch {
     return null
   }
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function resolveGithubLatestApi(value: string): string {
+  const raw = value.trim()
+  let repo = ''
+
+  if (/^[\w.-]+\/[\w.-]+$/.test(raw)) {
+    repo = raw
+  } else {
+    try {
+      const url = new URL(raw)
+      if (url.hostname.toLowerCase() === 'github.com') {
+        const [owner, name] = url.pathname.split('/').filter(Boolean)
+        if (owner && name) repo = `${owner}/${name.replace(/\.git$/i, '')}`
+      }
+    } catch {
+      repo = ''
+    }
+  }
+
+  return repo ? `https://api.github.com/repos/${repo}/releases/latest` : ''
+}
+
+function resolveCheckverUrl(checkver: unknown): string {
+  if (typeof checkver === 'string') {
+    const value = checkver.trim()
+    return /^https?:\/\//i.test(value) ? value : ''
+  }
+
+  if (!isRecord(checkver)) return ''
+
+  const url = checkver.url
+  if (typeof url === 'string' && url.trim()) return url.trim()
+
+  const github = checkver.github
+  if (typeof github === 'string' && github.trim()) {
+    return resolveGithubLatestApi(github)
+  }
+
+  return ''
+}
+
+function fetchCheckverText(url: string, redirectCount = 0): Promise<{ text: string; finalUrl: string }> {
+  return new Promise((resolvePromise, reject) => {
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      reject(new Error('无效的 checkver.url'))
+      return
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      reject(new Error('checkver.url 仅支持 http/https'))
+      return
+    }
+
+    const request = parsed.protocol === 'https:' ? httpsRequest : httpRequest
+    const req = request(
+      parsed,
+      {
+        method: 'GET',
+        timeout: 12_000,
+        headers: {
+          'User-Agent': 'Scoop-UI/checkver',
+          Accept: 'application/json,text/plain,text/html,*/*',
+        },
+      },
+      (res) => {
+        const status = res.statusCode || 0
+        const location = res.headers.location
+
+        if ([301, 302, 303, 307, 308].includes(status) && location) {
+          res.resume()
+          if (redirectCount >= 5) {
+            reject(new Error('checkver.url 重定向过多'))
+            return
+          }
+          resolvePromise(fetchCheckverText(new URL(location, parsed).toString(), redirectCount + 1))
+          return
+        }
+
+        if (status < 200 || status >= 300) {
+          res.resume()
+          reject(new Error(`请求 checkver.url 失败：HTTP ${status}`))
+          return
+        }
+
+        res.setEncoding('utf8')
+        let text = ''
+        res.on('data', (chunk) => {
+          text += chunk
+          if (text.length > 2_000_000) {
+            req.destroy(new Error('checkver 响应过大'))
+          }
+        })
+        res.on('end', () => resolvePromise({ text, finalUrl: parsed.toString() }))
+      }
+    )
+
+    req.on('timeout', () => req.destroy(new Error('请求 checkver.url 超时')))
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+function buildCheckverRegex(pattern: string): RegExp | null {
+  let source = pattern.trim()
+  let flags = 'im'
+  const inline = source.match(/^\(\?([is]+)\)/i)
+  if (inline) {
+    if (inline[1].toLowerCase().includes('s')) flags = 'ims'
+    source = source.slice(inline[0].length)
+  }
+  try {
+    return new RegExp(source, flags)
+  } catch {
+    return null
+  }
+}
+
+function applyCheckverReplace(template: string, match: RegExpExecArray): string {
+  let result = template
+  if (match.groups) {
+    for (const [key, value] of Object.entries(match.groups)) {
+      result = result
+        .replace(new RegExp(`\\$<${key}>`, 'g'), value || '')
+        .replace(new RegExp(`\\$\\{${key}\\}`, 'g'), value || '')
+    }
+  }
+  return result.replace(/\$(\d+)/g, (_all, index) => match[Number(index)] || '')
+}
+
+function cleanCheckverVersion(value: string): string {
+  let version = value.trim().replace(/^["']|["']$/g, '').trim()
+  if (!version) return ''
+
+  const match = version.match(/v?(\d+(?:[._-]\d+)+(?:[-+][0-9A-Za-z.-]+)?|\d+(?:[-+][0-9A-Za-z.-]+)?)/)
+  if (match) version = match[1]
+  return version.replace(/^v(?=\d)/i, '').replace(/_/g, '.')
+}
+
+function getSimpleJsonPathValue(root: unknown, jsonPath: string): string {
+  const normalized = jsonPath.trim().replace(/^\$\.?/, '')
+  if (!normalized) return ''
+
+  let current: any = root
+  for (const token of normalized.split('.').filter(Boolean)) {
+    const match = token.match(/^([^[\]]+)?(?:\[(\d+)\])?$/)
+    if (!match) return ''
+    const key = match[1]
+    const index = match[2] === undefined ? null : Number(match[2])
+
+    if (key) {
+      if (!isRecord(current)) return ''
+      current = current[key]
+    }
+
+    if (index !== null) {
+      if (!Array.isArray(current)) return ''
+      current = current[index]
+    }
+  }
+
+  if (typeof current === 'string' || typeof current === 'number') return String(current)
+  return ''
+}
+
+function pickVersionFromJson(value: unknown): string {
+  if (!isRecord(value)) return ''
+  for (const key of ['tag_name', 'version', 'name', 'tag', 'latest']) {
+    const picked = value[key]
+    if (typeof picked === 'string' && picked.trim()) return picked.trim()
+    if (typeof picked === 'number') return String(picked)
+  }
+  return ''
+}
+
+function extractVersionByRegex(text: string, checkver: Record<string, any>): string {
+  const regex = typeof checkver.regex === 'string' ? buildCheckverRegex(checkver.regex) : null
+  if (!regex) return ''
+
+  const match = regex.exec(text)
+  if (!match) return ''
+
+  if (typeof checkver.replace === 'string' && checkver.replace.trim()) {
+    return cleanCheckverVersion(applyCheckverReplace(checkver.replace, match))
+  }
+
+  const named = match.groups?.version || match.groups?.Version
+  return cleanCheckverVersion(named || match[1] || match[0] || '')
+}
+
+function extractCheckverVersion(text: string, finalUrl: string, checkver: unknown): string {
+  const record = isRecord(checkver) ? checkver : {}
+  const jsonPath = typeof record.jsonpath === 'string' ? record.jsonpath.trim() : ''
+
+  if (jsonPath) {
+    try {
+      const json = JSON.parse(text)
+      const jsonPathValue = getSimpleJsonPathValue(json, jsonPath)
+      if (jsonPathValue) {
+        const byRegex = extractVersionByRegex(jsonPathValue, record)
+        return byRegex || cleanCheckverVersion(jsonPathValue)
+      }
+    } catch {
+      // 非 JSON 响应继续走 regex / 文本兜底。
+    }
+  }
+
+  const byRegex = extractVersionByRegex(text, record)
+  if (byRegex) return byRegex
+
+  try {
+    const json = JSON.parse(text)
+    const fromJson = pickVersionFromJson(json)
+    if (fromJson) return cleanCheckverVersion(fromJson)
+  } catch {
+    // 非 JSON 响应继续走 URL / 文本兜底。
+  }
+
+  const fromFinalUrl = finalUrl.match(/(?:tag|download|releases?)\/v?([^/?#]+)/i)
+  if (fromFinalUrl) return cleanCheckverVersion(fromFinalUrl[1])
+
+  const fromText = text.match(/v?(\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?)/)
+  return fromText ? cleanCheckverVersion(fromText[1]) : ''
 }
 
 function pushSearchResult(
@@ -641,9 +873,55 @@ export function registerScoopIPC(): void {
       throw new Error('Invalid package name')
     }
     try {
-      return await execScoopJSON<{ description?: string; homepage?: string; license?: string; version?: string }>(`cat ${name}`)
+      return await execScoopJSON<Record<string, any>>(`cat ${name}`)
     } catch {
       return { description: '' }
+    }
+  })
+
+  // Dynamic upstream version from Manifest checkver.url, without syncing local buckets.
+  ipcMain.handle('scoop:checkverLatest', async (_event, name: string) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
+      throw new Error('Invalid package name')
+    }
+
+    try {
+      const manifest = await execScoopJSON<Record<string, any>>(`cat ${name}`)
+      const checkver = manifest?.checkver
+      const url = resolveCheckverUrl(checkver)
+
+      if (!checkver || !url) {
+        return {
+          success: false,
+          supported: false,
+          reason: '此 Manifest 未提供可直接请求的 checkver.url',
+        }
+      }
+
+      const { text, finalUrl } = await fetchCheckverText(url)
+      const version = extractCheckverVersion(text, finalUrl, checkver)
+
+      if (!version) {
+        return {
+          success: false,
+          supported: true,
+          url: finalUrl,
+          reason: '已请求 checkver.url，但未能解析出版本号',
+        }
+      }
+
+      return {
+        success: true,
+        supported: true,
+        version,
+        url: finalUrl,
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        supported: true,
+        reason: error?.message || '刷新官方版本失败',
+      }
     }
   })
 

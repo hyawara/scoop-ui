@@ -71,6 +71,14 @@ interface SearchEngineInstallResult {
   error?: string
 }
 
+interface CheckverLatestResult {
+  success: boolean
+  supported: boolean
+  version?: string
+  url?: string
+  reason?: string
+}
+
 interface CheckUpdatesResult {
   updates: {
     name: string
@@ -128,7 +136,8 @@ interface Window {
     syncAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
     // 只读本地缓存，不触发搜索（供秒开读取）
     getAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
-    fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
+    fetchPackageInfo: (name: string) => Promise<Record<string, any>>
+    checkverLatest: (name: string) => Promise<CheckverLatestResult>
     install: (name: string, options?: InstallOptions) => Promise<void>
     reset: (appName: string) => Promise<ResetResult>
     uninstall: (name: string, global?: boolean) => Promise<void>

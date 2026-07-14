@@ -188,6 +188,27 @@ const dependencies = computed<string[]>(() => {
   return arr.filter((v: unknown) => typeof v === 'string' && (v as string).trim()) as string[]
 })
 
+function normalizeManifestList(value: unknown): string[] {
+  if (!value) return []
+  const items = Array.isArray(value) ? value : [value]
+  return items
+    .map((item) => {
+      if (typeof item === 'string') return item.trim()
+      if (Array.isArray(item)) {
+        return item
+          .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+          .join(' → ')
+      }
+      return ''
+    })
+    .filter(Boolean)
+}
+
+const persistEntries = computed(() => normalizeManifestList(manifest.value?.persist))
+const envAddPathEntries = computed(() => normalizeManifestList(manifest.value?.env_add_path))
+const hasPersist = computed(() => persistEntries.value.length > 0)
+const hasEnvAddPath = computed(() => envAddPathEntries.value.length > 0)
+
 // ─── CLI 命令实时拼装（供极客一键复制）───────────────
 const installName = computed(() => {
   if (!props.pkg) return ''
@@ -393,27 +414,54 @@ async function copyManifest() {
                   <p v-else class="text-[13px] dark:text-slate-500 text-gray-400 italic">暂无描述</p>
                 </div>
 
-                <div v-if="displayLicense" class="flex items-center gap-2">
-                  <span class="text-[11px] dark:text-slate-500 text-gray-500">协议</span>
-                  <NTag size="small" :bordered="false" class="dark:!bg-white/[0.04] !bg-black/[0.04] font-mono">
-                    {{ displayLicense }}
-                  </NTag>
-                </div>
+                <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                  <a
+                    v-if="displayHomepage"
+                    :href="displayHomepage"
+                    class="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[12px] font-medium dark:bg-cyan-500/10 bg-cyan-50 dark:text-cyan-300 text-cyan-700 hover:dark:bg-cyan-500/15 hover:bg-cyan-100 transition-colors"
+                    :title="displayHomepage"
+                    @click.prevent="openHomepage"
+                  >
+                    <span>访问官网</span>
+                    <NIcon :component="OpenOutline" size="12" />
+                  </a>
 
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="text-[11px] dark:text-slate-500 text-gray-500 flex-shrink-0">主页</span>
-                  <template v-if="displayHomepage">
-                    <button
-                      class="flex items-center gap-1 text-[12px] font-mono dark:text-cyan-400 text-cyan-600 hover:underline truncate min-w-0"
-                      :title="displayHomepage"
-                      @click="openHomepage"
-                    >
-                      <span class="truncate">{{ displayHomepage }}</span>
-                      <NIcon :component="OpenOutline" size="12" class="flex-shrink-0" />
-                    </button>
-                  </template>
-                  <NSkeleton v-else-if="manifestLoading" :width="180" :height="14" :border-radius="4" />
-                  <span v-else class="text-[12px] dark:text-slate-500 text-gray-400 italic">暂无</span>
+                  <NTag
+                    v-if="displayLicense"
+                    size="small"
+                    type="info"
+                    :bordered="false"
+                    class="font-mono"
+                  >
+                    License: {{ displayLicense }}
+                  </NTag>
+
+                  <NTag
+                    v-if="hasPersist"
+                    size="small"
+                    type="success"
+                    :bordered="false"
+                    :title="persistEntries.join('\n')"
+                  >
+                    💾 本地数据已持久化
+                  </NTag>
+
+                  <NTag
+                    v-if="hasEnvAddPath"
+                    size="small"
+                    type="warning"
+                    :bordered="false"
+                    :title="envAddPathEntries.join('\n')"
+                  >
+                    ⚙️ 安装后将自动配置系统环境变量
+                  </NTag>
+
+                  <NSkeleton
+                    v-if="manifestLoading && !displayHomepage && !displayLicense && !hasPersist && !hasEnvAddPath"
+                    :width="220"
+                    :height="24"
+                    :border-radius="6"
+                  />
                 </div>
               </div>
             </section>

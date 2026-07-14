@@ -16,6 +16,7 @@ import {
   CheckmarkDoneOutline,
   CubeOutline,
   RefreshOutline,
+  SwapHorizontalOutline,
 } from '@vicons/ionicons5'
 import type { DiscoverApp, AppVersion } from '@/types'
 
@@ -39,6 +40,11 @@ const emit = defineEmits<{
 const message = useMessage()
 const copiedVer = ref<string | null>(null)
 const selectedVersionKey = ref<string | null>(null)
+const manifestForCheckver = ref<Record<string, any> | null>(null)
+const officialRefreshing = ref(false)
+const officialLatestVersion = ref('')
+const officialLatestUrl = ref('')
+let manifestRequestId = 0
 
 function handleClose() {
   emit('update:show', false)
@@ -72,11 +78,53 @@ const selectedVersion = computed(() => {
     || versionsWithStatus.value[0]
 })
 
+const checkverTargetName = computed(() => {
+  if (selectedVersion.value) return getInstallName(selectedVersion.value)
+  return props.app?.id || ''
+})
+
+function hasDirectCheckverSource(checkver: unknown): boolean {
+  if (typeof checkver === 'string') return /^https?:\/\//i.test(checkver.trim())
+  if (!checkver || typeof checkver !== 'object' || Array.isArray(checkver)) return false
+  const value = checkver as Record<string, unknown>
+  return typeof value.url === 'string' && value.url.trim().length > 0
+    || typeof value.github === 'string' && value.github.trim().length > 0
+}
+
+const hasCheckver = computed(() => hasDirectCheckverSource(manifestForCheckver.value?.checkver))
+
+async function loadCheckverManifest() {
+  const appName = checkverTargetName.value
+  const requestId = ++manifestRequestId
+
+  manifestForCheckver.value = null
+  officialLatestVersion.value = ''
+  officialLatestUrl.value = ''
+
+  if (!props.show || !appName) return
+
+  try {
+    const info = await window.scoopAPI.fetchPackageInfo(appName)
+    if (requestId !== manifestRequestId) return
+    manifestForCheckver.value = info || null
+  } catch {
+    if (requestId === manifestRequestId) manifestForCheckver.value = null
+  }
+}
+
 watch(
   () => props.app?.id,
   () => {
     selectedVersionKey.value = null
   },
+)
+
+watch(
+  () => [props.show, checkverTargetName.value] as const,
+  () => {
+    loadCheckverManifest()
+  },
+  { immediate: true },
 )
 
 watch(
@@ -139,6 +187,26 @@ async function copyMainCmd() {
     message.success(`命令已复制: ${cmd}`)
   } catch {
     message.error('复制失败')
+  }
+}
+
+async function refreshOfficialVersion() {
+  const appName = checkverTargetName.value
+  if (!appName || officialRefreshing.value) return
+  officialRefreshing.value = true
+  try {
+    const result = await window.scoopAPI.checkverLatest(appName)
+    if (result.success && result.version) {
+      officialLatestVersion.value = result.version
+      officialLatestUrl.value = result.url || ''
+      message.success(`官方最新版本：${result.version}`)
+      return
+    }
+    message.warning(result.reason || '暂未解析到官方最新版本')
+  } catch (error: any) {
+    message.error(error?.message || '刷新官方版本失败')
+  } finally {
+    officialRefreshing.value = false
   }
 }
 </script>
@@ -228,9 +296,39 @@ async function copyMainCmd() {
 
           <!-- 版本列表 -->
           <template v-else>
-            <div class="flex items-center gap-2 mb-3">
+            <div class="flex flex-wrap items-center gap-2 mb-3 min-w-0">
               <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">可用版本</span>
               <span class="px-1.5 py-0.5 text-[10px] dark:bg-white/[0.04] bg-black/[0.03] dark:text-gray-500 text-gray-500 rounded-md font-mono">{{ versionsWithStatus.length }}</span>
+              <div class="ml-auto flex items-center gap-1.5 min-w-0">
+                <NTag
+                  v-if="officialLatestVersion"
+                  size="small"
+                  type="success"
+                  :bordered="false"
+                  class="!h-6 !px-2 !font-mono flex-shrink-0"
+                  :title="officialLatestUrl || officialLatestVersion"
+                >
+                  官方最新 {{ officialLatestVersion }}
+                </NTag>
+                <button
+                  v-if="hasCheckver"
+                  :disabled="officialRefreshing"
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-all select-none flex-shrink-0"
+                  :class="officialRefreshing
+                    ? 'bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
+                    : 'bg-transparent dark:text-zinc-400 text-gray-500 hover:bg-black/[0.06] dark:hover:bg-white/[0.10] cursor-pointer'"
+                  @click="refreshOfficialVersion"
+                >
+                  <template v-if="officialRefreshing">
+                    <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-current rounded-full animate-spin" />
+                    刷新中
+                  </template>
+                  <template v-else>
+                    <NIcon :component="RefreshOutline" :size="15" />
+                    刷新最新官方版本
+                  </template>
+                </button>
+              </div>
             </div>
 
           <div class="flex flex-col">
@@ -272,16 +370,15 @@ async function copyMainCmd() {
                   <NTooltip>
                     <template #trigger>
                       <NButton
-                        type="primary"
-                        secondary
-                        size="tiny"
+                        text
+                        size="small"
                         :loading="resettingSet.has(ver.manifestName)"
                         :disabled="resettingSet.has(ver.manifestName)"
-                        class="!rounded-md opacity-75 hover:opacity-100 !transition-opacity cursor-pointer"
+                        class="!text-zinc-500 dark:!text-zinc-600 hover:!text-cyan-400 dark:hover:!text-cyan-400 transition-colors duration-200 cursor-pointer"
+                        title="设为活动版本"
                         @click.stop="handleReset(ver)"
                       >
-                        <template #icon><NIcon :component="RefreshOutline" size="13" /></template>
-                        设为活动
+                        <template #icon><NIcon :component="SwapHorizontalOutline" size="15" /></template>
                       </NButton>
                     </template>
                     将此版本设为系统的默认活动版本 (scoop reset)
