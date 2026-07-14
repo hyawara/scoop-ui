@@ -9,12 +9,28 @@ export interface PackageInfo {
   installed?: boolean
   updatable?: boolean
   newVersion?: string
+  engine?: 'scoop-search' | 'native'
 }
 
 export interface UpdatableInfo {
   name: string
   oldVersion: string
   newVersion: string
+  latestVersion?: string
+  bucket?: string
+  global?: boolean
+  hasUpdate?: boolean
+}
+
+export interface ManifestChangedInfo {
+  name: string
+  installedVersion: string
+  latestVersion: string
+  bucket: string
+  global: boolean
+  latestUpdatedAt?: string
+  installedUpdatedAt?: string
+  reason: 'version-compare-unknown' | 'manifest-newer-than-installed'
 }
 
 export interface InstallOptions {

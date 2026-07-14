@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('scoopAPI', {
 
   search: (query: string) => ipcRenderer.invoke('scoop:search', query),
   searchRaw: (query: string) => ipcRenderer.invoke('scoop:searchRaw', query),
+  searchEngineStatus: (force?: boolean) => ipcRenderer.invoke('scoop:searchEngineStatus', force),
+  installSearchEngine: () => ipcRenderer.invoke('scoop:installSearchEngine'),
   // 惰性按需同步：静默 scoop search <app> → 解析全量版本 → 回写 config.appVersionMaps，返回最新数组
   syncAppVersions: (appName: string) => ipcRenderer.invoke('scoop:syncAppVersions', appName),
   // 只读关联版本缓存（秒开用），不触发搜索
@@ -22,6 +24,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   cache: () => ipcRenderer.invoke('scoop:cache'),
   clearCache: () => ipcRenderer.invoke('scoop:clearCache'),
   listInstalled: () => ipcRenderer.invoke('scoop:listInstalled'),
+  checkUpdates: () => ipcRenderer.invoke('scoop:check-updates'),
   listUpdatable: () => ipcRenderer.invoke('scoop:listUpdatable'),
   checkAria2: () => ipcRenderer.invoke('scoop:checkAria2'),
   setAria2Enabled: (enabled: boolean) => ipcRenderer.invoke('scoop:setAria2Enabled', enabled),

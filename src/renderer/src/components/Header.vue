@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, inject, computed } from 'vue'
-import { NButton, NIcon, NBadge, useMessage } from 'naive-ui'
+import { NButton, NIcon, NBadge, NSpin, useMessage } from 'naive-ui'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
 import { usePackageProgress } from '@/composables/usePackageProgress'
@@ -32,11 +32,17 @@ const emit = defineEmits<{
 
 const openTerminal = inject<() => void>('openTerminal', () => {})
 const { isProcessing } = usePackageProgress()
+const packagesStore = usePackagesStore()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const isMaximized = ref(false)
 const refreshing = ref(false)
 const message = useMessage()
+const searchPlaceholder = computed(() =>
+  packagesStore.searchEngine.installed
+    ? '🔍 搜索软件 (已启用 scoop-search 极速引擎)...'
+    : '🔍 搜索软件 (未加速，推荐安装 scoop-search)...'
+)
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.ctrlKey && e.key === 'k') {
@@ -45,7 +51,10 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', handleKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+  packagesStore.loadSearchEngineStatus()
+})
 onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 function minimize() {
@@ -65,7 +74,6 @@ async function refreshAll() {
   if (refreshing.value) return
   refreshing.value = true
   try {
-    const packagesStore = usePackagesStore()
     const settingsStore = useSettingsStore()
     await Promise.all([
       packagesStore.loadInstalled(),
@@ -109,9 +117,10 @@ async function refreshAll() {
             :value="searchQuery"
             @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
             @keydown.enter="emit('search', searchQuery)"
-            placeholder="搜索 Scoop 软件包..."
+            :placeholder="searchPlaceholder"
             class="bg-transparent border-none outline-none text-sm w-full text-gray-700 dark:text-gray-200 placeholder-gray-400"
           />
+          <NSpin v-if="packagesStore.searching" size="small" class="flex-shrink-0" />
           <button
             v-if="searchQuery"
             @click="emit('update:searchQuery', ''); emit('search', '')"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NCheckbox, NButton, NIcon, NPopconfirm, NTooltip } from 'naive-ui'
+import { NCheckbox, NButton, NIcon, NPopconfirm, NTooltip, NText } from 'naive-ui'
 import { DownloadOutline, TrashOutline, ArrowUpCircleOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 
 interface PackageInfo {
@@ -18,6 +18,7 @@ defineProps<{
   isInstalled?: boolean
   pinned?: boolean
   newVersion?: string
+  changedVersion?: string
   active?: boolean
   resettable?: boolean
   resetting?: boolean
@@ -46,6 +47,7 @@ const emit = defineEmits<{
       'dark:bg-white/[0.04] bg-zinc-100': isSelected,
       'is-pinned': pinned,
       'is-active': active,
+      'is-updatable': mode === 'updatable' && !active && !pinned,
       'is-active-version': activeVersion && !active,
     }"
     @click="emit('select', pkg)"
@@ -73,10 +75,21 @@ const emit = defineEmits<{
     <!-- 信息区：名称 + 版本 + 标签，永不换行，弹性自适应 -->
     <div class="flex-1 min-w-0 flex items-center flex-nowrap ml-2.5 overflow-hidden">
       <span class="font-semibold text-sm dark:text-zinc-50 text-zinc-900 truncate flex-shrink-0">{{ pkg.name }}</span>
-      <span class="text-zinc-400 text-[12px] font-medium font-mono ml-3 flex-shrink-0">{{ pkg.version }}</span>
+      <span
+        class="text-[12px] font-medium font-mono ml-3 flex-shrink-0 transition-colors"
+        :class="newVersion && !active ? 'dark:text-zinc-500 text-zinc-400' : 'text-zinc-400'"
+      >{{ pkg.version }}</span>
       <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-xs font-normal border rounded-md font-mono flex-shrink-0 dark:bg-white/[0.04] dark:border-zinc-700/60 dark:text-zinc-400 bg-zinc-100 border-zinc-200 text-zinc-600">{{ pkg.bucket }}</span>
       <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-xs font-normal border rounded-md font-mono flex-shrink-0 dark:bg-white/[0.04] dark:border-zinc-700/60 dark:text-zinc-400 bg-zinc-100 border-zinc-200 text-zinc-600">Global</span>
-      <span v-if="newVersion && !active" class="ml-3 text-amber-400 text-[12px] font-semibold font-mono flex-shrink-0">→ {{ newVersion }}</span>
+      <span v-if="newVersion && !active" class="version-pop ml-3 inline-flex items-center gap-1 font-semibold font-mono flex-shrink-0">
+        <span class="dark:text-zinc-500 text-zinc-400">→</span>
+        <NText type="warning" class="update-version-text">{{ newVersion }}</NText>
+      </span>
+      <span v-else-if="changedVersion && !active" class="manifest-changed ml-3 inline-flex items-center gap-1 font-medium font-mono flex-shrink-0">
+        <span class="dark:text-zinc-500 text-zinc-400">↝</span>
+        <span>{{ changedVersion }}</span>
+        <span class="manifest-changed-label">清单变更</span>
+      </span>
       <span
         v-if="activeVersion"
         class="ml-3 px-2 py-0.5 text-[11px] font-medium text-cyan-500 font-mono flex-shrink-0 rounded-md bg-cyan-500/10"
@@ -231,6 +244,62 @@ const emit = defineEmits<{
   width: 2px;
   background-color: rgb(16 185 129);
   border-radius: 0 2px 2px 0;
+}
+
+/* ─── 可更新行：琥珀色轻提示，不盖过置顶/执行中状态 ─── */
+.is-updatable {
+  position: relative;
+  background-color: rgb(245 158 11 / 0.08);
+}
+.is-updatable:hover {
+  background-color: rgb(245 158 11 / 0.12);
+}
+.is-updatable::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background-color: rgb(245 158 11);
+  border-radius: 0 2px 2px 0;
+}
+
+.version-pop {
+  font-size: var(--app-font-size);
+  line-height: 1.5;
+  animation: version-pop 420ms ease-out;
+}
+
+.update-version-text {
+  font-size: var(--app-font-size) !important;
+  line-height: 1.5 !important;
+  font-family: var(--font-mono) !important;
+  font-weight: 600 !important;
+}
+
+.manifest-changed {
+  font-size: var(--app-font-size);
+  line-height: 1.5;
+  color: rgb(56 189 248);
+}
+
+.manifest-changed-label {
+  padding: 0 6px;
+  border-radius: 6px;
+  color: rgb(125 211 252);
+  background-color: rgb(14 165 233 / 0.10);
+}
+
+@keyframes version-pop {
+  0% {
+    transform: translateY(2px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* ─── 当前活动版本：轻微蓝绿色定位，不抢执行中态的绿色高亮 ─── */

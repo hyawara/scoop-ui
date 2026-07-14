@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { execPowerShell, execGitBash, execScoop, execScoopJSON, execScoopRaw } from '../utils/powershell.js'
 import { getAppVersionMap, setAppVersionMap, type AppVersionEntry } from '../utils/config.js'
+import { checkScoopUpdatesFast } from '../services/status.js'
 import { homedir, tmpdir } from 'os'
 import { join, basename, resolve, relative, isAbsolute } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, promises as fsp } from 'fs'
@@ -59,6 +60,267 @@ async function resolveScoopRoot(): Promise<string> {
     }
   } catch { /* 读取失败，走默认 */ }
   return join(homedir(), 'scoop')
+}
+
+type SearchEngineName = 'scoop-search' | 'native'
+
+interface SearchEngineStatus {
+  installed: boolean
+  engine: SearchEngineName
+  path?: string
+}
+
+interface SearchPackageResult {
+  name: string
+  version: string
+  description: string
+  bucket: string
+  engine?: SearchEngineName
+}
+
+let searchEngineCache: { value: SearchEngineStatus; checkedAt: number } | null = null
+const SEARCH_ENGINE_CACHE_TTL = 15_000
+
+function bashQuoteMain(arg: string): string {
+  return `'${arg.replace(/'/g, `'\\''`)}'`
+}
+
+function validateSearchQuery(query: string): string {
+  const normalized = query.trim()
+  if (!/^[a-zA-Z0-9._\- ]{1,100}$/.test(normalized)) {
+    throw new Error('Invalid search query')
+  }
+  return normalized
+}
+
+async function detectScoopSearchInstalled(force = false): Promise<SearchEngineStatus> {
+  const now = Date.now()
+  if (!force && searchEngineCache && now - searchEngineCache.checkedAt < SEARCH_ENGINE_CACHE_TTL) {
+    return searchEngineCache.value
+  }
+
+  const scoopRoot = await resolveScoopRoot()
+  const candidates = [
+    join(scoopRoot, 'apps', 'scoop-search', 'current'),
+    join(scoopRoot, 'shims', 'scoop-search.exe'),
+    join(scoopRoot, 'shims', 'scoop-search.ps1'),
+    join(scoopRoot, 'shims', 'scoop-search.cmd'),
+    process.env['SCOOP_GLOBAL'] ? join(process.env['SCOOP_GLOBAL'], 'apps', 'scoop-search', 'current') : '',
+    process.env['SCOOP_GLOBAL'] ? join(process.env['SCOOP_GLOBAL'], 'shims', 'scoop-search.exe') : '',
+  ].filter(Boolean)
+
+  const found = candidates.find(candidate => existsSync(candidate))
+  const value: SearchEngineStatus = found
+    ? { installed: true, engine: 'scoop-search', path: found }
+    : { installed: false, engine: 'native' }
+
+  searchEngineCache = { value, checkedAt: now }
+  return value
+}
+
+function pickString(obj: Record<string, any>, keys: string[]): string {
+  for (const key of keys) {
+    const value = obj[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function normalizeBucketName(raw: string): string {
+  return raw.replace(/^\[/, '').replace(/\]$/, '').trim()
+}
+
+function parseSearchJsonObject(obj: Record<string, any>, engine: SearchEngineName): SearchPackageResult | null {
+  const name = pickString(obj, ['name', 'Name', 'app', 'App', 'appName', 'AppName'])
+  const version = pickString(obj, ['version', 'Version'])
+  const bucket = normalizeBucketName(pickString(obj, ['bucket', 'Bucket', 'source', 'Source', 'repo', 'Repo']))
+  const description = pickString(obj, ['description', 'Description', 'desc', 'Desc', 'summary', 'Summary'])
+  if (!name) return null
+  return { name, version, bucket, description, engine }
+}
+
+function flattenJsonRecords(value: unknown): Record<string, any>[] {
+  const records: Record<string, any>[] = []
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
+    if (!node || typeof node !== 'object') return
+
+    const record = node as Record<string, any>
+    records.push(record)
+    for (const child of Object.values(record)) {
+      if (child && typeof child === 'object') {
+        visit(child)
+      }
+    }
+  }
+
+  visit(value)
+  return records
+}
+
+async function parseManifestPath(line: string, engine: SearchEngineName): Promise<SearchPackageResult | null> {
+  const match = line.match(/(?:^|\s)([A-Za-z]:)?[^:"<>|?*\r\n]*?[\\/]buckets[\\/](?<bucket>[^\\/]+)[\\/]bucket[\\/](?<name>[^\\/]+)\.json\b/i)
+  if (!match?.groups?.bucket || !match.groups.name) return null
+
+  const fullPath = match[0].trim()
+  const manifest = existsSync(fullPath)
+    ? await readJsonManifest(fullPath)
+    : null
+
+  return {
+    name: match.groups.name,
+    version: typeof manifest?.version === 'string' ? manifest.version : '',
+    bucket: match.groups.bucket,
+    description: typeof manifest?.description === 'string' ? manifest.description : '',
+    engine,
+  }
+}
+
+async function readJsonManifest(path: string): Promise<Record<string, any> | null> {
+  try {
+    return JSON.parse(await fsp.readFile(path, 'utf-8')) as Record<string, any>
+  } catch {
+    return null
+  }
+}
+
+function pushSearchResult(
+  result: SearchPackageResult[],
+  seen: Set<string>,
+  item: SearchPackageResult | null,
+  engine: SearchEngineName
+) {
+  if (!item?.name) return
+  const bucket = normalizeBucketName(item.bucket || '')
+  const key = `${bucket.toLowerCase()}/${item.name.toLowerCase()}`
+  if (seen.has(key)) return
+  seen.add(key)
+  result.push({
+    name: item.name,
+    version: item.version || '',
+    bucket,
+    description: item.description || '',
+    engine,
+  })
+}
+
+async function parseSearchOutput(stdout: string, engine: SearchEngineName): Promise<SearchPackageResult[]> {
+  const result: SearchPackageResult[] = []
+  const seen = new Set<string>()
+  const trimmedStdout = stdout.trim()
+
+  if (trimmedStdout.startsWith('{') || trimmedStdout.startsWith('[')) {
+    try {
+      const json = JSON.parse(trimmedStdout)
+      for (const item of flattenJsonRecords(json)) {
+        const parsed = parseSearchJsonObject(item, engine)
+        if (parsed) {
+          pushSearchResult(result, seen, parsed, engine)
+          continue
+        }
+        const manifestPath = pickString(item, ['path', 'Path', 'manifest', 'Manifest', 'manifestPath', 'ManifestPath'])
+        if (manifestPath) {
+          pushSearchResult(result, seen, await parseManifestPath(manifestPath, engine), engine)
+        }
+      }
+      if (result.length > 0) return result
+    } catch { /* 不是整体 JSON，继续按行解析 */ }
+  }
+
+  let inTable = false
+  let currentBucket = ''
+  for (const rawLine of stdout.split('\n')) {
+    const line = rawLine.replace(/\r/g, '')
+    const trimmed = line.trim()
+    if (!trimmed || /^(Results|No results|No matches|WARN|ERROR)/i.test(trimmed)) continue
+
+    if (/^-{3,}/.test(trimmed)) {
+      inTable = true
+      continue
+    }
+
+    const jsonLine = trimmed.startsWith('{') && trimmed.endsWith('}')
+    if (jsonLine) {
+      try {
+        const item = JSON.parse(trimmed)
+        const parsed = parseSearchJsonObject(item, engine)
+        if (parsed) {
+          pushSearchResult(result, seen, parsed, engine)
+          continue
+        }
+        const manifestPath = pickString(item, ['path', 'Path', 'manifest', 'Manifest', 'manifestPath', 'ManifestPath'])
+        if (manifestPath) {
+          pushSearchResult(result, seen, await parseManifestPath(manifestPath, engine), engine)
+          continue
+        }
+        continue
+      } catch { /* 不是 JSON 行，继续文本解析 */ }
+    }
+
+    const pathItem = await parseManifestPath(trimmed, engine)
+    if (pathItem) {
+      pushSearchResult(result, seen, pathItem, engine)
+      continue
+    }
+
+    const bucketHeader = trimmed.match(/^['"]?([^'":]+)['"]?\s+bucket:?$/i)
+    if (bucketHeader) {
+      currentBucket = bucketHeader[1].trim()
+      continue
+    }
+
+    const grouped = trimmed.match(/^([\w.+-]+)\s+\(([^)]+)\)\s*(?:\[(.*?)\])?\s*(.*)$/)
+    if (grouped) {
+      pushSearchResult(result, seen, {
+        name: grouped[1],
+        version: grouped[2],
+        bucket: grouped[3] || currentBucket,
+        description: grouped[4] || '',
+        engine,
+      }, engine)
+      continue
+    }
+
+    const slash = trimmed.match(/^(?<bucket>[\w.-]+)[\\/](?<name>[\w.+-]+)\s+(?<version>\S+)\s*(?<desc>.*)$/)
+    if (slash?.groups) {
+      pushSearchResult(result, seen, {
+        name: slash.groups.name,
+        version: slash.groups.version,
+        bucket: slash.groups.bucket,
+        description: slash.groups.desc || '',
+        engine,
+      }, engine)
+      continue
+    }
+
+    const fields = trimmed.split(/\s{2,}/)
+    if (inTable && fields.length >= 2) {
+      pushSearchResult(result, seen, {
+        name: fields[0],
+        version: fields[1] || '',
+        bucket: normalizeBucketName(fields[2] || currentBucket),
+        description: fields.slice(3).join(' ').trim(),
+        engine,
+      }, engine)
+      continue
+    }
+
+    const loose = trimmed.match(/^([\w.+-]+)\s+(\S+)\s+(\[?[\w.-]+\]?)\s*(.*)$/)
+    if (loose) {
+      pushSearchResult(result, seen, {
+        name: loose[1],
+        version: loose[2],
+        bucket: normalizeBucketName(loose[3]),
+        description: loose[4] || '',
+        engine,
+      }, engine)
+    }
+  }
+
+  return result
 }
 
 function buildInstallScript(scoopPath: string, globalPath: string): string {
@@ -133,37 +395,49 @@ export function registerScoopIPC(): void {
 
   // Search packages (raw text, for precise client-side filtering)
   ipcMain.handle('scoop:searchRaw', async (_event, query: string) => {
-    if (!/^[a-zA-Z0-9._\- ]{1,100}$/.test(query)) {
-      throw new Error('Invalid search query')
-    }
-    const { stdout } = await execScoop(`search ${query}`)
+    const normalized = validateSearchQuery(query)
+    const status = await detectScoopSearchInstalled()
+    const { stdout } = status.installed
+      ? await execGitBash(`scoop-search ${bashQuoteMain(normalized)}`)
+      : await execScoop(`search ${normalized}`)
     return stdout
+  })
+
+  ipcMain.handle('scoop:searchEngineStatus', async (_event, force?: boolean) => {
+    return detectScoopSearchInstalled(Boolean(force))
+  })
+
+  ipcMain.handle('scoop:installSearchEngine', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { stdout, stderr, code } = await execScoopRaw(['install', 'scoop-search'], (data, stream) => {
+      sendProgress(win, {
+        type: 'install',
+        package: 'scoop-search',
+        stream,
+        message: data,
+      })
+    })
+    searchEngineCache = null
+    const status = await detectScoopSearchInstalled(true)
+    return {
+      success: code === 0 && status.installed,
+      stdout,
+      stderr,
+      code,
+      status,
+      error: code === 0 ? undefined : ((stderr || stdout).trim() || `scoop install scoop-search exited with code ${code}`),
+    }
   })
 
   // Search packages (parsed)
   ipcMain.handle('scoop:search', async (_event, query: string) => {
-    if (!/^[a-zA-Z0-9._\- ]{1,100}$/.test(query)) {
-      throw new Error('Invalid search query')
-    }
-    const { stdout } = await execScoop(`search ${query}`)
-    const lines = stdout.split('\n')
-    const result: { name: string; version: string; description: string; bucket: string }[] = []
-    let inTable = false
-    for (const line of lines) {
-      if (!inTable) {
-        if (/^-{3,}/.test(line.trim())) { inTable = true }
-        continue
-      }
-      // 跳过空行和汇总行（如 "Results from local buckets..."）
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('Results') || trimmed.startsWith('No results')) continue
-      // scoop search 输出格式: name  version  [bucket]  description
-      const m = trimmed.match(/^([\w.\-+]+)\s+(\S+)\s+(\S+)\s*(.*)$/)
-      if (m && m[1].length > 0) {
-        result.push({ name: m[1], version: m[2] || '', bucket: m[3] || '', description: (m[4] || '').trim() })
-      }
-    }
-    return result
+    const normalized = validateSearchQuery(query)
+    const status = await detectScoopSearchInstalled()
+    const engine = status.installed ? 'scoop-search' : 'native'
+    const { stdout } = status.installed
+      ? await execGitBash(`scoop-search ${bashQuoteMain(normalized)}`)
+      : await execScoop(`search ${normalized}`)
+    return parseSearchOutput(stdout, engine)
   })
 
   // ============================================
@@ -794,13 +1068,15 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // List updatable packages (scoop status: Name, Installed Version, Latest Version, ...)
+  // Fast update check: parallel git sync + in-memory manifest comparison.
+  ipcMain.handle('scoop:check-updates', async () => {
+    return checkScoopUpdatesFast()
+  })
+
+  // List updatable packages. Kept for compatibility, now backed by the fast service.
   ipcMain.handle('scoop:listUpdatable', async () => {
-    const { stdout } = await execScoop('status')
-    return parseFixedWidthTable(stdout, (fields) => {
-      if (fields.length < 3 || !fields[0] || !fields[1] || !fields[2]) return null
-      return { name: fields[0].trim(), oldVersion: fields[1].trim(), newVersion: fields[2].trim() }
-    })
+    const result = await checkScoopUpdatesFast()
+    return result.updates.map(({ name, oldVersion, newVersion }) => ({ name, oldVersion, newVersion }))
   })
 
   // Get Scoop version

@@ -1,14 +1,30 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { PackageInfo, UpdatableInfo, InstallOptions, ProgressData } from '@/types'
+import type { PackageInfo, UpdatableInfo, ManifestChangedInfo, InstallOptions, ProgressData } from '@/types'
 
 export const usePackagesStore = defineStore('packages', () => {
   const installed = ref<PackageInfo[]>([])
   const updatable = ref<UpdatableInfo[]>([])
+  const manifestChanged = ref<ManifestChangedInfo[]>([])
+  const updateCheckSkipped = ref<{
+    name: string
+    installedVersion: string
+    latestVersion: string
+    reason: string
+  }[]>([])
   const searchResults = ref<PackageInfo[]>([])
   const loading = ref(false)
+  const searching = ref(false)
   const progress = ref<ProgressData | null>(null)
   const descriptionsLoading = ref(false)
+  const searchEngine = ref<{ installed: boolean; engine: 'scoop-search' | 'native'; path?: string }>({
+    installed: false,
+    engine: 'native',
+  })
+  const updateCheckPhase = ref<'idle' | 'syncing' | 'comparing' | 'done' | 'error'>('idle')
+  const updateCheckText = ref('')
+  const updateCheckWarnings = ref<string[]>([])
+  const updateCheckElapsedMs = ref(0)
 
   async function loadInstalled() {
     loading.value = true
@@ -22,21 +38,44 @@ export const usePackagesStore = defineStore('packages', () => {
   }
 
   async function loadUpdatable() {
+    updateCheckPhase.value = 'syncing'
+    updateCheckText.value = '正在同步 Bucket 仓库...'
+    updateCheckWarnings.value = []
     try {
-      updatable.value = await window.scoopAPI.listUpdatable()
+      const phaseTimer = window.setTimeout(() => {
+        updateCheckPhase.value = 'comparing'
+        updateCheckText.value = '正在高速对比本地版本...'
+      }, 350)
+
+      try {
+        const result = await window.scoopAPI.checkUpdates()
+        updatable.value = result.updates
+        manifestChanged.value = result.changed || []
+        updateCheckSkipped.value = result.skipped || []
+        updateCheckWarnings.value = result.warnings || []
+        updateCheckElapsedMs.value = result.elapsedMs || 0
+        updateCheckPhase.value = 'done'
+        if (result.updates.length > 0) {
+          updateCheckText.value = `发现 ${result.updates.length} 个可更新软件`
+        } else if ((result.changed || []).length > 0) {
+          updateCheckText.value = `发现 ${result.changed.length} 个清单变更待确认`
+        } else {
+          updateCheckText.value = '所有软件均为最新版本'
+        }
+      } finally {
+        window.clearTimeout(phaseTimer)
+      }
     } catch {
       updatable.value = []
+      manifestChanged.value = []
+      updateCheckSkipped.value = []
+      updateCheckPhase.value = 'error'
+      updateCheckText.value = '更新检查失败'
     }
   }
 
-  // 启动自检：先异步执行 `scoop update`（更新 scoop 自身与 buckets），
-  // 再执行 `scoop status` 同步可更新列表。update 失败不阻断 status 同步。
+  // 启动自检：直接使用主进程的并行 git 同步 + 内存 manifest 对比。
   async function refreshUpdatable() {
-    try {
-      await window.scoopAPI.updateSelf()
-    } catch {
-      // 更新 scoop/buckets 失败（如网络问题）不阻断，仍尝试同步 status
-    }
     await loadUpdatable()
   }
 
@@ -45,7 +84,7 @@ export const usePackagesStore = defineStore('packages', () => {
       searchResults.value = []
       return
     }
-    loading.value = true
+    searching.value = true
     try {
       searchResults.value = await window.scoopAPI.search(query)
       // 异步批量获取软件描述（限制前 30 个包，并发 3 个）
@@ -53,8 +92,22 @@ export const usePackagesStore = defineStore('packages', () => {
     } catch {
       searchResults.value = []
     } finally {
-      loading.value = false
+      searching.value = false
     }
+  }
+
+  async function loadSearchEngineStatus(force = false) {
+    try {
+      searchEngine.value = await window.scoopAPI.searchEngineStatus(force)
+    } catch {
+      searchEngine.value = { installed: false, engine: 'native' }
+    }
+  }
+
+  async function installSearchEngine() {
+    const result = await window.scoopAPI.installSearchEngine()
+    await loadSearchEngineStatus(true)
+    return result
   }
 
   async function fetchDescriptions(pkgs: PackageInfo[]) {
@@ -124,7 +177,8 @@ export const usePackagesStore = defineStore('packages', () => {
   }
 
   return {
-    installed, updatable, searchResults, loading, progress, descriptionsLoading,
-    loadInstalled, loadUpdatable, refreshUpdatable, search, install, uninstall, update
+    installed, updatable, manifestChanged, updateCheckSkipped, searchResults, loading, searching, progress, descriptionsLoading,
+    searchEngine, updateCheckPhase, updateCheckText, updateCheckWarnings, updateCheckElapsedMs,
+    loadInstalled, loadUpdatable, refreshUpdatable, search, loadSearchEngineStatus, installSearchEngine, install, uninstall, update
   }
 })

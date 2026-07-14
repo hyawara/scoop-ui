@@ -25,6 +25,7 @@ import {
   ColorPaletteOutline,
   SpeedometerOutline,
   FlashOutline,
+  RefreshOutline,
 } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import { useSettingsStore } from '@/stores/settings'
@@ -69,9 +70,18 @@ const updatableNames = computed(() =>
   new Set(packagesStore.updatable.map((p: any) => p.name))
 )
 
+const manifestChangedNames = computed(() =>
+  new Set(packagesStore.manifestChanged.map((p: any) => p.name))
+)
+
 function getNewVersion(name: string): string {
   const pkg = packagesStore.updatable.find((p: any) => p.name === name)
   return pkg?.newVersion || ''
+}
+
+function getChangedVersion(name: string): string {
+  const pkg = packagesStore.manifestChanged.find((p: any) => p.name === name)
+  return pkg?.latestVersion || ''
 }
 
 // ═══ 商店分类系统 ═══
@@ -548,13 +558,36 @@ const selectedPackageNames = computed(() =>
   packagesStore.installed.filter((p: any) => selectedPackages.value.has(p.name)).map((p: any) => p.name)
 )
 
+const selectedUpdatableNames = computed(() =>
+  packagesStore.updatable.filter((p: any) => selectedPackages.value.has(p.name)).map((p: any) => p.name)
+)
+
+async function checkUpdatesFast(manual = false) {
+  if (checkingUpdates.value) return
+  checkingUpdates.value = true
+  try {
+    await packagesStore.loadUpdatable()
+    if (manual) {
+      if (packagesStore.updateCheckPhase === 'error') {
+        message.error('更新检查失败')
+      } else if (packagesStore.updateCheckWarnings.length > 0) {
+        message.warning(`检查完成，${packagesStore.updateCheckWarnings.length} 个软件源同步失败，已使用本地缓存对比`)
+      } else if (packagesStore.manifestChanged.length > 0) {
+        message.info(`检查完成，${packagesStore.manifestChanged.length} 个清单变更需要手动确认`)
+      } else {
+        const ms = packagesStore.updateCheckElapsedMs
+        message.success(ms > 0 ? `检查完成，用时 ${ms}ms` : '检查完成')
+      }
+    }
+  } finally {
+    checkingUpdates.value = false
+  }
+}
+
 onMounted(() => {
   loadSelectedFromConfig()
   loadPinnedFromConfig()
-  checkingUpdates.value = true
-  packagesStore.loadUpdatable().finally(() => {
-    checkingUpdates.value = false
-  })
+  checkUpdatesFast(false)
 })
 
 watch(() => packagesStore.installed.length, () => {
@@ -603,6 +636,7 @@ const scoopIsProcessing = computed(() =>
   pkgProgress.isProcessing.value
   || batchUpdating.value
   || updatingAll.value
+  || checkingUpdates.value
   || storeInstallingSet.value.size > 0
   || uninstallingSet.value.size > 0
   || resettingSet.value.size > 0
@@ -874,9 +908,9 @@ async function handleUpdate(pkg: any) {
 }
 
 function handleBatchUpdate() {
-  const names = selectedPackageNames.value
+  const names = selectedUpdatableNames.value
   if (names.length === 0) {
-    message.warning('请先勾选需要更新的软件')
+    message.warning('请先勾选带有更新标志的软件')
     return
   }
   runNativeUpdate(names, batchUpdating)
@@ -1092,14 +1126,39 @@ function openBucketDrawer() {
                   <div class="flex items-center gap-2 ml-auto">
                     <template v-if="checkingUpdates">
                       <div class="w-3.5 h-3.5 border-[1.5px] border-t-transparent border-gray-500 rounded-full animate-spin" />
-                      <span class="text-[12px] font-normal dark:text-zinc-500 text-gray-500">检查中...</span>
+                      <span class="text-[12px] font-normal dark:text-zinc-500 text-gray-500">
+                        {{ packagesStore.updateCheckText || '检查中...' }}
+                      </span>
                     </template>
                     <template v-else>
+                      <span
+                        v-if="packagesStore.updateCheckWarnings.length > 0"
+                        class="text-[11px] font-normal dark:text-amber-300/80 text-amber-700"
+                      >
+                        {{ packagesStore.updateCheckWarnings.length }} 个源使用缓存
+                      </span>
+                      <span
+                        v-if="packagesStore.manifestChanged.length > 0"
+                        class="text-[11px] font-normal dark:text-sky-300/80 text-sky-700"
+                      >
+                        {{ packagesStore.manifestChanged.length }} 个清单变更待确认
+                      </span>
                       <button
-                        :disabled="selectedPackageNames.length === 0 || batchUpdating || updatingAll"
+                        :disabled="batchUpdating || updatingAll"
+                        @click="checkUpdatesFast(true)"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-all select-none"
+                        :class="batchUpdating || updatingAll
+                          ? 'bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
+                          : 'bg-transparent dark:text-zinc-400 text-gray-500 hover:bg-black/[0.06] dark:hover:bg-white/[0.10] cursor-pointer'"
+                      >
+                        <NIcon :component="RefreshOutline" :size="15" />
+                        检查更新
+                      </button>
+                      <button
+                        :disabled="selectedUpdatableNames.length === 0 || batchUpdating || updatingAll"
                         @click="handleBatchUpdate"
                         class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md border transition-all select-none"
-                        :class="(selectedPackageNames.length === 0 && !batchUpdating) || updatingAll
+                        :class="selectedUpdatableNames.length === 0 || batchUpdating || updatingAll
                           ? 'dark:border-white/[0.04] border-black/[0.06] bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
                           : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 cursor-pointer'"
                       >
@@ -1109,7 +1168,7 @@ function openBucketDrawer() {
                         </template>
                         <template v-else>
                           <NIcon :component="DownloadOutline" :size="15" />
-                          更新已选 ({{ selectedPackageNames.length }})
+                          更新已选 ({{ selectedUpdatableNames.length }})
                         </template>
                       </button>
                       <button
@@ -1166,6 +1225,7 @@ function openBucketDrawer() {
                     :disabled="uninstallingSet.has(pkg.name)"
                     :pinned="isPinned(pkg.name)"
                     :new-version="getNewVersion(pkg.name)"
+                    :changed-version="manifestChangedNames.has(pkg.name) ? getChangedVersion(pkg.name) : ''"
                     :active="pkgProgress.isCurrent(pkg.name)"
                     :resettable="isMultiVersionApp(pkg.name)"
                     :resetting="resettingSet.has(pkg.name)"

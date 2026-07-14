@@ -56,6 +56,57 @@ interface ResetResult {
   error?: string
 }
 
+interface SearchEngineStatus {
+  installed: boolean
+  engine: 'scoop-search' | 'native'
+  path?: string
+}
+
+interface SearchEngineInstallResult {
+  success: boolean
+  stdout: string
+  stderr: string
+  code: number | null
+  status: SearchEngineStatus
+  error?: string
+}
+
+interface CheckUpdatesResult {
+  updates: {
+    name: string
+    oldVersion: string
+    newVersion: string
+    latestVersion: string
+    bucket: string
+    global: boolean
+    hasUpdate: true
+  }[]
+  changed: {
+    name: string
+    installedVersion: string
+    latestVersion: string
+    bucket: string
+    global: boolean
+    latestUpdatedAt?: string
+    installedUpdatedAt?: string
+    reason: 'version-compare-unknown' | 'manifest-newer-than-installed'
+  }[]
+  skipped: {
+    name: string
+    installedVersion: string
+    latestVersion: string
+    bucket: string
+    global: boolean
+    latestUpdatedAt?: string
+    installedUpdatedAt?: string
+    reason: 'latest-older-than-installed' | 'normalized-version-equal' | 'manifest-not-newer-than-installed'
+  }[]
+  installed: { name: string; version: string; bucket: string; global: boolean }[]
+  bucketResults: { bucket: string; path: string; ok: boolean; message?: string }[]
+  warnings: string[]
+  elapsedMs: number
+}
+
 // 主进程 electron-updater 统一推送的更新事件（与 src/main/ipc/updater.ts 保持一致）
 type UpdateEvent =
   | { status: 'checking' }
@@ -69,8 +120,10 @@ interface Window {
   scoopAPI: {
     checkScoop: () => Promise<{ installed: boolean; path?: string }>
     installScoop: (options?: { scoopPath?: string; globalPath?: string }) => Promise<void>
-    search: (query: string) => Promise<{ name: string; version: string; description: string; bucket: string }[]>
+    search: (query: string) => Promise<{ name: string; version: string; description: string; bucket: string; engine?: 'scoop-search' | 'native' }[]>
     searchRaw: (query: string) => Promise<string>
+    searchEngineStatus: (force?: boolean) => Promise<SearchEngineStatus>
+    installSearchEngine: () => Promise<SearchEngineInstallResult>
     // 惰性按需同步：静默 scoop search <app> → 解析全量版本 → 回写 config，返回最新数组
     syncAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
     // 只读本地缓存，不触发搜索（供秒开读取）
@@ -85,6 +138,7 @@ interface Window {
     cache: () => Promise<{ size: number; unit: string; files: number }>
     clearCache: () => Promise<void>
     listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>
+    checkUpdates: () => Promise<CheckUpdatesResult>
     listUpdatable: () => Promise<{ name: string; oldVersion: string; newVersion: string }[]>
     checkAria2: () => Promise<{ installed: boolean; enabled: boolean }>
     setAria2Enabled: (enabled: boolean) => Promise<{ success: boolean }>

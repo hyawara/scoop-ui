@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { watch, computed, ref, inject } from 'vue'
-import { NScrollbar, NEmpty, NSkeleton, useMessage } from 'naive-ui'
+import { watch, computed, ref, inject, onMounted } from 'vue'
+import { NScrollbar, NEmpty, NSkeleton, NAlert, NButton, useMessage } from 'naive-ui'
 import { SearchOutline } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
 import AppDetailDrawer, { type AppDetailPayload } from '@/components/AppDetailDrawer.vue'
@@ -12,6 +12,8 @@ const props = defineProps<{ query: string }>()
 const packagesStore = usePackagesStore()
 const message = useMessage()
 const isSearching = ref(false)
+const showSpeedupBanner = ref(false)
+const installingSearchEngine = ref(false)
 
 const pkgProgress = usePackageProgress()
 const openTerminal = inject<() => void>('openTerminal', () => {})
@@ -25,6 +27,14 @@ const installedNames = computed(() =>
   new Set(packagesStore.installed.map((p: any) => p.name))
 )
 
+const searchEngineReady = computed(() => packagesStore.searchEngine.installed)
+
+onMounted(() => {
+  packagesStore.loadSearchEngineStatus().then(() => {
+    showSpeedupBanner.value = !packagesStore.searchEngine.installed
+  })
+})
+
 watch(
   () => props.query,
   async (q) => {
@@ -33,12 +43,40 @@ watch(
       selectedPackage.value = null
       showDetailDrawer.value = false
       packagesStore.searchResults = []
-      await packagesStore.search(q)
-      isSearching.value = false
+      try {
+        await packagesStore.loadSearchEngineStatus()
+        showSpeedupBanner.value = !packagesStore.searchEngine.installed
+        await packagesStore.search(q)
+      } finally {
+        isSearching.value = false
+      }
     }
   },
   { immediate: true }
 )
+
+async function installSearchEngine() {
+  if (installingSearchEngine.value) return
+  installingSearchEngine.value = true
+  openTerminal()
+  try {
+    const result = await packagesStore.installSearchEngine()
+    if (!result.success) {
+      throw new Error(result.error || 'scoop-search 安装失败')
+    }
+    message.success('scoop-search 已启用，搜索引擎切换完成')
+    showSpeedupBanner.value = false
+    if (props.query.trim()) {
+      isSearching.value = true
+      await packagesStore.search(props.query)
+    }
+  } catch (e) {
+    message.error((e as Error).message || 'scoop-search 安装失败')
+  } finally {
+    isSearching.value = false
+    installingSearchEngine.value = false
+  }
+}
 
 function selectPackage(pkg: any) {
   selectedPackage.value = {
@@ -99,14 +137,47 @@ const skeletonItems = Array.from({ length: 5 })
         搜索 "<strong class="dark:text-white text-gray-900">{{ query }}</strong>" 的结果
       </span>
       <span class="px-2 py-0.5 text-[12px] dark:bg-white/[0.06] bg-black/[0.04] dark:text-slate-400 text-gray-500 rounded-md font-mono">
-        {{ isSearching ? '搜索中...' : `${packagesStore.searchResults.length} 个` }}
+        {{ isSearching || packagesStore.searching ? '搜索中...' : `${packagesStore.searchResults.length} 个` }}
+      </span>
+      <span
+        class="px-2 py-0.5 text-[11px] rounded-md font-mono"
+        :class="searchEngineReady
+          ? 'dark:bg-emerald-500/10 bg-emerald-100 dark:text-emerald-300 text-emerald-700'
+          : 'dark:bg-amber-500/10 bg-amber-100 dark:text-amber-300 text-amber-700'"
+      >
+        {{ searchEngineReady ? 'scoop-search' : 'native' }}
       </span>
     </div>
+
+    <NAlert
+      v-if="showSpeedupBanner && !searchEngineReady"
+      type="warning"
+      closable
+      class="mb-3 !rounded-lg dark:!bg-amber-500/10"
+      @close="showSpeedupBanner = false"
+    >
+      <div class="flex items-center gap-3">
+        <span class="text-[13px] leading-5 flex-1">
+          🚀 检查到您未安装 <code class="font-mono">scoop-search</code> 插件，当前搜索可能需要 10秒以上。点击此处一键安装，让搜索瞬间提速 100 倍！
+        </span>
+        <NButton
+          size="small"
+          type="warning"
+          secondary
+          :loading="installingSearchEngine"
+          :disabled="installingSearchEngine"
+          class="!rounded-md flex-shrink-0"
+          @click="installSearchEngine"
+        >
+          一键安装加速
+        </NButton>
+      </div>
+    </NAlert>
 
     <!-- 搜索结果列表：单栏铺满，点击行 → 弹出详情抽屉 -->
     <NScrollbar class="flex-1">
       <!-- 骨架屏 -->
-      <div v-if="isSearching && packagesStore.searchResults.length === 0" class="flex flex-col pr-1">
+      <div v-if="(isSearching || packagesStore.searching) && packagesStore.searchResults.length === 0" class="flex flex-col pr-1">
         <div
           v-for="(_, i) in skeletonItems"
           :key="i"
