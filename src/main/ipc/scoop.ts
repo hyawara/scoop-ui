@@ -4,8 +4,8 @@ import { getAppVersionMap, setAppVersionMap, type AppVersionEntry } from '../uti
 import { checkScoopUpdatesFast } from '../services/status.js'
 import { homedir, tmpdir } from 'os'
 import { join, basename, resolve, relative, isAbsolute } from 'path'
-import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, promises as fsp } from 'fs'
-import { spawn } from 'child_process'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, realpathSync, statSync, promises as fsp } from 'fs'
+import { spawn, execFile } from 'child_process'
 import { request as httpRequest } from 'http'
 import { request as httpsRequest } from 'https'
 
@@ -246,11 +246,63 @@ function parseFixedWidthTable<T>(
   return result
 }
 
+function expandUserPath(path: string): string {
+  if (path === '~') return homedir()
+  if (path.startsWith('~/') || path.startsWith('~\\')) return join(homedir(), path.slice(1))
+  return path
+}
+
+function cleanScoopConfigPath(stdout: string): string {
+  const line = stdout
+    .split(/\r?\n/)
+    .map(part => part.trim())
+    .find(part => part.length > 0) || ''
+  if (!line || /(?:not\s+set|isn'?t\s+set|access\s+to\s+the\s+path|denied|error|failed)/i.test(line)) {
+    return ''
+  }
+  return line
+    .replace(/^root_path\s*=\s*/i, '')
+    .replace(/^['"]|['"]$/g, '')
+    .trim()
+}
+
+function isScoopRoot(path: string): boolean {
+  return !!path && (existsSync(join(path, 'apps')) || existsSync(join(path, 'buckets')))
+}
+
+function findScoopRootFromPrefix(stdout: string): string {
+  const prefix = stdout
+    .split(/\r?\n/)
+    .map(part => part.trim())
+    .find(part => /[\\/]apps[\\/]scoop[\\/]current$/i.test(part))
+  if (!prefix) return ''
+  const root = resolve(prefix, '..', '..', '..')
+  return isScoopRoot(root) ? root : ''
+}
+
+function findScoopRootByScan(): string {
+  const candidates = [
+    join(homedir(), 'scoop'),
+    join(homedir(), 'install', 'scoop'),
+  ]
+
+  try {
+    for (const entry of readdirSync(homedir(), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      candidates.push(join(homedir(), entry.name, 'scoop'))
+    }
+  } catch { /* ignore */ }
+
+  return candidates.map(expandUserPath).find(isScoopRoot) || ''
+}
+
 /**
  * 解析 Scoop 安装根目录。优先级：
  * 1. $SCOOP 环境变量（用户显式设置）
  * 2. `scoop config root_path`（scoop 自己记录的真实根，展开开头的 ~ 为用户主目录）
- * 3. 默认 ~/scoop
+ * 3. `scoop prefix scoop` 反推出真实根
+ * 4. 扫描用户目录下一层的常见安装位
+ * 5. 默认 ~/scoop
  * 解决：非默认路径安装（如 ~/install/scoop）且 $SCOOP 为空时，换源误判 buckets 目录不存在。
  */
 async function resolveScoopRoot(): Promise<string> {
@@ -258,15 +310,23 @@ async function resolveScoopRoot(): Promise<string> {
   if (envRoot) return envRoot
   try {
     const { stdout } = await execPowerShell('scoop config root_path')
-    let p = stdout.trim()
+    let p = cleanScoopConfigPath(stdout)
     if (p) {
       // 展开开头的 ~ / ~\ / ~/ 为用户主目录（scoop config 常返回 ~/install/scoop 形式）
-      if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) {
-        p = join(homedir(), p.slice(1))
-      }
+      p = expandUserPath(p)
       return p
     }
   } catch { /* 读取失败，走默认 */ }
+
+  try {
+    const { stdout } = await execPowerShell('scoop prefix scoop')
+    const root = findScoopRootFromPrefix(stdout)
+    if (root) return root
+  } catch { /* ignore */ }
+
+  const scannedRoot = findScoopRootByScan()
+  if (scannedRoot) return scannedRoot
+
   return join(homedir(), 'scoop')
 }
 
@@ -1898,67 +1958,363 @@ export function registerScoopIPC(): void {
     return { success: true }
   })
 
-  // List buckets
-  ipcMain.handle('scoop:listBuckets', async () => {
-    const { stdout } = await execScoop('bucket list')
+  interface ParsedBucketRow {
+    name: string
+    source: string
+    appCount: number
+    lastUpdated: string
+  }
 
-    let scoopRoot = ''
+  interface BucketListItem extends ParsedBucketRow {
+    localPath: string
+    branch: string
+    commit: string
+    localExists: boolean
+    warning?: string
+  }
+
+  function validateBucketName(name: string): string {
+    const value = (name || '').trim()
+    if (!/^[a-zA-Z0-9._-]{1,80}$/.test(value)) {
+      throw new Error('Bucket 名称只能包含字母、数字、点、下划线和短横线')
+    }
+    return value
+  }
+
+  function validateBucketRepo(repo: string): string {
+    const value = (repo || '').trim()
+    if (!value) throw new Error('远程仓库地址不能为空')
+    if (value.length > 2048 || /\s/.test(value)) {
+      throw new Error('远程仓库地址格式不正确')
+    }
+    return value
+  }
+
+  function resolveBucketPath(scoopRoot: string, name: string): string {
+    const safeName = validateBucketName(name)
+    const bucketsDir = resolve(scoopRoot, 'buckets')
+    const bucketPath = resolve(bucketsDir, safeName)
+    const rel = relative(bucketsDir, bucketPath)
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error('Bucket 路径越界')
+    }
+    return bucketPath
+  }
+
+  function readTextIfExists(path: string): string {
     try {
-      const { stdout: envOut } = await execPowerShell('echo $env:SCOOP')
-      scoopRoot = envOut.trim()
+      if (!existsSync(path)) return ''
+      return readFileSync(path, 'utf-8')
+    } catch {
+      return ''
+    }
+  }
+
+  function resolveGitDir(localPath: string): string {
+    const dotGit = join(localPath, '.git')
+    try {
+      const stat = statSync(dotGit)
+      if (stat.isDirectory()) return dotGit
+      if (stat.isFile()) {
+        const content = readTextIfExists(dotGit)
+        const match = content.match(/^gitdir:\s*(.+)$/im)
+        if (match?.[1]) {
+          const gitDir = match[1].trim()
+          return isAbsolute(gitDir) ? gitDir : resolve(localPath, gitDir)
+        }
+      }
     } catch { /* ignore */ }
+    return dotGit
+  }
 
-    const result: {
-      name: string; source: string; localPath: string
-      appCount: number; lastUpdated: string
-    }[] = []
+  function readGitOrigin(localPath: string): string {
+    const config = readTextIfExists(join(resolveGitDir(localPath), 'config'))
+    const block = config.match(/\[remote\s+"origin"\]([\s\S]*?)(?=\n\[|$)/i)
+    const url = block?.[1]?.match(/^\s*url\s*=\s*(.+)\s*$/im)?.[1]
+    return (url || '').trim()
+  }
 
-    let pastHeader = false
-    for (const raw of stdout.split('\n')) {
-      const line = raw.trim()
-      if (!line) continue
-      if (!pastHeader) {
-        if (/^-+\s+-+/.test(line)) { pastHeader = true }
-        continue
+  function readPackedRef(gitDir: string, ref: string): string {
+    const packedRefs = readTextIfExists(join(gitDir, 'packed-refs'))
+    for (const line of packedRefs.split(/\r?\n/)) {
+      if (!line || line.startsWith('#') || line.startsWith('^')) continue
+      const [sha, name] = line.trim().split(/\s+/, 2)
+      if (name === ref) return sha || ''
+    }
+    return ''
+  }
+
+  function readGitHead(localPath: string): { branch: string; commit: string } {
+    const gitDir = resolveGitDir(localPath)
+    const head = readTextIfExists(join(gitDir, 'HEAD')).trim()
+    if (!head) return { branch: '', commit: '' }
+
+    if (!head.startsWith('ref:')) {
+      return { branch: 'detached', commit: head.slice(0, 7) }
+    }
+
+    const ref = head.replace(/^ref:\s*/, '').trim()
+    const branch = ref.replace(/^refs\/heads\//, '')
+    const refCommit = readTextIfExists(join(gitDir, ...ref.split('/'))).trim()
+    const commit = (refCommit || readPackedRef(gitDir, ref)).slice(0, 7)
+    return { branch, commit }
+  }
+
+  function formatBucketTime(date: Date): string {
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  }
+
+  function readGitUpdatedTime(localPath: string): string {
+    const gitDir = resolveGitDir(localPath)
+    const candidates = [
+      join(gitDir, 'FETCH_HEAD'),
+      join(gitDir, 'logs', 'HEAD'),
+      localPath,
+    ]
+    for (const candidate of candidates) {
+      try {
+        if (existsSync(candidate)) return formatBucketTime(statSync(candidate).mtime)
+      } catch { /* try next */ }
+    }
+    return ''
+  }
+
+  function countBucketManifests(localPath: string): number {
+    const bucketDir = join(localPath, 'bucket')
+    try {
+      return readdirSync(bucketDir, { withFileTypes: true })
+        .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
+        .length
+    } catch {
+      return 0
+    }
+  }
+
+  function parseBucketListOutput(stdout: string): ParsedBucketRow[] {
+    const rows: ParsedBucketRow[] = []
+    const lines = stdout.split(/\r?\n/)
+    const headerIndex = lines.findIndex(line => /\bName\b/i.test(line) && /\bManifests\b/i.test(line))
+    if (headerIndex >= 0) {
+      const header = lines[headerIndex]
+      const starts = {
+        name: header.indexOf('Name'),
+        source: header.indexOf('Source'),
+        updated: header.indexOf('Updated'),
+        manifests: header.indexOf('Manifests'),
       }
+      if (Object.values(starts).every(start => start >= 0)) {
+        const separatorIndex = lines.findIndex((line, index) => index > headerIndex && /^-+\s+-+/.test(line.trim()))
+        const startIndex = separatorIndex >= 0 ? separatorIndex + 1 : headerIndex + 1
 
-      // 按字段模式匹配：name + url + 可选的时间 + 可选的 manifests 数
-      // 格式: name  url  [date/time]  [count]
-      const full = line.match(/^(\S+)\s+(https?:\/\/\S+)\s+(\d{4}\/\d{1,2}\/\d{1,2}\/\S+\s+\d{1,2}:\d{2}:\d{2})\s+(\d+)$/)
-      if (full) {
-        const name = full[1], source = full[2]
-        const lastUpdated = full[3]
-        const appCount = parseInt(full[4], 10) || 0
-        const localPath = scoopRoot ? join(scoopRoot, 'buckets', name) : join(homedir(), 'scoop', 'buckets', name)
-        result.push({ name, source, localPath, appCount, lastUpdated })
-        continue
-      }
-
-      // Fallback: 只匹配 name + url（没有时间/manifests 的旧行）
-      const basic = line.match(/^(\S+)\s+(https?:\/\/\S+)/)
-      if (basic) {
-        const name = basic[1], source = basic[2]
-        const localPath = scoopRoot ? join(scoopRoot, 'buckets', name) : join(homedir(), 'scoop', 'buckets', name)
-        result.push({ name, source, localPath, appCount: 0, lastUpdated: '' })
+        for (const raw of lines.slice(startIndex)) {
+          if (!raw.trim()) continue
+          const name = raw.slice(starts.name, starts.source).trim()
+          if (!name || /^-+$/.test(name)) continue
+          const source = raw.slice(starts.source, starts.updated).trim()
+          const lastUpdated = raw.slice(starts.updated, starts.manifests).trim()
+          const manifestText = raw.slice(starts.manifests).trim()
+          const appCount = Number(manifestText.match(/\d+/)?.[0] || 0)
+          rows.push({ name, source, lastUpdated, appCount })
+        }
+        if (rows.length > 0) return rows
       }
     }
 
-    return result
+    let pastHeader = false
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (!line) continue
+      if (!pastHeader) {
+        if (/^-+\s+-+/.test(line)) pastHeader = true
+        continue
+      }
+      const fields = line.split(/\s{2,}/).map(field => field.trim()).filter(Boolean)
+      if (fields.length >= 4) {
+        rows.push({
+          name: fields[0],
+          source: fields[1],
+          lastUpdated: fields.slice(2, -1).join(' '),
+          appCount: Number(fields[fields.length - 1].match(/\d+/)?.[0] || 0),
+        })
+      } else if (fields.length === 2 && /^\d+$/.test(fields[1])) {
+        rows.push({ name: fields[0], source: '', lastUpdated: '', appCount: Number(fields[1]) })
+      }
+    }
+    return rows
+  }
+
+  function buildBucketItem(scoopRoot: string, parsed: ParsedBucketRow): BucketListItem {
+    const localPath = resolveBucketPath(scoopRoot, parsed.name)
+    const localExists = existsSync(localPath)
+    const gitHead = localExists ? readGitHead(localPath) : { branch: '', commit: '' }
+    const source = parsed.source || (localExists ? readGitOrigin(localPath) : '')
+    const appCount = parsed.appCount || (localExists ? countBucketManifests(localPath) : 0)
+    const lastUpdated = parsed.lastUpdated || (localExists ? readGitUpdatedTime(localPath) : '')
+    const warning = !localExists
+      ? '本地 bucket 目录不存在'
+      : !source
+        ? '未能读取远程仓库地址'
+        : undefined
+
+    return {
+      ...parsed,
+      source,
+      localPath,
+      appCount,
+      lastUpdated,
+      branch: gitHead.branch,
+      commit: gitHead.commit,
+      localExists,
+      warning,
+    }
+  }
+
+  function listLocalBucketRows(scoopRoot: string): ParsedBucketRow[] {
+    const bucketsDir = join(scoopRoot, 'buckets')
+    try {
+      return readdirSync(bucketsDir, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
+        .map(entry => ({
+          name: entry.name,
+          source: '',
+          appCount: 0,
+          lastUpdated: '',
+        }))
+    } catch {
+      return []
+    }
+  }
+
+  function bucketSortRank(name: string): number {
+    switch (name.toLowerCase()) {
+      case 'main': return 0
+      case 'extras': return 1
+      default: return 2
+    }
+  }
+
+  function compareBuckets(a: BucketListItem, b: BucketListItem): number {
+    const rankDelta = bucketSortRank(a.name) - bucketSortRank(b.name)
+    if (rankDelta !== 0) return rankDelta
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+  }
+
+  function execGit(args: string[], cwd: string, timeout = 45_000): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
+    return new Promise((resolve) => {
+      execFile('git', args, {
+        cwd,
+        windowsHide: true,
+        timeout,
+        encoding: 'utf-8',
+        maxBuffer: 1024 * 1024,
+      }, (error, stdout, stderr) => {
+        resolve({
+          ok: !error,
+          stdout: String(stdout || ''),
+          stderr: String(stderr || (error?.message ?? '')),
+          code: error && 'code' in error ? Number(error.code) : 0,
+        })
+      })
+    })
+  }
+
+  async function syncBucketRepo(name: string): Promise<{ success: boolean; message: string; stdout: string; stderr: string }> {
+    const scoopRoot = await resolveScoopRoot()
+    const bucketPath = resolveBucketPath(scoopRoot, name)
+    if (!existsSync(bucketPath)) {
+      throw new Error(`未找到本地 Bucket 目录：${bucketPath}`)
+    }
+
+    const fetch = await execGit(['fetch', '--all', '--prune'], bucketPath)
+    if (!fetch.ok) {
+      throw new Error((fetch.stderr || fetch.stdout || 'git fetch 失败').trim())
+    }
+
+    const upstream = await execGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], bucketPath, 10_000)
+    const upstreamRef = upstream.stdout.trim()
+    if (!upstream.ok || !upstreamRef) {
+      return {
+        success: true,
+        message: '已 fetch；未配置 upstream，跳过快进合并',
+        stdout: fetch.stdout,
+        stderr: fetch.stderr,
+      }
+    }
+
+    const merge = await execGit(['merge', '--ff-only', upstreamRef], bucketPath)
+    if (!merge.ok) {
+      throw new Error((merge.stderr || merge.stdout || 'bucket 无法快进合并').trim())
+    }
+
+    return {
+      success: true,
+      message: (merge.stdout || '软件源已同步').trim(),
+      stdout: `${fetch.stdout}\n${merge.stdout}`.trim(),
+      stderr: `${fetch.stderr}\n${merge.stderr}`.trim(),
+    }
+  }
+
+  // List buckets
+  ipcMain.handle('scoop:listBuckets', async () => {
+    const scoopRoot = await resolveScoopRoot()
+    const { stdout } = await execScoop('bucket list')
+    const bucketMap = new Map<string, ParsedBucketRow>()
+
+    for (const row of parseBucketListOutput(stdout)) {
+      if (!row.name) continue
+      bucketMap.set(row.name.toLowerCase(), row)
+    }
+
+    for (const row of listLocalBucketRows(scoopRoot)) {
+      if (!bucketMap.has(row.name.toLowerCase())) {
+        bucketMap.set(row.name.toLowerCase(), row)
+      }
+    }
+
+    return [...bucketMap.values()]
+      .map(row => buildBucketItem(scoopRoot, row))
+      .sort(compareBuckets)
   })
 
   // Add bucket
   ipcMain.handle('scoop:addBucket', async (_event, name: string, repo?: string) => {
-    const cmd = repo ? `bucket add ${name} ${repo}` : `bucket add ${name}`
-    const { stdout, stderr, code } = await execScoop(cmd)
+    const safeName = validateBucketName(name)
+    const args = repo?.trim()
+      ? ['bucket', 'add', safeName, validateBucketRepo(repo)]
+      : ['bucket', 'add', safeName]
+    const { stdout, stderr, code } = await execScoopRaw(args)
     if (code !== 0) {
       throw new Error(stderr.trim() || stdout.trim() || `添加软件源失败 (exit ${code})`)
     }
     return { stdout, stderr, code }
   })
 
+  // Sync bucket repository
+  ipcMain.handle('scoop:syncBucket', async (_event, name: string) => {
+    return syncBucketRepo(validateBucketName(name))
+  })
+
+  // Update bucket remote URL
+  ipcMain.handle('scoop:updateBucketSource', async (_event, name: string, repo: string) => {
+    const scoopRoot = await resolveScoopRoot()
+    const bucketPath = resolveBucketPath(scoopRoot, name)
+    const result = await execGit(['remote', 'set-url', 'origin', validateBucketRepo(repo)], bucketPath, 15_000)
+    if (!result.ok) {
+      throw new Error((result.stderr || result.stdout || '修改远程仓库地址失败').trim())
+    }
+    return { success: true, stdout: result.stdout, stderr: result.stderr }
+  })
+
   // Remove bucket
   ipcMain.handle('scoop:removeBucket', async (_event, name: string) => {
-    const { stdout, stderr, code } = await execScoop(`bucket rm ${name}`)
+    const { stdout, stderr, code } = await execScoopRaw(['bucket', 'rm', validateBucketName(name)])
     if (code !== 0) {
       throw new Error(stderr.trim() || stdout.trim() || `删除软件源失败 (exit ${code})`)
     }

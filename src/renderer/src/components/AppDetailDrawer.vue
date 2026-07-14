@@ -47,6 +47,7 @@ import {
   CodeSlashOutline,
 } from '@vicons/ionicons5'
 import type { InstallOptions } from '@/types'
+import { APP_DRAWER_WIDTH } from '@/constants/layout'
 
 /**
  * 详情抽屉接收的最小数据形状。所有可选字段抽屉都会尝试从 scoop:info 补齐。
@@ -74,7 +75,7 @@ const props = defineProps<{
   newVersion?: string
   /** 当前是否正在对该包执行安装 / 卸载 / 更新，用于禁用按钮与显示微型状态条。 */
   processing?: boolean
-  /** 抽屉宽度，默认 530。 */
+  /** 抽屉宽度，默认使用全局抽屉宽度。 */
   width?: number
 }>()
 
@@ -289,7 +290,7 @@ async function copyManifest() {
 <template>
   <NDrawer
     :show="show"
-    :width="width || 530"
+    :width="width || APP_DRAWER_WIDTH"
     placement="right"
     @update:show="(v: boolean) => emit('update:show', v)"
   >

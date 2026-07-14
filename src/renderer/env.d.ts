@@ -200,8 +200,20 @@ interface Window {
     getConfig: (path?: string) => Promise<any>
     setConfig: (path: string, value: any) => Promise<boolean>
     getAllConfig: () => Promise<any>
-    listBuckets: () => Promise<{ name: string; source: string; localPath: string; appCount: number; lastUpdated: string }[]>
+    listBuckets: () => Promise<{
+      name: string
+      source: string
+      localPath: string
+      appCount: number
+      lastUpdated: string
+      branch: string
+      commit: string
+      localExists: boolean
+      warning?: string
+    }[]>
     addBucket: (name: string, repo?: string) => Promise<void>
+    syncBucket: (name: string) => Promise<{ success: boolean; message: string; stdout: string; stderr: string }>
+    updateBucketSource: (name: string, repo: string) => Promise<{ success: boolean; stdout: string; stderr: string }>
     removeBucket: (name: string) => Promise<void>
     getProxy: () => Promise<{ enabled: boolean; address: string; type: 'http' | 'socks5' }>
     setProxy: (proxy: string) => Promise<void>

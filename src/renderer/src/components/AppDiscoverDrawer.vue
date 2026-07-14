@@ -19,6 +19,7 @@ import {
   SwapHorizontalOutline,
 } from '@vicons/ionicons5'
 import type { DiscoverApp, AppVersion } from '@/types'
+import { APP_DRAWER_WIDTH } from '@/constants/layout'
 
 const props = defineProps<{
   show: boolean
@@ -214,7 +215,7 @@ async function refreshOfficialVersion() {
 <template>
   <NDrawer
     v-model:show="props.show"
-    :width="530"
+    :width="APP_DRAWER_WIDTH"
     placement="right"
     @update:show="handleClose"
   >

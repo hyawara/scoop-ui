@@ -9,6 +9,7 @@ import {
 } from 'naive-ui'
 import { CopyOutline, PlayCircleOutline, StopCircleOutline } from '@vicons/ionicons5'
 import { usePackagesStore } from '@/stores/packages'
+import { APP_DRAWER_WIDTH } from '@/constants/layout'
 
 const props = defineProps<{
   show: boolean
@@ -455,7 +456,7 @@ onBeforeUnmount(() => {
 <template>
   <NDrawer
     v-model:show="visible"
-    :width="760"
+    :width="APP_DRAWER_WIDTH"
     placement="right"
     :mask-closable="true"
     :close-on-esc="true"
