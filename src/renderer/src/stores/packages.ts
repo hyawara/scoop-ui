@@ -139,8 +139,11 @@ export const usePackagesStore = defineStore('packages', () => {
       window.scoopAPI.onProgress((data: ProgressData) => {
         progress.value = data
       })
-      await window.scoopAPI.install(name, options)
+      const result = await window.scoopAPI.install(name, options)
       await loadInstalled()
+      if (!result.success) {
+        throw new Error(result.error || (result.aborted ? `${name} 安装已中止` : `${name} 安装失败`))
+      }
     } finally {
       loading.value = false
       window.scoopAPI.removeProgressListener()
@@ -150,8 +153,11 @@ export const usePackagesStore = defineStore('packages', () => {
   async function uninstall(name: string, global = false) {
     loading.value = true
     try {
-      await window.scoopAPI.uninstall(name, global)
+      const result = await window.scoopAPI.uninstall(name, global)
       await loadInstalled()
+      if (!result.success) {
+        throw new Error(result.error || (result.aborted ? `${name} 卸载已中止` : `${name} 卸载失败`))
+      }
     } finally {
       loading.value = false
     }

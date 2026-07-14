@@ -171,6 +171,13 @@ function expandHomePath(path: string): string {
   return path
 }
 
+function isRealBucketName(value: string | undefined): value is string {
+  if (!value) return false
+  const normalized = value.trim()
+  if (!normalized || /^<.*>$/.test(normalized)) return false
+  return /^[a-zA-Z0-9._-]+$/.test(normalized)
+}
+
 async function exists(path: string): Promise<boolean> {
   try {
     await fsp.access(path)
@@ -324,6 +331,7 @@ async function readInstallBucket(appDir: string): Promise<string> {
 
   for (const value of candidates) {
     const normalized = basename(value.replace(/\\/g, '/')).replace(/\.json$/i, '')
+    if (!isRealBucketName(normalized)) continue
     if (normalized && normalized !== 'bucket') return normalized
   }
 
@@ -380,12 +388,12 @@ async function readInstalledApps(scoopRoot: string): Promise<FastInstalledApp[]>
 }
 
 async function readLatestManifest(app: FastInstalledApp, buckets: BucketRepo[]): Promise<LatestManifest | null> {
-  const preferred = app.bucket
-    ? buckets.find(bucket => bucket.name.toLowerCase() === app.bucket.toLowerCase())
-    : null
-  const ordered = preferred
-    ? [preferred, ...buckets.filter(bucket => bucket !== preferred)]
-    : buckets
+  if (!isRealBucketName(app.bucket)) return null
+
+  const preferred = buckets.find(bucket => bucket.name.toLowerCase() === app.bucket.toLowerCase())
+  if (!preferred) return null
+
+  const ordered = [preferred]
 
   for (const bucket of ordered) {
     const relativePath = `bucket/${app.name}.json`

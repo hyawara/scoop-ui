@@ -40,13 +40,21 @@ watch(() => props.pkg, () => {
 }, { immediate: true })
 
 async function handleInstall() {
-  await packagesStore.install(props.pkg.name, installOptions.value)
-  message.success(`${props.pkg.name} 安装完成`)
+  try {
+    await packagesStore.install(props.pkg.name, installOptions.value)
+    message.success(`${props.pkg.name} 安装完成`)
+  } catch (e: any) {
+    message.error(e?.message || `${props.pkg.name} 安装失败`)
+  }
 }
 
 async function handleUninstall() {
-  await packagesStore.uninstall(props.pkg.name, installOptions.value.global)
-  message.success(`${props.pkg.name} 已卸载`)
+  try {
+    await packagesStore.uninstall(props.pkg.name, installOptions.value.global)
+    message.success(`${props.pkg.name} 已卸载`)
+  } catch (e: any) {
+    message.error(e?.message || `${props.pkg.name} 卸载失败`)
+  }
 }
 
 async function handleUpdate() {

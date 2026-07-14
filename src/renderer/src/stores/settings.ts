@@ -102,8 +102,11 @@ export const useSettingsStore = defineStore('settings', () => {
   async function installAria2() {
     loading.value = true
     try {
-      await window.scoopAPI.install('aria2')
+      const result = await window.scoopAPI.install('aria2')
       await checkAria2()
+      if (!result.success) {
+        throw new Error(result.error || (result.aborted ? 'aria2 安装已中止' : 'aria2 安装失败'))
+      }
     } finally {
       loading.value = false
     }

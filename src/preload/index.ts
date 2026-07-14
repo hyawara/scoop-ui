@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   setScoopConfig: (key: string, value: string) => ipcRenderer.invoke('scoop:setConfig', key, value),
   getAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:getAppIcon', packageName),
   clearAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:clearAppIcon', packageName),
+  getCommandState: () => ipcRenderer.invoke('scoop:getCommandState'),
+  abortCommand: () => ipcRenderer.invoke('scoop:abortCommand'),
 
   onProgress: (callback: (data: any) => void) => {
     ipcRenderer.on('scoop:progress', (_event, data) => callback(data))
@@ -75,6 +77,12 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   },
   removeLogEndListener: () => {
     ipcRenderer.removeAllListeners('scoop:logEnd')
+  },
+  onCommandState: (callback: (data: any) => void) => {
+    ipcRenderer.on('scoop:commandState', (_event, data) => callback(data))
+  },
+  removeCommandStateListener: () => {
+    ipcRenderer.removeAllListeners('scoop:commandState')
   },
 
   // 内嵌命令执行器 API

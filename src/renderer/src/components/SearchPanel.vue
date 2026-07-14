@@ -29,6 +29,12 @@ const installedNames = computed(() =>
 
 const searchEngineReady = computed(() => packagesStore.searchEngine.installed)
 
+function assertScoopCommandSuccess(result: any, fallback: string) {
+  if (!result?.success) {
+    throw new Error(result?.error || (result?.aborted ? `${fallback}已中止` : `${fallback}失败`))
+  }
+}
+
 onMounted(() => {
   packagesStore.loadSearchEngineStatus().then(() => {
     showSpeedupBanner.value = !packagesStore.searchEngine.installed
@@ -100,12 +106,13 @@ async function quickInstall(pkgName: string, options?: InstallOptions) {
   pkgProgress.startProcessing(pkgName)
   try {
     // 直接调用 API，绕过 store.install 的全局进度监听（避免冲突）
-    await window.scoopAPI.install(pkgName, options || { global: false, skipCheck: false, independent: false })
+    const result = await window.scoopAPI.install(pkgName, options || { global: false, skipCheck: false, independent: false })
+    assertScoopCommandSuccess(result, `${pkgName} 安装`)
     message.success(`${pkgName} 安装完成`)
     // 刷新已安装列表（静默）
     packagesStore.loadInstalled()
-  } catch {
-    message.error(`${pkgName} 安装失败`)
+  } catch (e: any) {
+    message.error(e?.message || `${pkgName} 安装失败`)
   } finally {
     pkgProgress.finishProcessing()
     const next = new Set(installingSet.value)
@@ -115,8 +122,10 @@ async function quickInstall(pkgName: string, options?: InstallOptions) {
 }
 
 async function handleDrawerUninstall(name: string, global: boolean) {
+  openTerminal()
   try {
-    await window.scoopAPI.uninstall(name, global)
+    const result = await window.scoopAPI.uninstall(name, global)
+    assertScoopCommandSuccess(result, `${name} 卸载`)
     message.success(`${name} 已卸载`)
     packagesStore.loadInstalled()
     showDetailDrawer.value = false

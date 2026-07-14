@@ -41,8 +41,12 @@ interface UpdateResult {
   package: string
   packages?: string[]
   code?: number
+  aborted?: boolean
+  stdout?: string
+  stderr?: string
   localVersion?: string
   expectedVersion?: string
+  diagnostics?: string[]
   error?: string
   verifyError?: string
 }
@@ -54,6 +58,36 @@ interface ResetResult {
   stdout: string
   stderr: string
   error?: string
+}
+
+interface ScoopCommandResult {
+  success: boolean
+  package: string
+  packages?: string[]
+  code?: number | null
+  stdout: string
+  stderr: string
+  aborted?: boolean
+  elevated?: boolean
+  error?: string
+}
+
+interface ScoopCommandTask {
+  id: number
+  type: 'install' | 'uninstall' | 'update' | 'message'
+  label: string
+  packages: string[]
+  startedAt: number
+}
+
+interface ScoopCommandState {
+  active: boolean
+  count: number
+  tasks: ScoopCommandTask[]
+  event?: {
+    status: 'started' | 'ended' | 'aborted'
+    task: ScoopCommandTask
+  }
 }
 
 interface SearchEngineStatus {
@@ -138,9 +172,9 @@ interface Window {
     getAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
     fetchPackageInfo: (name: string) => Promise<Record<string, any>>
     checkverLatest: (name: string) => Promise<CheckverLatestResult>
-    install: (name: string, options?: InstallOptions) => Promise<void>
+    install: (name: string, options?: InstallOptions) => Promise<ScoopCommandResult>
     reset: (appName: string) => Promise<ResetResult>
-    uninstall: (name: string, global?: boolean) => Promise<void>
+    uninstall: (name: string, global?: boolean) => Promise<ScoopCommandResult>
     update: (name?: string | string[]) => Promise<UpdateResult>
     updateSelf: () => Promise<{ success: boolean; stdout: string; stderr: string }>
     cleanup: () => Promise<CleanupResult>
@@ -188,8 +222,12 @@ interface Window {
     removeProgressListener: () => void
     onLog: (callback: (data: ProgressData) => void) => void
     removeLogListener: () => void
-    onLogEnd: (callback: (data: { package: string; packages?: string[]; success: boolean; code?: number }) => void) => void
+    onLogEnd: (callback: (data: { package: string; packages?: string[]; success: boolean; code?: number | null; aborted?: boolean }) => void) => void
     removeLogEndListener: () => void
+    getCommandState: () => Promise<ScoopCommandState>
+    abortCommand: () => Promise<{ success: boolean; aborted: number }>
+    onCommandState: (callback: (data: ScoopCommandState) => void) => void
+    removeCommandStateListener: () => void
 
     // 内嵌命令执行器 API
     executeCommand: (command: string) => Promise<{ success: boolean }>

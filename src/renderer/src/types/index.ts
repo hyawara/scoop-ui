@@ -39,6 +39,18 @@ export interface InstallOptions {
   independent?: boolean
 }
 
+export interface ScoopCommandResult {
+  success: boolean
+  package: string
+  packages?: string[]
+  code?: number | null
+  stdout: string
+  stderr: string
+  aborted?: boolean
+  elevated?: boolean
+  error?: string
+}
+
 export interface ProgressData {
   type: 'download' | 'install' | 'uninstall' | 'update' | 'message'
   package: string

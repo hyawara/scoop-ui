@@ -409,6 +409,54 @@ const detailProcessing = computed(() => {
   )
 })
 
+function assertScoopCommandSuccess(result: any, fallback: string) {
+  if (!result?.success) {
+    throw new Error(result?.error || (result?.aborted ? `${fallback}已中止` : `${fallback}失败`))
+  }
+}
+
+function appendTerminalDiagnostic(messageText: string) {
+  window.dispatchEvent(new CustomEvent('scoop-ui:terminal-log', {
+    detail: { message: messageText },
+  }))
+}
+
+function collectRawCommandTail(result: any): string[] {
+  const collect = (label: 'stderr' | 'stdout', value: unknown) => {
+    if (typeof value !== 'string' || !value.trim()) return []
+    return value
+      .split(/\r?\n|\r/g)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => `${label}: ${line}`)
+  }
+
+  return [
+    ...collect('stderr', result?.stderr),
+    ...collect('stdout', result?.stdout),
+  ].slice(-48)
+}
+
+function appendUpdateStatusDiagnostic(failedByStatus: string[], result: any) {
+  const diagnostics = Array.isArray(result?.diagnostics)
+    ? result.diagnostics.filter((line: unknown): line is string => typeof line === 'string' && line.trim().length > 0)
+    : []
+  const rawTail = collectRawCommandTail(result)
+  const diagnosticBlock = diagnostics.length > 0
+    ? diagnostics.map((line: string) => `  ${line}`).join('\n')
+    : rawTail.length > 0
+      ? [
+          '  原生返回日志尾部：',
+          ...rawTail.map(line => `ERROR RAW: ${line}`),
+        ].join('\n')
+      : '  git-bash/scoop 未返回可展示的 stdout/stderr；Scoop 命令结束后该软件仍显示可更新。'
+
+  appendTerminalDiagnostic([
+    `ERROR: Update incomplete: ${failedByStatus.join(', ')} 仍显示可更新。`,
+    diagnosticBlock,
+  ].join('\n'))
+}
+
 async function handleDetailInstall(name: string, options: InstallOptions) {
   if (storeInstallingSet.value.has(name)) return
   openTerminal()
@@ -417,12 +465,13 @@ async function handleDetailInstall(name: string, options: InstallOptions) {
   storeInstallingSet.value = s
   pkgProgress.startProcessing(name)
   try {
-    await window.scoopAPI.install(name, options)
+    const result = await window.scoopAPI.install(name, options)
+    assertScoopCommandSuccess(result, `${name} 安装`)
     message.success(`${name} 安装完成`)
     packagesStore.loadInstalled()
     showAppDetailDrawer.value = false
-  } catch {
-    message.error(`${name} 安装失败`)
+  } catch (e: any) {
+    message.error(e?.message || `${name} 安装失败`)
   } finally {
     pkgProgress.finishProcessing()
     const next = new Set(storeInstallingSet.value)
@@ -433,11 +482,13 @@ async function handleDetailInstall(name: string, options: InstallOptions) {
 
 async function handleDetailUninstall(name: string, global: boolean) {
   if (uninstallingSet.value.has(name)) return
+  openTerminal()
   const s = new Set(uninstallingSet.value)
   s.add(name)
   uninstallingSet.value = s
   try {
-    await window.scoopAPI.uninstall(name, global)
+    const result = await window.scoopAPI.uninstall(name, global)
+    assertScoopCommandSuccess(result, `${name} 卸载`)
     await packagesStore.loadInstalled()
     await packagesStore.loadUpdatable()
     showAppDetailDrawer.value = false
@@ -486,8 +537,16 @@ function togglePin(name: string) {
   const s = new Set(pinnedPackages.value)
   if (s.has(name)) {
     s.delete(name)
+    const selected = new Set(selectedPackages.value)
+    selected.delete(name)
+    selectedPackages.value = selected
+    saveSelectedToConfig()
   } else {
     s.add(name)
+    const selected = new Set(selectedPackages.value)
+    selected.add(name)
+    selectedPackages.value = selected
+    saveSelectedToConfig()
   }
   pinnedPackages.value = s
   savePinnedToConfig()
@@ -625,8 +684,13 @@ const recommendedPackages = [
 ]
 
 async function handleInstall(name: string) {
-  await packagesStore.install(name, { global: false, skipCheck: false, independent: false })
-  message.success(`${name} 安装完成`)
+  openTerminal()
+  try {
+    await packagesStore.install(name, { global: false, skipCheck: false, independent: false })
+    message.success(`${name} 安装完成`)
+  } catch (e: any) {
+    message.error(e?.message || `${name} 安装失败`)
+  }
 }
 
 // ═══ 商店行内安装 ═══
@@ -650,11 +714,12 @@ async function storeQuickInstall(pkgName: string) {
   storeInstallingSet.value = s
   pkgProgress.startProcessing(pkgName)
   try {
-    await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
+    const result = await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
+    assertScoopCommandSuccess(result, `${pkgName} 安装`)
     message.success(`${pkgName} 安装完成`)
     packagesStore.loadInstalled()
-  } catch {
-    message.error(`${pkgName} 安装失败`)
+  } catch (e: any) {
+    message.error(e?.message || `${pkgName} 安装失败`)
   } finally {
     pkgProgress.finishProcessing()
     const next = new Set(storeInstallingSet.value)
@@ -780,20 +845,22 @@ function handleCardClick(app: StoreApp) {
 
 async function handleDiscoverInstall(manifestName: string) {
   if (storeInstallingSet.value.has(manifestName)) return
+  openTerminal()
   const s = new Set(storeInstallingSet.value)
   s.add(manifestName)
   storeInstallingSet.value = s
   pkgProgress.startProcessing(manifestName)
   try {
-    await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false })
+    const result = await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false })
+    assertScoopCommandSuccess(result, `${manifestName} 安装`)
     message.success(`${manifestName} 安装完成`)
     packagesStore.loadInstalled()
     // 刷新 drawer 内的已安装状态
     if (selectedDiscoverApp.value) {
       selectedDiscoverApp.value = { ...selectedDiscoverApp.value }
     }
-  } catch {
-    message.error(`${manifestName} 安装失败`)
+  } catch (e: any) {
+    message.error(e?.message || `${manifestName} 安装失败`)
   } finally {
     pkgProgress.finishProcessing()
     const next = new Set(storeInstallingSet.value)
@@ -880,7 +947,10 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
     const failedByStatus = await refreshAfterNativeUpdate(uniqueNames)
 
     if (failedByStatus.length > 0) {
-      message.error(result.error || `${failedByStatus.length} 个软件仍显示可更新，请查看终端日志`)
+      appendUpdateStatusDiagnostic(failedByStatus, result)
+      const diagnostics = Array.isArray(result.diagnostics) ? result.diagnostics : []
+      const rawTail = collectRawCommandTail(result)
+      message.error(result.error || diagnostics[0] || rawTail[rawTail.length - 1] || `${failedByStatus.length} 个软件仍显示可更新，请查看终端日志`)
       return
     }
     if (!result.success) {
@@ -933,11 +1003,13 @@ function handleUpdateAllConfirm() {
 
 async function handleUninstall(pkg: any) {
   if (uninstallingSet.value.has(pkg.name)) return
+  openTerminal()
   const s = new Set(uninstallingSet.value)
   s.add(pkg.name)
   uninstallingSet.value = s
   try {
-    await window.scoopAPI.uninstall(pkg.name, pkg.global)
+    const result = await window.scoopAPI.uninstall(pkg.name, pkg.global)
+    assertScoopCommandSuccess(result, `${pkg.name} 卸载`)
     const r = new Set(removingSet.value)
     r.add(pkg.name)
     removingSet.value = r
@@ -976,6 +1048,7 @@ function handleBatchUninstall() {
 }
 
 async function executeBatchUninstall(names: string[]) {
+  openTerminal()
   // 锁定所有选中卡片
   const lockSet = new Set(uninstallingSet.value)
   for (const n of names) lockSet.add(n)
@@ -985,7 +1058,8 @@ async function executeBatchUninstall(names: string[]) {
   for (const name of names) {
     try {
       const pkg = packagesStore.installed.find((p: any) => p.name === name)
-      await window.scoopAPI.uninstall(name, pkg?.global || false)
+      const result = await window.scoopAPI.uninstall(name, pkg?.global || false)
+      assertScoopCommandSuccess(result, `${name} 卸载`)
       // 退出动画：逐个标记移除
       const r = new Set(removingSet.value)
       r.add(name)

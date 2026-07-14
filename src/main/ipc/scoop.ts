@@ -16,6 +16,212 @@ function sendProgress(win: BrowserWindow | null, data: any) {
   }
 }
 
+type CancellableScoopTaskType = 'install' | 'uninstall' | 'update' | 'message'
+type CancellableScoopTaskStatus = 'started' | 'ended' | 'aborted'
+
+interface CancellableScoopTask {
+  id: number
+  type: CancellableScoopTaskType
+  label: string
+  packages: string[]
+  startedAt: number
+  controller: AbortController
+}
+
+let nextScoopTaskId = 1
+const activeScoopTasks = new Map<number, CancellableScoopTask>()
+let sudoCache: { available: boolean; checkedAt: number } | null = null
+let adminCache: { elevated: boolean; checkedAt: number } | null = null
+const SUDO_CACHE_TTL = 30_000
+const ADMIN_CACHE_TTL = 30_000
+
+function getCommandState(event?: {
+  status: CancellableScoopTaskStatus
+  task: Omit<CancellableScoopTask, 'controller'>
+}) {
+  const tasks = [...activeScoopTasks.values()].map(({ controller: _controller, ...task }) => task)
+  return {
+    active: tasks.length > 0,
+    count: tasks.length,
+    tasks,
+    event,
+  }
+}
+
+function broadcastCommandState(event?: {
+  status: CancellableScoopTaskStatus
+  task: Omit<CancellableScoopTask, 'controller'>
+}) {
+  const payload = getCommandState(event)
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('scoop:commandState', payload)
+    }
+  }
+}
+
+function beginScoopTask(
+  type: CancellableScoopTaskType,
+  label: string,
+  packages: string[]
+): CancellableScoopTask {
+  const task: CancellableScoopTask = {
+    id: nextScoopTaskId++,
+    type,
+    label,
+    packages,
+    startedAt: Date.now(),
+    controller: new AbortController(),
+  }
+  activeScoopTasks.set(task.id, task)
+  const { controller: _controller, ...publicTask } = task
+  broadcastCommandState({ status: 'started', task: publicTask })
+  return task
+}
+
+function finishScoopTask(task: CancellableScoopTask, status: 'ended' | 'aborted') {
+  activeScoopTasks.delete(task.id)
+  const { controller: _controller, ...publicTask } = task
+  broadcastCommandState({ status, task: publicTask })
+}
+
+function sendLogEnd(
+  win: BrowserWindow | null,
+  data: { package: string; packages?: string[]; success: boolean; code?: number | null; aborted?: boolean }
+) {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('scoop:logEnd', data)
+  }
+}
+
+function tailLog(stdout: string, stderr: string): string {
+  return (stderr || stdout)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-4)
+    .join('\n')
+}
+
+function normalizeExitError(
+  action: 'Install' | 'Update' | 'Uninstall',
+  label: string,
+  stdout: string,
+  stderr: string,
+  code: number | null,
+  aborted?: boolean
+): string {
+  if (aborted) return `${action} aborted: ${label}`
+  return tailLog(stdout, stderr) || `${action} failed: ${label} (exit ${code ?? 'unknown'})`
+}
+
+const DIAGNOSTIC_LINE_PATTERN = /(?:^|\b)(?:ERROR:?|ERR!|ERR\b|error\b|failed\b|failure\b|fatal\b|exception\b|denied\b|permission\b|EPERM\b|EACCES\b|ENOENT\b|ETIMEDOUT\b|ECONNRESET\b|hash check failed|couldn'?t|cannot|can't|not found|npm\s+(?:ERR!|error)|pnpm\s+(?:ERR|error))/i
+
+function extractCommandDiagnostics(stdout: string, stderr: string): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const line of `${stderr}\n${stdout}`.split('\n')) {
+    const text = line.trim()
+    if (!text || !DIAGNOSTIC_LINE_PATTERN.test(text)) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(text)
+  }
+  return result.slice(-8)
+}
+
+function sendCommandFailure(
+  win: BrowserWindow | null,
+  type: CancellableScoopTaskType,
+  label: string,
+  action: 'Install' | 'Update' | 'Uninstall',
+  error: string,
+  aborted?: boolean
+) {
+  sendProgress(win, {
+    type,
+    package: label,
+    message: `ERROR: ${aborted ? `${action} aborted` : `${action} failed`}: ${label}\n${error}`,
+  })
+}
+
+async function detectSudoAvailable(force = false): Promise<boolean> {
+  const now = Date.now()
+  if (!force && sudoCache && now - sudoCache.checkedAt < SUDO_CACHE_TTL) {
+    return sudoCache.available
+  }
+
+  try {
+    const { stdout } = await execPowerShell(`
+      if (Get-Command sudo -ErrorAction SilentlyContinue) {
+        Write-Output "YES"
+      } else {
+        Write-Output "NO"
+      }
+    `)
+    const available = stdout.trim().includes('YES')
+    sudoCache = { available, checkedAt: now }
+    return available
+  } catch {
+    sudoCache = { available: false, checkedAt: now }
+    return false
+  }
+}
+
+async function detectProcessElevated(force = false): Promise<boolean> {
+  const now = Date.now()
+  if (!force && adminCache && now - adminCache.checkedAt < ADMIN_CACHE_TTL) {
+    return adminCache.elevated
+  }
+
+  try {
+    const { stdout } = await execPowerShell(`
+      $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+      $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+      if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Output "YES"
+      } else {
+        Write-Output "NO"
+      }
+    `)
+    const elevated = stdout.trim().includes('YES')
+    adminCache = { elevated, checkedAt: now }
+    return elevated
+  } catch {
+    adminCache = { elevated: false, checkedAt: now }
+    return false
+  }
+}
+
+async function ensureGlobalPrivilege(
+  win: BrowserWindow | null,
+  type: CancellableScoopTaskType,
+  label: string,
+  global?: boolean
+): Promise<{ ok: true; useSudo: boolean } | { ok: false; error: string }> {
+  if (!global) return { ok: true, useSudo: false }
+
+  if (await detectProcessElevated()) {
+    return { ok: true, useSudo: false }
+  }
+
+  const sudoAvailable = await detectSudoAvailable()
+  if (!sudoAvailable) {
+    return {
+      ok: false,
+      error: 'Global 操作需要管理员权限。请先执行 `scoop install sudo`，或以管理员身份运行 Scoop UI。',
+    }
+  }
+
+  sendProgress(win, {
+    type,
+    package: label,
+    message: '检测到 global 操作，正在通过 sudo 请求管理员权限...',
+  })
+  return { ok: true, useSudo: true }
+}
+
 /**
  * 解析 Scoop 固定宽度表格输出（如 scoop list / scoop status）。
  * 自动跳过分隔线之前的表头，按 2+ 空格切分列。
@@ -566,6 +772,30 @@ scoop install git 7zip
 }
 
 export function registerScoopIPC(): void {
+  ipcMain.handle('scoop:getCommandState', async () => getCommandState())
+
+  ipcMain.handle('scoop:abortCommand', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const tasks = [...activeScoopTasks.values()]
+    if (tasks.length === 0) {
+      return { success: false, aborted: 0 }
+    }
+
+    sendProgress(win, {
+      type: 'message',
+      package: 'scoop',
+      message: `正在中止 ${tasks.length} 个 Scoop 命令...`,
+    })
+
+    for (const task of tasks) {
+      if (!task.controller.signal.aborted) {
+        task.controller.abort()
+      }
+    }
+
+    return { success: true, aborted: tasks.length }
+  })
+
   // Check if Scoop is installed
   ipcMain.handle('scoop:check', async () => {
     const { stdout } = await execPowerShell(`
@@ -641,23 +871,47 @@ export function registerScoopIPC(): void {
 
   ipcMain.handle('scoop:installSearchEngine', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const { stdout, stderr, code } = await execScoopRaw(['install', 'scoop-search'], (data, stream) => {
-      sendProgress(win, {
-        type: 'install',
+    const task = beginScoopTask('install', 'scoop-search', ['scoop-search'])
+
+    try {
+      const { stdout, stderr, code, aborted } = await execScoopRaw(['install', 'scoop-search'], (data, stream) => {
+        sendProgress(win, {
+          type: 'install',
+          package: 'scoop-search',
+          stream,
+          message: data,
+        })
+      }, task.controller.signal)
+
+      searchEngineCache = null
+      const status = aborted ? { installed: false, engine: 'native' as const } : await detectScoopSearchInstalled(true)
+      const success = code === 0 && status.installed && !aborted
+      const error = success
+        ? undefined
+        : normalizeExitError('Install', 'scoop-search', stdout, stderr, code, aborted)
+
+      if (!success && error) {
+        sendCommandFailure(win, 'install', 'scoop-search', 'Install', error, aborted)
+      }
+      sendLogEnd(win, {
         package: 'scoop-search',
-        stream,
-        message: data,
+        packages: ['scoop-search'],
+        success,
+        code,
+        aborted,
       })
-    })
-    searchEngineCache = null
-    const status = await detectScoopSearchInstalled(true)
-    return {
-      success: code === 0 && status.installed,
-      stdout,
-      stderr,
-      code,
-      status,
-      error: code === 0 ? undefined : ((stderr || stdout).trim() || `scoop install scoop-search exited with code ${code}`),
+
+      return {
+        success,
+        stdout,
+        stderr,
+        code,
+        status,
+        aborted,
+        error,
+      }
+    } finally {
+      finishScoopTask(task, task.controller.signal.aborted ? 'aborted' : 'ended')
     }
   })
 
@@ -936,13 +1190,66 @@ export function registerScoopIPC(): void {
     if (options?.independent) args.push('--independent')
 
     const win = BrowserWindow.fromWebContents(event.sender)
-    return execScoop(args.join(' '), (data) => {
+    const task = beginScoopTask('install', name, [name])
+
+    try {
+      const privilege = await ensureGlobalPrivilege(win, 'install', name, options?.global)
+      if (!privilege.ok) {
+        sendCommandFailure(win, 'install', name, 'Install', privilege.error)
+        sendLogEnd(win, {
+          package: name,
+          packages: [name],
+          success: false,
+          code: null,
+        })
+        return {
+          success: false,
+          package: name,
+          code: null,
+          stdout: '',
+          stderr: privilege.error,
+          error: privilege.error,
+        }
+      }
+
+      const { stdout, stderr, code, aborted } = await execScoopRaw(args, (data, stream) => {
         sendProgress(win, {
           type: 'install',
           package: name,
-          message: data.trim(),
+          stream,
+          message: data,
         })
-    })
+      }, task.controller.signal, undefined, privilege.useSudo)
+
+      const success = code === 0 && !aborted
+      const error = success
+        ? undefined
+        : normalizeExitError('Install', name, stdout, stderr, code, aborted)
+
+      if (!success && error) {
+        sendCommandFailure(win, 'install', name, 'Install', error, aborted)
+      }
+      sendLogEnd(win, {
+        package: name,
+        packages: [name],
+        success,
+        code,
+        aborted,
+      })
+
+      return {
+        success,
+        package: name,
+        code,
+        stdout,
+        stderr,
+        aborted,
+        elevated: privilege.useSudo,
+        error,
+      }
+    } finally {
+      finishScoopTask(task, task.controller.signal.aborted ? 'aborted' : 'ended')
+    }
   })
 
   // Reset / activate an installed package version (`scoop reset <appname>`)
@@ -976,15 +1283,69 @@ export function registerScoopIPC(): void {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
-    const args = `uninstall ${name}${global ? ' --global' : ''}`
+    const args = ['uninstall', name]
+    if (global) args.push('--global')
     const win = BrowserWindow.fromWebContents(event.sender)
-    return execScoop(args, (data) => {
+    const task = beginScoopTask('uninstall', name, [name])
+
+    try {
+      const privilege = await ensureGlobalPrivilege(win, 'uninstall', name, global)
+      if (!privilege.ok) {
+        sendCommandFailure(win, 'uninstall', name, 'Uninstall', privilege.error)
+        sendLogEnd(win, {
+          package: name,
+          packages: [name],
+          success: false,
+          code: null,
+        })
+        return {
+          success: false,
+          package: name,
+          code: null,
+          stdout: '',
+          stderr: privilege.error,
+          error: privilege.error,
+        }
+      }
+
+      const { stdout, stderr, code, aborted } = await execScoopRaw(args, (data, stream) => {
         sendProgress(win, {
           type: 'uninstall',
           package: name,
-          message: data.trim(),
+          stream,
+          message: data,
         })
-    })
+      }, task.controller.signal, undefined, privilege.useSudo)
+
+      const success = code === 0 && !aborted
+      const error = success
+        ? undefined
+        : normalizeExitError('Uninstall', name, stdout, stderr, code, aborted)
+
+      if (!success && error) {
+        sendCommandFailure(win, 'uninstall', name, 'Uninstall', error, aborted)
+      }
+      sendLogEnd(win, {
+        package: name,
+        packages: [name],
+        success,
+        code,
+        aborted,
+      })
+
+      return {
+        success,
+        package: name,
+        code,
+        stdout,
+        stderr,
+        aborted,
+        elevated: privilege.useSudo,
+        error,
+      }
+    } finally {
+      finishScoopTask(task, task.controller.signal.aborted ? 'aborted' : 'ended')
+    }
   })
 
   // Update packages —— 原生批量：一次 spawn 执行 `scoop update a b c`，日志只做 raw stream 转发
@@ -998,42 +1359,50 @@ export function registerScoopIPC(): void {
     const args = names.length > 0 ? ['update', ...names] : ['update', '--all']
     const win = BrowserWindow.fromWebContents(event.sender)
     const pkgLabel = names.length === 1 ? names[0] : (names.length > 1 ? names.join(' ') : '*')
+    const task = beginScoopTask('update', pkgLabel, names)
 
-    const { stdout, stderr, code } = await execScoopRaw(args, (data, stream) => {
-      sendProgress(win, {
-        type: 'update',
-        package: pkgLabel,
-        stream,
-        message: data,
-      })
-    })
+    try {
+      const { stdout, stderr, code, aborted } = await execScoopRaw(args, (data, stream) => {
+        sendProgress(win, {
+          type: 'update',
+          package: pkgLabel,
+          stream,
+          message: data,
+        })
+      }, task.controller.signal)
 
-    // spawn 进程 close 后，通知渲染层批量命令已结束，触发终态数据刷新
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('scoop:logEnd', {
+      const success = code === 0 && !aborted
+      const diagnostics = extractCommandDiagnostics(stdout, stderr)
+      const error = success
+        ? undefined
+        : normalizeExitError('Update', pkgLabel, stdout, stderr, code, aborted)
+
+      if (!success && error) {
+        sendCommandFailure(win, 'update', pkgLabel, 'Update', error, aborted)
+      }
+
+      // spawn 进程 close 后，通知渲染层批量命令已结束，触发终态数据刷新
+      sendLogEnd(win, {
         package: pkgLabel,
         packages: names,
-        success: code === 0,
+        success,
         code,
+        aborted,
       })
-    }
 
-    const tailLog = (): string =>
-      (stderr || stdout)
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .slice(-3)
-        .join('\n')
-
-    return {
-      success: code === 0,
-      package: pkgLabel,
-      packages: names,
-      code,
-      stdout,
-      stderr,
-      error: code === 0 ? undefined : (tailLog() || `scoop update exited with code ${code}`),
+      return {
+        success,
+        package: pkgLabel,
+        packages: names,
+        code,
+        stdout,
+        stderr,
+        aborted,
+        diagnostics,
+        error,
+      }
+    } finally {
+      finishScoopTask(task, task.controller.signal.aborted ? 'aborted' : 'ended')
     }
   })
 
@@ -1915,12 +2284,12 @@ export function registerScoopIPC(): void {
 
   // 安全白名单：只允许执行Scoop相关的辅助命令
   const ALLOWED_COMMAND_PATTERNS = [
-    /^scoop\s+(reset|uninstall|install|update|checkup|cleanup|config|bucket|list|status|search|info|cat|home|prefix|which|shim|export|import|hold|unhold|hold-check|virustotal|help)/i,
+    /^(?:sudo\s+)?scoop\s+(reset|uninstall|install|update|checkup|cleanup|config|bucket|list|status|search|info|cat|home|prefix|which|shim|export|import|hold|unhold|hold-check|virustotal|help)/i,
     /^(mysqld|nginx|redis-server|redis-cli|node|npm|yarn|pnpm|python|pip|java|javac|gradle|maven|mvn)\s+/i,
-    /^reg\s+(import|export|add|delete|query|copy|save|load|unload|restore|compare)/i,
+    /^(?:sudo\s+)?reg\s+(import|export|add|delete|query|copy|save|load|unload|restore|compare)/i,
     /^shim\s+/i,
-    /^netsh\s+/i,
-    /^Set-ExecutionPolicy\s+/i,
+    /^(?:sudo\s+)?netsh\s+/i,
+    /^(?:sudo\s+)?Set-ExecutionPolicy\s+/i,
   ]
 
   // 危险命令黑名单
@@ -1936,6 +2305,10 @@ export function registerScoopIPC(): void {
   ]
 
   function isCommandSafe(command: string): { safe: boolean; reason?: string } {
+    if (/(?:&&|\|\||[;|`])/.test(command)) {
+      return { safe: false, reason: `命令包含不允许的控制符: ${command}` }
+    }
+
     // 检查危险命令黑名单
     for (const pattern of DANGEROUS_PATTERNS) {
       if (pattern.test(command)) {

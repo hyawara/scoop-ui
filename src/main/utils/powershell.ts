@@ -7,6 +7,7 @@ export interface PSResult {
   stdout: string
   stderr: string
   code: number | null
+  aborted?: boolean
 }
 
 // Locate git-bash executable — prefer scoop-installed git
@@ -46,6 +47,51 @@ function findBashExe(): string {
 const BASH_EXE = findBashExe()
 export { BASH_EXE }
 
+function terminateChildProcess(child: ChildProcess): void {
+  if (!child.pid) {
+    child.kill()
+    return
+  }
+
+  if (process.platform === 'win32') {
+    try {
+      const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+      killer.on('error', () => {
+        try { child.kill() } catch { /* already closed */ }
+      })
+      return
+    } catch {
+      try { child.kill() } catch { /* already closed */ }
+      return
+    }
+  }
+
+  try { child.kill('SIGTERM') } catch { /* already closed */ }
+}
+
+function bindAbortSignal(
+  signal: AbortSignal | undefined,
+  child: ChildProcess,
+  onAbort: () => void
+): void {
+  if (!signal) return
+
+  const abort = () => {
+    onAbort()
+    terminateChildProcess(child)
+  }
+
+  if (signal.aborted) {
+    abort()
+    return
+  }
+
+  signal.addEventListener('abort', abort, { once: true })
+}
+
 /**
  * Execute a command via PowerShell (for Windows-specific ops: check, install, env, migrate).
  * Uses iconv-lite GBK→UTF-8 decoding for Chinese output.
@@ -69,6 +115,7 @@ export function execPowerShell(
 
     let stdout = ''
     let stderr = ''
+    let aborted = signal?.aborted ?? false
 
     const stdoutDecoder = iconv.decodeStream('gbk')
     stdoutDecoder.on('data', (text: string) => {
@@ -88,14 +135,10 @@ export function execPowerShell(
     })
 
     child.on('close', (code) => {
-      resolve({ stdout, stderr, code })
+      resolve({ stdout, stderr, code, aborted })
     })
 
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        child.kill()
-      })
-    }
+    bindAbortSignal(signal, child, () => { aborted = true })
   })
 }
 
@@ -135,6 +178,7 @@ export function execGitBash(
 
     let stdout = ''
     let stderr = ''
+    let aborted = signal?.aborted ?? false
 
     child.stdout?.on('data', (chunk: Buffer) => {
       const text = stripAnsi(chunk.toString('utf-8'))
@@ -151,14 +195,10 @@ export function execGitBash(
     })
 
     child.on('close', (code) => {
-      resolve({ stdout, stderr, code })
+      resolve({ stdout, stderr, code, aborted })
     })
 
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        child.kill()
-      })
-    }
+    bindAbortSignal(signal, child, () => { aborted = true })
   })
 }
 
@@ -183,6 +223,7 @@ export function execScoop(
 
     let stdout = ''
     let stderr = ''
+    let aborted = signal?.aborted ?? false
 
     const stdoutDecoder = iconv.decodeStream('gbk')
     stdoutDecoder.on('data', (text: string) => {
@@ -205,14 +246,10 @@ export function execScoop(
     })
 
     child.on('close', (code) => {
-      resolve({ stdout, stderr, code })
+      resolve({ stdout, stderr, code, aborted })
     })
 
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        child.kill()
-      })
-    }
+    bindAbortSignal(signal, child, () => { aborted = true })
   })
 }
 
@@ -230,10 +267,14 @@ export function execScoopRaw(
   args: string[],
   onProgress?: (data: string, stream: 'stdout' | 'stderr') => void,
   signal?: AbortSignal,
-  cwd?: string
+  cwd?: string,
+  useSudo = false
 ): Promise<PSResult> {
   return new Promise((resolve, reject) => {
-    const command = ['scoop', ...args.map(bashQuote)].join(' ')
+    const command = [
+      ...(useSudo ? ['sudo', 'scoop'] : ['scoop']),
+      ...args.map(bashQuote),
+    ].join(' ')
     const child: ChildProcess = spawn(BASH_EXE, ['--login', '-c', command], {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
@@ -243,6 +284,7 @@ export function execScoopRaw(
 
     let stdout = ''
     let stderr = ''
+    let aborted = signal?.aborted ?? false
 
     const stdoutDecoder = iconv.decodeStream('gbk')
     stdoutDecoder.on('data', (text: string) => {
@@ -265,14 +307,10 @@ export function execScoopRaw(
     })
 
     child.on('close', (code) => {
-      resolve({ stdout, stderr, code })
+      resolve({ stdout, stderr, code, aborted })
     })
 
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        child.kill()
-      })
-    }
+    bindAbortSignal(signal, child, () => { aborted = true })
   })
 }
 
