@@ -14,8 +14,11 @@ win:
   icon: build/icons/icon.ico
   compression: normal
 nsis:
-  oneClick: true
-  allowToChangeInstallationDirectory: false
+  oneClick: false
+  perMachine: false
+  selectPerMachineByDefault: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
   createStartMenuShortcut: false
   differentialPackage: true

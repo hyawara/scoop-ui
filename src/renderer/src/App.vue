@@ -78,37 +78,109 @@ const appDownloading = computed(() =>
   updateInfo.value.phase === 'downloading' || updateInfo.value.phase === 'downloaded'
 )
 
-// 静默检查更新：结果由 app:updateEvent 事件流回填，这里只负责触发 + 兜底错误
-// manual=true 表示用户在设置页主动点击，此时抑制右下角全局 toast，反馈就地闭环在设置窗口
+function resetUpdateProgress() {
+  updateInfo.value.percent = 0
+  updateInfo.value.bytesPerSecond = 0
+  updateInfo.value.transferred = 0
+  updateInfo.value.total = 0
+}
+
+function markUpdateError(message: string) {
+  updateInfo.value.phase = 'error'
+  updateInfo.value.checking = false
+  updateInfo.value.error = message
+}
+
+function applyAvailableUpdate(payload: {
+  version?: string
+  notes?: string
+  releaseDate?: string
+  size?: number
+}) {
+  updateInfo.value.phase = 'available'
+  updateInfo.value.hasUpdate = true
+  updateInfo.value.version = payload.version || ''
+  updateInfo.value.notes = payload.notes || ''
+  updateInfo.value.releaseDate = payload.releaseDate || ''
+  updateInfo.value.size = payload.size || 0
+  updateInfo.value.checking = false
+  updateInfo.value.error = ''
+}
+
+function applyNoUpdate(version = '') {
+  updateInfo.value.phase = 'not-available'
+  updateInfo.value.hasUpdate = false
+  updateInfo.value.version = version
+  updateInfo.value.notes = ''
+  updateInfo.value.releaseDate = ''
+  updateInfo.value.size = 0
+  updateInfo.value.checking = false
+  updateInfo.value.error = ''
+  resetUpdateProgress()
+}
+
+// 检查更新只负责“探测”，不负责下载；下载中/已下载时不允许再把状态冲回 checking。
 async function checkForUpdate(manual = false) {
-  if (updateInfo.value.checking) return
+  if (updateInfo.value.checking || updateInfo.value.phase === 'downloading' || updateInfo.value.phase === 'downloaded') return
+
   suppressUpdateToast.value = manual
   updateInfo.value.checking = true
+  updateInfo.value.phase = 'checking'
   updateInfo.value.error = ''
+  resetUpdateProgress()
+
   try {
     const result = await window.scoopAPI.checkForUpdate()
-    if (result.devMode) {
-      // 开发模式无 latest.yml，通过 not-available 反馈给 UI
-      updateInfo.value.phase = 'not-available'
-      updateInfo.value.version = result.version || ''
-      updateInfo.value.checking = false
+    if (result.error) {
+      markUpdateError(result.error)
       return
     }
-    if (result.error) {
-      updateInfo.value.error = result.error
+    if (result.devMode) {
+      // 开发模式没有 latest.yml，明确归入“无更新”，避免按钮一直转圈。
+      applyNoUpdate(result.version || '')
+      return
+    }
+
+    // 主进程事件通常会先到；这里仍做一次兜底，防止 IPC 事件丢失导致 UI 停在 checking。
+    if (result.hasUpdate) {
+      applyAvailableUpdate(result)
+    } else {
+      applyNoUpdate(result.version || '')
     }
   } catch (e) {
-    updateInfo.value.error = e instanceof Error ? e.message : String(e)
+    markUpdateError(e instanceof Error ? e.message : String(e))
   } finally {
     updateInfo.value.checking = false
   }
 }
 
-// 触发差分下载（由用户点击"立即更新"驱动）
+// 下载入口必须单线执行：差分下载会读写 updater 缓存，重复触发可能造成校验失败。
 async function startDownloadUpdate() {
-  const result = await window.scoopAPI.downloadUpdate()
-  if (!result.success && result.error) {
-    updateInfo.value.error = result.error
+  if (updateInfo.value.phase === 'downloading' || updateInfo.value.phase === 'downloaded') return
+  if (!updateInfo.value.hasUpdate && updateInfo.value.phase !== 'available') {
+    markUpdateError('当前没有可下载的应用更新')
+    return
+  }
+
+  updateInfo.value.phase = 'downloading'
+  updateInfo.value.error = ''
+  resetUpdateProgress()
+
+  try {
+    const result = await window.scoopAPI.downloadUpdate()
+    if (!result.success) {
+      markUpdateError(result.error || '更新下载失败')
+      return
+    }
+  } catch (e) {
+    markUpdateError(e instanceof Error ? e.message : String(e))
+    throw e
+  }
+
+  // update-downloaded 事件应当负责最终态；这里是兜底，避免极端情况下按钮一直显示“正在下载”。
+  if (updateInfo.value.phase === 'downloading') {
+    updateInfo.value.phase = 'downloaded'
+    updateInfo.value.percent = 100
   }
 }
 
@@ -120,43 +192,38 @@ function quitAndInstallUpdate() {
 function handleUpdateEvent(evt: UpdateEvent) {
   switch (evt.status) {
     case 'checking':
+      if (updateInfo.value.phase === 'downloading' || updateInfo.value.phase === 'downloaded') break
       updateInfo.value.phase = 'checking'
       updateInfo.value.checking = true
       break
     case 'available':
-      updateInfo.value.phase = 'available'
-      updateInfo.value.hasUpdate = true
-      updateInfo.value.version = evt.version
-      updateInfo.value.notes = evt.notes
-      updateInfo.value.releaseDate = evt.releaseDate
-      updateInfo.value.size = evt.size
-      updateInfo.value.checking = false
+      applyAvailableUpdate(evt)
       break
     case 'not-available':
-      updateInfo.value.phase = 'not-available'
-      updateInfo.value.hasUpdate = false
-      updateInfo.value.version = evt.version
-      updateInfo.value.checking = false
+      applyNoUpdate(evt.version)
       break
     case 'progress':
       updateInfo.value.phase = 'downloading'
+      updateInfo.value.hasUpdate = true
       updateInfo.value.percent = evt.percent
       updateInfo.value.bytesPerSecond = evt.bytesPerSecond
       updateInfo.value.transferred = evt.transferred
       updateInfo.value.total = evt.total
+      updateInfo.value.error = ''
       break
     case 'downloaded':
       updateInfo.value.phase = 'downloaded'
+      updateInfo.value.hasUpdate = true
       updateInfo.value.percent = 100
       updateInfo.value.version = evt.version
       updateInfo.value.notes = evt.notes
       updateInfo.value.releaseDate = evt.releaseDate
       updateInfo.value.size = evt.size
+      updateInfo.value.checking = false
+      updateInfo.value.error = ''
       break
     case 'error':
-      updateInfo.value.phase = 'error'
-      updateInfo.value.checking = false
-      updateInfo.value.error = evt.message
+      markUpdateError(evt.message)
       break
   }
 }
@@ -461,6 +528,14 @@ onMounted(async () => {
   // electron-updater 事件流：统一驱动更新状态机（App 生命周期内常驻）
   window.scoopAPI.onUpdateEvent(handleUpdateEvent)
 
+  // 应用更新检查与 Scoop 环境无关：配置读取完、监听器挂好后立即异步触发。
+  // 不 await，避免网络检查拖慢首屏和 Scoop 数据初始化。
+  if (autoCheckUpdate.value) {
+    window.setTimeout(() => {
+      void checkForUpdate(false)
+    }, 0)
+  }
+
   await appStore.checkScoop()
   if (appStore.scoopStatus.installed) {
     await Promise.all([
@@ -474,11 +549,6 @@ onMounted(async () => {
     // 异步自检：先执行 scoop update（更新 scoop 自身与 buckets），
     // 再执行 scoop status 同步可更新列表。整体异步，不阻塞初始渲染。
     packagesStore.refreshUpdatable()
-
-    // 根据配置决定是否自动检查应用更新
-    if (autoCheckUpdate.value) {
-      checkForUpdate()
-    }
   }
 })
 

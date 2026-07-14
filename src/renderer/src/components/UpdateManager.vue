@@ -53,6 +53,7 @@ watch(() => updateInfo?.value?.hasUpdate, (newVal) => {
 
 async function startDownload() {
   if (!updateInfo?.value?.hasUpdate) return
+  if (updateInfo.value.phase === 'downloading' || updateInfo.value.phase === 'downloaded') return
   try {
     await startDownloadUpdate?.()
   } catch (e: any) {

@@ -80,8 +80,8 @@ const breadcrumbLabel = computed(() => {
 
 const sidebarNav = [
   { key: 'theme', label: '外观模式', icon: ColorPaletteOutline },
-  { key: 'system', label: '系统设置', icon: SettingsOutline },
   { key: 'scoopconfig', label: 'Scoop 配置', icon: TerminalOutline },
+  { key: 'system', label: '系统设置', icon: SettingsOutline },
 ]
 
 // 配色预设直接取自唯一数据源 theme/presets.ts（杜绝多处硬编码漂移）
@@ -159,7 +159,6 @@ const scoopVersionLoading = ref(false)
 
 const updatePhase = computed(() => updateInfo?.value?.phase ?? 'idle')
 const remoteVersion = computed(() => updateInfo?.value?.version ?? '')
-const releaseNotes = computed(() => updateInfo?.value?.notes ?? '')
 const downloadProgress = computed(() => updateInfo?.value?.percent ?? 0)
 
 // ═══ 更新状态机：五态管理 ═══
@@ -220,17 +219,11 @@ async function handleCheckUpdate() {
 }
 
 async function triggerAppUpgrade() {
-  // 立即切换为下载中状态，消除网络连接等待期的无反馈空洞
-  updateInfo.value.phase = 'downloading'
   try {
     await startDownloadUpdate?.()
   } catch (e) {
     message.error(`更新失败: ${e instanceof Error ? e.message : String(e)}`)
   }
-}
-
-function installUpdate() {
-  quitAndInstallUpdate?.()
 }
 
 function restartAndInstall() {

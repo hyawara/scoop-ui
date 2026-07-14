@@ -136,11 +136,12 @@ interface Window {
       version?: string
       notes?: string
       releaseDate?: string
+      size?: number
       error?: string
       devMode?: boolean
     }>
     downloadUpdate: () => Promise<{ success: boolean; error?: string }>
-    quitAndInstall: (options?: { isUpdate?: boolean }) => Promise<void>
+    quitAndInstall: () => Promise<{ success: boolean; error?: string }>
     onUpdateEvent: (callback: (data: UpdateEvent) => void) => void
     removeUpdateEventListener: () => void
   }
