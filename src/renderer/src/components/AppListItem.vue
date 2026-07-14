@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NCheckbox, NButton, NIcon, NPopconfirm } from 'naive-ui'
-import { DownloadOutline, TrashOutline, ArrowUpCircleOutline } from '@vicons/ionicons5'
+import { NCheckbox, NButton, NIcon, NPopconfirm, NTooltip } from 'naive-ui'
+import { DownloadOutline, TrashOutline, ArrowUpCircleOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 
 interface PackageInfo {
   name: string
@@ -19,6 +19,10 @@ defineProps<{
   pinned?: boolean
   newVersion?: string
   active?: boolean
+  resettable?: boolean
+  resetting?: boolean
+  activeVersion?: boolean
+  multiVersionFamily?: string | null
   icon?: string | null
 }>()
 
@@ -30,23 +34,24 @@ const emit = defineEmits<{
   (e: 'select', pkg: PackageInfo): void
   (e: 'show-logs', name: string): void
   (e: 'toggle-pin', name: string): void
+  (e: 'reset', name: string): void
 }>()
 </script>
 
 <template>
   <div
-    class="group flex items-center h-12 px-4 transition-colors duration-150 border-b dark:border-white/[0.04] border-zinc-200 dark:hover:bg-white/[0.02] hover:bg-zinc-100"
+    class="group flex items-center h-12 px-4 transition-colors duration-150 border-b dark:border-white/[0.04] border-zinc-200 dark:hover:bg-white/[0.02] hover:bg-zinc-100 cursor-pointer"
     :class="{
       'opacity-40': disabled,
       'dark:bg-white/[0.04] bg-zinc-100': isSelected,
-      'cursor-pointer': mode === 'search',
       'is-pinned': pinned,
       'is-active': active,
+      'is-active-version': activeVersion && !active,
     }"
-    @click="mode === 'search' && emit('select', pkg)"
+    @click="emit('select', pkg)"
   >
     <!-- 复选框 -->
-    <div v-if="mode !== 'search'" class="flex-shrink-0 w-6">
+    <div v-if="mode !== 'search'" class="flex-shrink-0 w-6" @click.stop>
       <NCheckbox
         :checked="checked"
         @update:checked="emit('toggle-check', pkg.name)"
@@ -72,6 +77,14 @@ const emit = defineEmits<{
       <span v-if="pkg.bucket" class="ml-3 px-2 py-0.5 text-xs font-normal border rounded-md font-mono flex-shrink-0 dark:bg-white/[0.04] dark:border-zinc-700/60 dark:text-zinc-400 bg-zinc-100 border-zinc-200 text-zinc-600">{{ pkg.bucket }}</span>
       <span v-if="pkg.global" class="ml-3 px-2 py-0.5 text-xs font-normal border rounded-md font-mono flex-shrink-0 dark:bg-white/[0.04] dark:border-zinc-700/60 dark:text-zinc-400 bg-zinc-100 border-zinc-200 text-zinc-600">Global</span>
       <span v-if="newVersion && !active" class="ml-3 text-amber-400 text-[12px] font-semibold font-mono flex-shrink-0">→ {{ newVersion }}</span>
+      <span
+        v-if="activeVersion"
+        class="ml-3 px-2 py-0.5 text-[11px] font-medium text-cyan-500 font-mono flex-shrink-0 rounded-md bg-cyan-500/10"
+      >活动</span>
+      <span
+        v-if="resettable && multiVersionFamily"
+        class="ml-3 text-[10px] font-mono flex-shrink-0 dark:text-violet-400/70 text-violet-600/70"
+      >{{ multiVersionFamily }}</span>
       <span v-if="mode === 'search' && isInstalled" class="ml-3 px-2 py-0.5 text-[11px] font-medium dark:text-zinc-500 text-zinc-600 font-mono flex-shrink-0 rounded-md dark:bg-white/[0.04] bg-zinc-100">已安装</span>
     </div>
 
@@ -95,6 +108,28 @@ const emit = defineEmits<{
         >
           <template #icon><NIcon :component="ArrowUpCircleOutline" size="16" /></template>
         </NButton>
+        <!-- 多版本激活按钮：属于 appVersionMaps 家族时常驻显示 -->
+        <NTooltip v-if="mode !== 'search' && resettable">
+          <template #trigger>
+            <NButton
+              text
+              size="small"
+              :loading="resetting"
+              :disabled="resetting"
+              class="!text-zinc-500 dark:!text-zinc-600 hover:!text-cyan-400 dark:hover:!text-cyan-400 transition-colors duration-200 cursor-pointer"
+              title="设为活动版本"
+              @click.stop="emit('reset', pkg.name)"
+            >
+              <template #icon>
+                <NIcon
+                  :component="SwapHorizontalOutline"
+                  size="15"
+                />
+              </template>
+            </NButton>
+          </template>
+          将此版本设为系统的默认活动版本 (scoop reset)
+        </NTooltip>
         <!-- 置顶按钮：静默常驻低亮，Hover 高亮 -->
         <template v-if="mode !== 'search'">
           <button
@@ -196,5 +231,24 @@ const emit = defineEmits<{
   width: 2px;
   background-color: rgb(16 185 129);
   border-radius: 0 2px 2px 0;
+}
+
+/* ─── 当前活动版本：轻微蓝绿色定位，不抢执行中态的绿色高亮 ─── */
+.is-active-version {
+  position: relative;
+  background-color: rgb(6 182 212 / 0.07);
+}
+.is-active-version:hover {
+  background-color: rgb(6 182 212 / 0.11);
+}
+.is-active-version::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background-color: rgb(6 182 212);
+  border-radius: 2px 0 0 2px;
 }
 </style>

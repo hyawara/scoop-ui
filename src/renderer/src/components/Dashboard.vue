@@ -33,8 +33,15 @@ import StorageEnvCard from '@/components/StorageEnvCard.vue'
 import AppListItem from '@/components/AppListItem.vue'
 import BucketDrawer from '@/components/BucketDrawer.vue'
 import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
+import AppDetailDrawer, { type AppDetailPayload } from '@/components/AppDetailDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
-import type { DiscoverApp, AppVersion, AppVersionEntry } from '@/types'
+import {
+  buildMultiVersionIndex,
+  getMultiVersionFamily as getIndexedMultiVersionFamily,
+  isMultiVersionApp as isIndexedMultiVersionApp,
+  type MultiVersionIndex,
+} from '@/utils/multiVersion'
+import type { DiscoverApp, AppVersion, AppVersionEntry, InstallOptions } from '@/types'
 
 const packagesStore = usePackagesStore()
 const settingsStore = useSettingsStore()
@@ -218,6 +225,36 @@ function preloadIcons() {
 const discoverLoading = ref(false)
 // 后台静默同步态：缓存已展示、正在向 scoop search 拉取最新版本时为 true（驱动抽屉右上角微型转圈）
 const discoverRefreshing = ref(false)
+const multiVersionIndex = ref<MultiVersionIndex>(buildMultiVersionIndex(null))
+const resettingSet = ref<Set<string>>(new Set())
+const activeVersionByFamily = ref<Record<string, string>>({})
+
+async function loadAppVersionMaps() {
+  try {
+    const maps = await window.scoopAPI.getConfig('appVersionMaps')
+    multiVersionIndex.value = buildMultiVersionIndex(maps)
+  } catch {
+    multiVersionIndex.value = buildMultiVersionIndex(null)
+  }
+}
+
+function getMultiVersionFamily(appName: string): string | null {
+  return getIndexedMultiVersionFamily(appName, multiVersionIndex.value)
+}
+
+function isMultiVersionApp(appName: string): boolean {
+  return isIndexedMultiVersionApp(appName, multiVersionIndex.value)
+}
+
+function getActiveVersionForFamily(familyKey?: string | null): string | null {
+  if (!familyKey) return null
+  return activeVersionByFamily.value[familyKey] || null
+}
+
+function isActiveMultiVersionApp(appName: string): boolean {
+  const familyKey = getMultiVersionFamily(appName)
+  return !!familyKey && getActiveVersionForFamily(familyKey) === appName
+}
 
 const appWebsites: Record<string, string> = {
   'git': 'https://git-scm.com/',
@@ -305,6 +342,7 @@ async function prefetchAppVersions(app: StoreApp) {
   try {
     const latest = await window.scoopAPI.syncAppVersions(app.name)
     const count = Array.isArray(latest) ? latest.length : 0
+    await loadAppVersionMaps()
     if (count > 0 && selectedDiscoverApp.value?.id === app.name) {
       selectedDiscoverApp.value = buildDiscoverApp(app, toAppVersions(latest, app.name))
     }
@@ -314,10 +352,99 @@ async function prefetchAppVersions(app: StoreApp) {
   }
 }
 loadMVPrefs()
+loadAppVersionMaps()
 
 const showBucketDrawer = ref(false)
 const showDiscoverDrawer = ref(false)
 const selectedDiscoverApp = ref<DiscoverApp | null>(null)
+
+// ─── 通用软件详情抽屉（已安装 / 软件发现共用） ─────────
+const showAppDetailDrawer = ref(false)
+const selectedDetailPkg = ref<AppDetailPayload | null>(null)
+
+function openInstalledDetail(pkg: any) {
+  selectedDetailPkg.value = {
+    name: pkg.name,
+    version: pkg.version,
+    bucket: pkg.bucket,
+    global: pkg.global,
+    icon: iconMap.value[pkg.name] ?? null,
+  }
+  showAppDetailDrawer.value = true
+}
+
+function openStoreAppDetail(app: StoreApp) {
+  selectedDetailPkg.value = {
+    name: app.name,
+    description: app.desc,
+    homepage: appWebsites[app.name] || undefined,
+    icon: iconMap.value[app.name] ?? null,
+  }
+  showAppDetailDrawer.value = true
+}
+
+const detailNewVersion = computed(() => {
+  const name = selectedDetailPkg.value?.name
+  if (!name) return ''
+  return getNewVersion(name)
+})
+
+const detailProcessing = computed(() => {
+  const name = selectedDetailPkg.value?.name
+  if (!name) return false
+  return (
+    storeInstallingSet.value.has(name)
+    || uninstallingSet.value.has(name)
+    || pkgProgress.isCurrent(name)
+  )
+})
+
+async function handleDetailInstall(name: string, options: InstallOptions) {
+  if (storeInstallingSet.value.has(name)) return
+  openTerminal()
+  const s = new Set(storeInstallingSet.value)
+  s.add(name)
+  storeInstallingSet.value = s
+  pkgProgress.startProcessing(name)
+  try {
+    await window.scoopAPI.install(name, options)
+    message.success(`${name} 安装完成`)
+    packagesStore.loadInstalled()
+    showAppDetailDrawer.value = false
+  } catch {
+    message.error(`${name} 安装失败`)
+  } finally {
+    pkgProgress.finishProcessing()
+    const next = new Set(storeInstallingSet.value)
+    next.delete(name)
+    storeInstallingSet.value = next
+  }
+}
+
+async function handleDetailUninstall(name: string, global: boolean) {
+  if (uninstallingSet.value.has(name)) return
+  const s = new Set(uninstallingSet.value)
+  s.add(name)
+  uninstallingSet.value = s
+  try {
+    await window.scoopAPI.uninstall(name, global)
+    await packagesStore.loadInstalled()
+    await packagesStore.loadUpdatable()
+    showAppDetailDrawer.value = false
+    message.success(`${name} 已卸载`)
+  } catch (e: any) {
+    message.error(e?.message || `卸载 ${name} 失败`)
+  } finally {
+    const s2 = new Set(uninstallingSet.value)
+    s2.delete(name)
+    uninstallingSet.value = s2
+  }
+}
+
+function handleDetailUpdate(name: string) {
+  showAppDetailDrawer.value = false
+  runNativeUpdate([name], batchUpdating)
+}
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
 
@@ -478,6 +605,7 @@ const scoopIsProcessing = computed(() =>
   || updatingAll.value
   || storeInstallingSet.value.size > 0
   || uninstallingSet.value.size > 0
+  || resettingSet.value.size > 0
 )
 
 async function storeQuickInstall(pkgName: string) {
@@ -587,6 +715,7 @@ async function openDiscoverDrawer(app: StoreApp) {
     // ── 第三步：无缝刷新 ──
     if (Array.isArray(latest) && latest.length > 0) {
       selectedDiscoverApp.value = buildDiscoverApp(app, toAppVersions(latest, app.name))
+      await loadAppVersionMaps()
     } else if (!hasCache) {
       // 既无缓存又同步无果（如网络异常）→ 兜底单版本，避免空抽屉
       selectedDiscoverApp.value = buildFallbackDiscoverApp(app)
@@ -601,11 +730,17 @@ async function openDiscoverDrawer(app: StoreApp) {
   }
 }
 
+/**
+ * 分类卡片点击：
+ *   - 多版本模式开启 → 打开多版本抽屉；
+ *   - 其余情况（未安装 / 已安装） → 打开统一的通用详情抽屉。
+ * 快速安装、多版本入口仍由右侧独立按钮触发，互不干扰。
+ */
 function handleCardClick(app: StoreApp) {
   if (getMVEnabled(app)) {
     openDiscoverDrawer(app)
-  } else if (!installedNames.value.has(app.name)) {
-    storeQuickInstall(app.name)
+  } else {
+    openStoreAppDetail(app)
   }
 }
 
@@ -630,6 +765,48 @@ async function handleDiscoverInstall(manifestName: string) {
     const next = new Set(storeInstallingSet.value)
     next.delete(manifestName)
     storeInstallingSet.value = next
+  }
+}
+
+async function handleResetActive(appName: string, familyKey?: string) {
+  if (resettingSet.value.has(appName)) return
+
+  const resolvedFamilyKey = familyKey || getMultiVersionFamily(appName)
+  if (!resolvedFamilyKey) {
+    message.warning(`${appName} 未在多版本配置中关联`)
+    return
+  }
+
+  const next = new Set(resettingSet.value)
+  next.add(appName)
+  resettingSet.value = next
+
+  try {
+    const result = await window.scoopAPI.reset(appName)
+    if (!result.success) {
+      throw new Error(result.error || result.stderr || result.stdout || `scoop reset ${appName} 失败`)
+    }
+
+    activeVersionByFamily.value = {
+      ...activeVersionByFamily.value,
+      [resolvedFamilyKey]: appName,
+    }
+
+    await Promise.all([
+      packagesStore.loadInstalled(),
+      packagesStore.loadUpdatable(),
+    ])
+
+    if (selectedDiscoverApp.value) {
+      selectedDiscoverApp.value = { ...selectedDiscoverApp.value }
+    }
+    message.success(`已切换活动版本为 ${appName}`)
+  } catch (e: any) {
+    message.error(e?.message || `切换 ${appName} 活动版本失败`)
+  } finally {
+    const done = new Set(resettingSet.value)
+    done.delete(appName)
+    resettingSet.value = done
   }
 }
 
@@ -990,12 +1167,18 @@ function openBucketDrawer() {
                     :pinned="isPinned(pkg.name)"
                     :new-version="getNewVersion(pkg.name)"
                     :active="pkgProgress.isCurrent(pkg.name)"
+                    :resettable="isMultiVersionApp(pkg.name)"
+                    :resetting="resettingSet.has(pkg.name)"
+                    :active-version="isActiveMultiVersionApp(pkg.name)"
+                    :multi-version-family="getMultiVersionFamily(pkg.name)"
                     :icon="getIcon(pkg.name)"
                     @toggle-check="toggleSelect"
                     @update="handleUpdate"
                     @uninstall="handleUninstall"
+                    @reset="handleResetActive"
                     @show-logs="showPkgLogs"
                     @toggle-pin="togglePin"
+                    @select="openInstalledDetail"
                   />
                 </TransitionGroup>
               </div>
@@ -1112,9 +1295,25 @@ function openBucketDrawer() {
       :app="selectedDiscoverApp"
       :installed-names="installedNames"
       :installing-set="storeInstallingSet"
+      :resetting-set="resettingSet"
+      :active-version-name="getActiveVersionForFamily(selectedDiscoverApp?.id)"
       :loading="discoverLoading"
       :refreshing="discoverRefreshing"
       @install="handleDiscoverInstall"
+      @reset="handleResetActive"
+    />
+
+    <!-- 全局复用的软件详情抽屉：已安装 / 软件发现共用 -->
+    <AppDetailDrawer
+      v-model:show="showAppDetailDrawer"
+      :pkg="selectedDetailPkg"
+      :is-installed="!!selectedDetailPkg && installedNames.has(selectedDetailPkg.name)"
+      :updatable="!!selectedDetailPkg && updatableNames.has(selectedDetailPkg.name)"
+      :new-version="detailNewVersion"
+      :processing="detailProcessing"
+      @install="handleDetailInstall"
+      @uninstall="handleDetailUninstall"
+      @update="handleDetailUpdate"
     />
 
   </div>

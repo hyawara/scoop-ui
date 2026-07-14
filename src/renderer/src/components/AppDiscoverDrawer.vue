@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   NDrawer,
   NDrawerContent,
   NButton,
   NIcon,
   NTag,
+  NTooltip,
   useMessage,
 } from 'naive-ui'
 import {
@@ -14,6 +15,7 @@ import {
   DownloadOutline,
   CheckmarkDoneOutline,
   CubeOutline,
+  RefreshOutline,
 } from '@vicons/ionicons5'
 import type { DiscoverApp, AppVersion } from '@/types'
 
@@ -22,6 +24,8 @@ const props = defineProps<{
   app: DiscoverApp | null
   installedNames: Set<string>
   installingSet: Set<string>
+  resettingSet: Set<string>
+  activeVersionName?: string | null
   loading?: boolean
   refreshing?: boolean
 }>()
@@ -29,10 +33,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
   (e: 'install', manifestName: string): void
+  (e: 'reset', manifestName: string, familyKey: string): void
 }>()
 
 const message = useMessage()
 const copiedVer = ref<string | null>(null)
+const selectedVersionKey = ref<string | null>(null)
 
 function handleClose() {
   emit('update:show', false)
@@ -48,6 +54,10 @@ function getInstallName(version: AppVersion): string {
     : `${version.bucket}/${version.manifestName}`
 }
 
+function getVersionKey(version: AppVersion): string {
+  return `${version.bucket}:${version.manifestName}:${version.version}`
+}
+
 const versionsWithStatus = computed(() => {
   if (!props.app) return []
   return props.app.versions.map(v => ({
@@ -56,10 +66,55 @@ const versionsWithStatus = computed(() => {
   }))
 })
 
+const selectedVersion = computed(() => {
+  if (versionsWithStatus.value.length === 0) return null
+  return versionsWithStatus.value.find(v => getVersionKey(v) === selectedVersionKey.value)
+    || versionsWithStatus.value[0]
+})
+
+watch(
+  () => props.app?.id,
+  () => {
+    selectedVersionKey.value = null
+  },
+)
+
+watch(
+  versionsWithStatus,
+  (versions) => {
+    if (versions.length === 0) {
+      selectedVersionKey.value = null
+      return
+    }
+
+    if (!selectedVersionKey.value || !versions.some(v => getVersionKey(v) === selectedVersionKey.value)) {
+      selectedVersionKey.value = getVersionKey(versions[0])
+    }
+  },
+  { immediate: true },
+)
+
+function selectVersion(version: AppVersion) {
+  selectedVersionKey.value = getVersionKey(version)
+}
+
+function isVersionSelected(version: AppVersion): boolean {
+  return selectedVersion.value ? getVersionKey(selectedVersion.value) === getVersionKey(version) : false
+}
+
 function handleInstall(version: AppVersion) {
   const installName = getInstallName(version)
   if (props.installingSet.has(installName)) return
   emit('install', installName)
+}
+
+function handleReset(version: AppVersion) {
+  if (props.resettingSet.has(version.manifestName)) return
+  emit('reset', version.manifestName, props.app?.id || version.manifestName)
+}
+
+function isActiveVersion(version: AppVersion): boolean {
+  return props.activeVersionName === version.manifestName
 }
 
 async function copyCmd(version: AppVersion) {
@@ -77,9 +132,8 @@ async function copyCmd(version: AppVersion) {
 }
 
 async function copyMainCmd() {
-  if (!props.app || versionsWithStatus.value.length === 0) return
-  const primary = versionsWithStatus.value.find(v => v.bucket === 'main') || versionsWithStatus.value[0]
-  const cmd = `scoop install ${getInstallName(primary)}`
+  if (!props.app || !selectedVersion.value) return
+  const cmd = `scoop install ${getInstallName(selectedVersion.value)}`
   try {
     await navigator.clipboard.writeText(cmd)
     message.success(`命令已复制: ${cmd}`)
@@ -92,7 +146,7 @@ async function copyMainCmd() {
 <template>
   <NDrawer
     v-model:show="props.show"
-    :width="420"
+    :width="530"
     placement="right"
     @update:show="handleClose"
   >
@@ -127,6 +181,36 @@ async function copyMainCmd() {
           <div class="flex-1 min-w-0 pt-0.5">
             <h2 class="text-lg font-bold text-white/90 truncate">{{ app.name }}</h2>
             <p class="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{{ app.description }}</p>
+            <div
+              v-if="selectedVersion"
+              class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-mono"
+            >
+              <span class="px-1.5 py-0.5 rounded-md dark:bg-indigo-500/10 bg-indigo-500/10 dark:text-indigo-300 text-indigo-600">
+                {{ selectedVersion.version }}
+              </span>
+              <span class="px-1.5 py-0.5 rounded-md dark:bg-white/[0.04] bg-black/[0.04] dark:text-zinc-400 text-zinc-500">
+                {{ selectedVersion.bucket }}
+              </span>
+              <span class="px-1.5 py-0.5 rounded-md dark:bg-white/[0.04] bg-black/[0.04] dark:text-zinc-400 text-zinc-500 truncate max-w-[260px]">
+                {{ selectedVersion.manifestName }}
+              </span>
+              <NTag
+                v-if="selectedVersion.isInstalled"
+                size="small"
+                :bordered="false"
+                class="!h-[20px] !px-1.5 !bg-emerald-500/12 !text-emerald-400"
+              >
+                已安装
+              </NTag>
+              <NTag
+                v-if="isActiveVersion(selectedVersion)"
+                size="small"
+                :bordered="false"
+                class="!h-[20px] !px-1.5 !bg-cyan-500/12 !text-cyan-400"
+              >
+                活动
+              </NTag>
+            </div>
           </div>
         </div>
 
@@ -153,39 +237,74 @@ async function copyMainCmd() {
             <div
               v-for="ver in versionsWithStatus"
               :key="`${ver.bucket}-${ver.manifestName}`"
-              class="group bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-3 mb-2 flex justify-between items-center hover:border-zinc-700 transition-all cursor-pointer"
-              @click="handleInstall(ver)"
+              class="group border rounded-xl p-3 mb-2 flex justify-between items-center transition-all cursor-default"
+              :class="isVersionSelected(ver)
+                ? 'dark:bg-indigo-500/10 bg-indigo-50/80 dark:border-indigo-400/40 border-indigo-400/60 shadow-[inset_3px_0_0_rgba(99,102,241,0.72)]'
+                : 'dark:bg-zinc-900/40 bg-white/70 dark:border-zinc-800/60 border-zinc-200/70 hover:dark:border-zinc-700 hover:border-zinc-300'"
+              @click="selectVersion(ver)"
             >
               <!-- 左侧：版本号 + 微型 Bucket 标签 -->
-              <div class="flex items-center min-w-0">
-                <span class="text-zinc-100 font-semibold font-mono truncate">{{ ver.version }}</span>
-                <span class="bg-zinc-800 text-zinc-400 text-[10px] px-1.5 py-0.5 rounded ml-2 flex-shrink-0 font-mono leading-none">{{ ver.bucket }}</span>
+              <div class="flex items-center min-w-0 flex-1">
+                <span class="dark:text-zinc-100 text-zinc-900 font-semibold font-mono truncate">{{ ver.version }}</span>
+                <span class="dark:bg-zinc-800 bg-zinc-100 dark:text-zinc-400 text-zinc-500 text-[10px] px-1.5 py-0.5 rounded ml-2 flex-shrink-0 font-mono leading-none">{{ ver.bucket }}</span>
               </div>
 
               <!-- 右侧：真实 Scoop 内部包名 + 操作 -->
-              <div class="flex items-center gap-2 flex-shrink-0 pl-3">
-                <span class="text-zinc-500 text-[12px] font-mono truncate max-w-[120px]">{{ ver.manifestName }}</span>
+              <div class="flex items-center gap-2 flex-shrink min-w-0 pl-3">
+                <span class="dark:text-zinc-500 text-zinc-500 text-[12px] font-mono truncate min-w-[96px] max-w-[220px] sm:max-w-[260px]">{{ ver.manifestName }}</span>
 
                 <template v-if="ver.isInstalled">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                  <span class="text-[11px] text-emerald-500/80 font-mono hidden sm:inline">已安装</span>
+                  <NTag
+                    size="small"
+                    :bordered="false"
+                    class="!h-6 !px-2 !bg-emerald-500/12 !text-emerald-400 !font-mono"
+                  >
+                    已安装
+                  </NTag>
+                  <NTag
+                    v-if="isActiveVersion(ver)"
+                    size="small"
+                    :bordered="false"
+                    class="!h-6 !px-2 !bg-cyan-500/12 !text-cyan-400 !font-mono"
+                  >
+                    活动
+                  </NTag>
+                  <NTooltip>
+                    <template #trigger>
+                      <NButton
+                        type="primary"
+                        secondary
+                        size="tiny"
+                        :loading="resettingSet.has(ver.manifestName)"
+                        :disabled="resettingSet.has(ver.manifestName)"
+                        class="!rounded-md opacity-75 hover:opacity-100 !transition-opacity cursor-pointer"
+                        @click.stop="handleReset(ver)"
+                      >
+                        <template #icon><NIcon :component="RefreshOutline" size="13" /></template>
+                        设为活动
+                      </NButton>
+                    </template>
+                    将此版本设为系统的默认活动版本 (scoop reset)
+                  </NTooltip>
                 </template>
                 <template v-else>
                   <NButton
-                    text
+                    secondary
                     size="tiny"
                     :loading="installingSet.has(getInstallName(ver))"
                     :disabled="installingSet.has(getInstallName(ver))"
-                    class="!text-zinc-500 hover:!text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                    class="!rounded-md opacity-70 hover:opacity-100 !transition-opacity cursor-pointer"
                     @click.stop="handleInstall(ver)"
                   >
                     <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
+                    安装
                   </NButton>
                 </template>
                 <NButton
                   text
                   size="tiny"
-                  class="!text-zinc-600 hover:!text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                  title="复制安装命令"
+                  class="!text-zinc-600 hover:!text-cyan-400 opacity-60 hover:opacity-100 transition-opacity duration-150 cursor-pointer"
                   @click.stop="copyCmd(ver)"
                 >
                   <template #icon>

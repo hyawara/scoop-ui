@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join, dirname } from 'path'
 import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -62,6 +62,28 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // 拦截所有 window.open / target="_blank" / a[href] 触发的新窗口请求：
+  // - http(s) 协议一律交由系统默认浏览器打开，杜绝弹出内嵌 BrowserWindow
+  // - 其他协议（file://、javascript:、about: 等）一律 deny，避免协议逃逸
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    if (/^https?:\/\//i.test(details.url)) {
+      shell.openExternal(details.url).catch(() => { /* 静默失败 */ })
+    }
+    return { action: 'deny' }
+  })
+
+  // 双保险：拦截主 frame 内的顶层导航（例如 <a> 未设 target 但被点击时）
+  // 若目标是 http(s) 外链，则阻止内嵌加载并交由系统浏览器打开
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!mainWindow) return
+    const currentUrl = mainWindow.webContents.getURL()
+    // 允许开发环境 HMR / 应用自身的路由跳转，仅拦截跨源 http(s)
+    if (/^https?:\/\//i.test(url) && !url.startsWith(currentUrl)) {
+      event.preventDefault()
+      shell.openExternal(url).catch(() => { /* 静默失败 */ })
+    }
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null

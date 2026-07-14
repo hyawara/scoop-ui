@@ -393,6 +393,32 @@ export function registerScoopIPC(): void {
     })
   })
 
+  // Reset / activate an installed package version (`scoop reset <appname>`)
+  ipcMain.handle('scoop:reset', async (event, name: string) => {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-+]{0,100}$/.test(name)) {
+      throw new Error('Invalid package name')
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { stdout, stderr, code } = await execScoopRaw(['reset', name], (data, stream) => {
+      sendProgress(win, {
+        type: 'message',
+        package: name,
+        stream,
+        message: data,
+      })
+    })
+
+    return {
+      success: code === 0,
+      package: name,
+      code,
+      stdout,
+      stderr,
+      error: code === 0 ? undefined : ((stderr || stdout).trim() || `scoop reset exited with code ${code}`),
+    }
+  })
+
   // Uninstall a package
   ipcMain.handle('scoop:uninstall', async (event, name: string, global?: boolean) => {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {

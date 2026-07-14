@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   fetchPackageInfo: (name: string) => ipcRenderer.invoke('scoop:info', name),
   install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) =>
     ipcRenderer.invoke('scoop:install', name, options),
+  reset: (appName: string) => ipcRenderer.invoke('scoop:reset', appName),
   uninstall: (name: string, global?: boolean) =>
     ipcRenderer.invoke('scoop:uninstall', name, global),
   update: (name?: string) => ipcRenderer.invoke('scoop:update', name),

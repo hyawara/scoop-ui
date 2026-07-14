@@ -47,6 +47,15 @@ interface UpdateResult {
   verifyError?: string
 }
 
+interface ResetResult {
+  success: boolean
+  package: string
+  code?: number | null
+  stdout: string
+  stderr: string
+  error?: string
+}
+
 // 主进程 electron-updater 统一推送的更新事件（与 src/main/ipc/updater.ts 保持一致）
 type UpdateEvent =
   | { status: 'checking' }
@@ -68,6 +77,7 @@ interface Window {
     getAppVersions: (appName: string) => Promise<{ name: string; version: string; bucket: string }[]>
     fetchPackageInfo: (name: string) => Promise<{ description?: string; homepage?: string; license?: string; version?: string }>
     install: (name: string, options?: InstallOptions) => Promise<void>
+    reset: (appName: string) => Promise<ResetResult>
     uninstall: (name: string, global?: boolean) => Promise<void>
     update: (name?: string | string[]) => Promise<UpdateResult>
     updateSelf: () => Promise<{ success: boolean; stdout: string; stderr: string }>
