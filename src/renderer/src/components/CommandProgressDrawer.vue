@@ -1,19 +1,14 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import {
-  NBadge,
   NButton,
-  NCollapse,
-  NCollapseItem,
   NDrawer,
   NDrawerContent,
   NIcon,
   NPopconfirm,
-  NSpin,
   useMessage,
 } from 'naive-ui'
 import {
-  CheckmarkDoneOutline,
   DocumentTextOutline,
   DownloadOutline,
   StopCircleOutline,
@@ -29,6 +24,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
 }>()
+
+// ─────────────────────────── 数据结构 ───────────────────────────
 
 interface CommandTask {
   id: number
@@ -49,11 +46,16 @@ interface PipelineTask {
   type: 'install' | 'update' | 'uninstall' | 'message'
   status: 'waiting' | 'running' | 'success' | 'error'
   versionInfo?: string
-  latestLine?: string
   order: number
 }
 
-const MAX_LINES = 5000
+interface UiLogLine {
+  id: number
+  text: string
+  rowClass: string
+}
+
+const MAX_LINES = 8000
 const LOCAL_TERMINAL_LOG_EVENT = 'scoop-ui:terminal-log'
 
 const message = useMessage()
@@ -62,26 +64,41 @@ const injectedFontFamily = inject<Ref<string> | string>('fontFamily', '')
 const drawerFontFamily = computed(() =>
   typeof injectedFontFamily === 'string' ? injectedFontFamily : injectedFontFamily.value
 )
+
+// 双通道日志：rawLogs 是 100% 原始终端行（导出使用），uiLogs 是清洗高亮后的展示行。
 const rawLogs = ref<string[]>([])
 const commandState = ref<CommandState>({ active: false, count: 0, tasks: [] })
 const abortingCommand = ref(false)
+const logContainerRef = ref<HTMLElement | null>(null)
+const autoScroll = ref(true)
 
 const visible = computed({
   get: () => props.show,
   set: (value) => emit('update:show', value),
 })
 
-const ansiPattern = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
+// ─────────────────────────── 日志清洗与着色 ───────────────────────────
+
+// 用 String.fromCharCode(27) 避免源码里出现字面控制符
+const ansiPattern = new RegExp(String.fromCharCode(27) + '(?:[@-Z\\\\-_]|\\[[0-?]*[ -/]*[@-~])', 'g')
+
+// 高亮匹配语义
+const errorPattern = /\b(?:ERROR|ERR!|WARN|failed|failure|fatal|exception|aborted|denied|permission|EPERM|EACCES|ENOENT|ETIMEDOUT|ECONNRESET|hash check failed|couldn'?t|cannot|can't|not found)\b/i
+const successPattern = /\bwas\s+(?:installed|updated|uninstalled)\s+successfully!?|\bsuccessfully!?$|\b(completed|done)\b/i
+const activePattern = /\b(Updating|Installing|Uninstalling|Extracting|Linking|Unlinking|Downloading)\b/i
+const downloadProgressPattern = /download:\s*\[[#=\->_ .]+/i
+const progressPattern = /^\s*(?:\[?[#=\->_ ]{3,}\]?|\d{1,3}%|\d+(?:\.\d+)?\s*[KMG]?i?B\/s)/i
+
+// 流水线聚合用
 const updateHeaderPattern = /^Updating\s+'([^']+)'\s*(?:\((.+)\))?/i
 const installHeaderPattern = /^Installing\s+'([^']+)'(?:\s+\((.+)\))?/i
 const uninstallHeaderPattern = /^Uninstalling\s+'?([^'\s]+)'?/i
 const batchUpdatePattern = /Updating\s+\d+\s+outdated\s+apps?:\s*(.+)$/i
-const successPattern = /\bwas\s+(?:installed|updated|uninstalled)\s+successfully!?\b|\bsuccessfully!?$/i
-const errorPattern = /(?:^|\b)(?:ERROR:?|ERR!|ERR\b|error\b|failed\b|failure\b|fatal\b|exception\b|aborted\b|denied\b|permission\b|EPERM\b|EACCES\b|ENOENT\b|ETIMEDOUT\b|ECONNRESET\b|hash check failed|couldn'?t|cannot|can't|not found)\b/i
-const downloadPattern = /\b(?:Downloading|Downloading new version|Starting download with aria2)\b/i
-const extractPattern = /\bExtracting\b/i
-const linkPattern = /\b(?:Linking|Unlinking)\b/i
 
+/**
+ * 清洗单行：剥离 ANSI、去除开发调试前缀（ERROR RAW: stdout/stderr）与首尾反引号/空白。
+ * 保留原始文本语义，不做任何截断，绝不吞行。
+ */
 function sanitizeLogLine(line: string): string {
   return line
     .replace(ansiPattern, '')
@@ -90,38 +107,42 @@ function sanitizeLogLine(line: string): string {
     .replace(/^ERROR RAW:\s*/i, '')
     .replace(/^(?:stdout|stderr):\s*/i, '')
     .replace(/^`+|`+$/g, '')
-    .replace(/^\s*/, '')
-    .trim()
+    .trimEnd()
 }
 
-const sanitizedLogs = computed(() =>
-  rawLogs.value
-    .map(sanitizeLogLine)
-    .filter((line) => line.length > 0)
-)
+const uiLogs = computed<UiLogLine[]>(() => {
+  const result: UiLogLine[] = []
+  const base = 'log-line'
+  for (let i = 0; i < rawLogs.value.length; i++) {
+    const text = sanitizeLogLine(rawLogs.value[i])
+    if (!text) continue
 
-const hasLogs = computed(() => sanitizedLogs.value.length > 0)
-const hasError = computed(() => sanitizedLogs.value.some((line) => errorPattern.test(line)))
+    let rowClass = `${base} log-line--default`
+    if (errorPattern.test(text)) {
+      rowClass = `${base} log-line--error`
+    } else if (successPattern.test(text)) {
+      rowClass = `${base} log-line--success`
+    } else if (downloadProgressPattern.test(text) || progressPattern.test(text)) {
+      rowClass = `${base} log-line--progress`
+    } else if (activePattern.test(text)) {
+      rowClass = `${base} log-line--active`
+    }
+
+    result.push({ id: i, text, rowClass })
+  }
+  return result
+})
+
+const hasLogs = computed(() => uiLogs.value.length > 0)
+const hasError = computed(() => uiLogs.value.some((line) => line.rowClass.includes('log-line--error')))
+
+// ─────────────────────────── 任务流水线聚合 ───────────────────────────
 
 const drawerPhase = computed<'idle' | 'running' | 'success' | 'error'>(() => {
   if (commandState.value.active) return 'running'
   if (hasError.value) return 'error'
   if (hasLogs.value) return 'success'
   return 'idle'
-})
-
-const headerText = computed(() => {
-  if (drawerPhase.value === 'running') return '正在处理任务队列...'
-  if (drawerPhase.value === 'success') return '任务全部完成'
-  if (drawerPhase.value === 'error') return '任务执行中断 / 发生错误'
-  return '等待任务'
-})
-
-const headerBadgeType = computed<'default' | 'info' | 'success' | 'error'>(() => {
-  if (drawerPhase.value === 'running') return 'info'
-  if (drawerPhase.value === 'success') return 'success'
-  if (drawerPhase.value === 'error') return 'error'
-  return 'default'
 })
 
 function splitPackageList(raw: string): string[] {
@@ -134,26 +155,8 @@ function splitPackageList(raw: string): string[] {
 function parseSuccessApp(line: string): string {
   const quoted = line.match(/'([^']+)'\s+was\s+(?:installed|updated|uninstalled)\s+successfully/i)
   if (quoted?.[1]) return quoted[1]
-
   const loose = line.match(/^([A-Za-z0-9._+/-]+)\s+was\s+(?:installed|updated|uninstalled)\s+successfully/i)
   return loose?.[1] || ''
-}
-
-function taskActionLabel(task: PipelineTask): string {
-  if (task.status === 'success') {
-    if (task.type === 'install') return '已安装成功'
-    if (task.type === 'uninstall') return '已卸载成功'
-    if (task.type === 'update') return '已更新成功'
-    return '已完成'
-  }
-  if (task.status === 'error') return '发生异常'
-  if (task.status === 'running') {
-    if (task.type === 'install') return '当前正在安装'
-    if (task.type === 'uninstall') return '当前正在卸载'
-    if (task.type === 'update') return '当前正在更新'
-    return '当前正在执行'
-  }
-  return '等待中'
 }
 
 const pipelineTasks = computed<PipelineTask[]>(() => {
@@ -177,14 +180,7 @@ const pipelineTasks = computed<PipelineTask[]>(() => {
       }
       return existing
     }
-
-    const task: PipelineTask = {
-      name,
-      type,
-      status,
-      versionInfo,
-      order: order++,
-    }
+    const task: PipelineTask = { name, type, status, versionInfo, order: order++ }
     map.set(key, task)
     return task
   }
@@ -196,8 +192,10 @@ const pipelineTasks = computed<PipelineTask[]>(() => {
     }
   }
 
-  for (const line of sanitizedLogs.value) {
-    const batchMatch = line.match(batchUpdatePattern)
+  for (const line of uiLogs.value) {
+    const text = line.text
+
+    const batchMatch = text.match(batchUpdatePattern)
     if (batchMatch?.[1]) {
       for (const name of splitPackageList(batchMatch[1])) {
         ensureTask(name, 'update', 'waiting')
@@ -205,49 +203,42 @@ const pipelineTasks = computed<PipelineTask[]>(() => {
       continue
     }
 
-    const updateMatch = line.match(updateHeaderPattern)
+    const updateMatch = text.match(updateHeaderPattern)
     if (updateMatch?.[1]) {
-      const task = ensureTask(updateMatch[1], 'update', 'running', updateMatch[2]?.replace(/\s*->\s*/g, ' -> '))
+      const task = ensureTask(updateMatch[1], 'update', 'running', updateMatch[2]?.replace(/\s*->\s*/g, ' → '))
       task.status = 'running'
-      task.latestLine = line
       activeTaskName = task.name
       continue
     }
 
-    const installMatch = line.match(installHeaderPattern)
+    const installMatch = text.match(installHeaderPattern)
     if (installMatch?.[1]) {
       const task = ensureTask(installMatch[1], 'install', 'running', installMatch[2])
       task.status = 'running'
-      task.latestLine = line
       activeTaskName = task.name
       continue
     }
 
-    const uninstallMatch = line.match(uninstallHeaderPattern)
+    const uninstallMatch = text.match(uninstallHeaderPattern)
     if (uninstallMatch?.[1]) {
       const task = ensureTask(uninstallMatch[1], 'uninstall', 'running')
       task.status = 'running'
-      task.latestLine = line
       activeTaskName = task.name
       continue
     }
 
-    if (successPattern.test(line)) {
-      const successApp = parseSuccessApp(line) || activeTaskName
+    if (successPattern.test(text)) {
+      const successApp = parseSuccessApp(text) || activeTaskName
       if (successApp) {
         const task = ensureTask(successApp)
         task.status = 'success'
-        task.latestLine = line
       }
       continue
     }
 
-    if (errorPattern.test(line) && activeTaskName) {
+    if (line.rowClass.includes('log-line--error') && activeTaskName) {
       const task = ensureTask(activeTaskName)
       task.status = 'error'
-      task.latestLine = line
-    } else if (activeTaskName) {
-      ensureTask(activeTaskName).latestLine = line
     }
   }
 
@@ -271,113 +262,74 @@ const pipelineTasks = computed<PipelineTask[]>(() => {
   return tasks
 })
 
+const runningTaskCount = computed(() => pipelineTasks.value.filter((task) => task.status === 'running').length)
 const completedTaskCount = computed(() => pipelineTasks.value.filter((task) => task.status === 'success').length)
 const failedTaskCount = computed(() => pipelineTasks.value.filter((task) => task.status === 'error').length)
 
-const currentAction = computed(() => {
-  let appName = ''
-  let statusText = '准备中...'
-  let detailText = ''
-
-  for (let index = sanitizedLogs.value.length - 1; index >= 0; index--) {
-    const line = sanitizedLogs.value[index]
-
-    if (!detailText && (line.includes('aria2') || downloadPattern.test(line))) {
-      detailText = line
-    }
-
-    const updateMatch = line.match(updateHeaderPattern)
-    if (updateMatch?.[1]) {
-      appName = updateMatch[1]
-      if (statusText === '准备中...') statusText = '正在更新...'
-      break
-    }
-
-    const installMatch = line.match(installHeaderPattern)
-    if (installMatch?.[1]) {
-      appName = installMatch[1]
-      if (statusText === '准备中...') statusText = '正在安装...'
-      break
-    }
-
-    if (line.includes('Downloading new version')) {
-      statusText = '正在下载新版本...'
-      continue
-    }
-    if (line.includes('Starting download with aria2')) {
-      statusText = '正在通过 aria2 高速下载...'
-      continue
-    }
-    if (extractPattern.test(line)) {
-      statusText = '正在解压安装包...'
-      continue
-    }
-    if (linkPattern.test(line)) {
-      statusText = '正在创建系统软链接...'
-      continue
-    }
-    if (successPattern.test(line)) {
-      statusText = '正在收尾并校验结果...'
-      continue
-    }
-    if (errorPattern.test(line)) {
-      statusText = '任务执行出现异常'
-      detailText = line
-      continue
-    }
+const headerSummary = computed(() => {
+  const total = pipelineTasks.value.length
+  if (drawerPhase.value === 'idle') return '等待任务'
+  if (drawerPhase.value === 'running') {
+    return `${runningTaskCount.value} 个正在运行 / ${failedTaskCount.value} 个异常 / ${total} 总计`
   }
-
-  const runningTask = pipelineTasks.value.find((task) => task.status === 'running')
-  if (!appName && runningTask) appName = runningTask.name
-  if (!detailText && runningTask?.latestLine) detailText = runningTask.latestLine
-
-  if (drawerPhase.value === 'success') {
-    statusText = '任务全部完成'
-    detailText = `${completedTaskCount.value || pipelineTasks.value.length || 1} 个任务已完成`
-  } else if (drawerPhase.value === 'idle') {
-    statusText = '等待 Scoop 输出'
-    detailText = '开始安装或更新后，这里会展示当前动作'
-  }
-
-  return { appName, statusText, detailText }
+  if (drawerPhase.value === 'success') return `任务全部完成 · ${completedTaskCount.value} / ${total}`
+  return `任务异常中断 · ${failedTaskCount.value} 失败 / ${total}`
 })
 
-function logLineKind(line: string): 'error' | 'active' | 'success' | 'normal' {
-  if (errorPattern.test(line)) return 'error'
-  if (successPattern.test(line)) return 'success'
-  if (downloadPattern.test(line) || extractPattern.test(line) || linkPattern.test(line)) return 'active'
-  return 'normal'
-}
+const headerLabel = computed(() => {
+  if (drawerPhase.value === 'running') return '任务状态'
+  if (drawerPhase.value === 'success') return '任务完成'
+  if (drawerPhase.value === 'error') return '任务异常'
+  return '任务队列'
+})
 
+const headerLabelClass = computed(() => {
+  if (drawerPhase.value === 'running') return 'text-sky-300'
+  if (drawerPhase.value === 'success') return 'text-emerald-300'
+  if (drawerPhase.value === 'error') return 'text-rose-300'
+  return 'text-zinc-400'
+})
+
+// ─────────────────────────── 原始日志接入 ───────────────────────────
+
+/**
+ * 追加主进程推送的行段到 rawLogs。主进程已按 \r / \n 边界切段，这里只做追加/覆盖。
+ *  - 独立 \r 段：进度覆盖 —— 覆盖 rawLogs 尾行
+ *  - \n 结尾段：完整行落定入队
+ *  - 无边界结尾段：拼接到尾行（继续攒下一段边界）
+ */
 function appendRawChunk(chunk: string) {
   if (!chunk) return
   const normalized = chunk.replace(/\r\n/g, '\n')
-  const next = [...rawLogs.value]
+  const next = rawLogs.value.slice()
 
-  if (normalized.includes('\r') && !normalized.includes('\n')) {
-    const latest = normalized.slice(normalized.lastIndexOf('\r') + 1)
-    if (next.length === 0) next.push(latest)
-    else next[next.length - 1] = latest
+  if (normalized.endsWith('\r') && !normalized.includes('\n')) {
+    const body = normalized.slice(0, -1)
+    if (next.length === 0) next.push(body)
+    else next[next.length - 1] = body
     rawLogs.value = next.slice(-MAX_LINES)
     return
   }
 
-  let current = next.pop() ?? ''
+  let current = ''
   for (const char of normalized) {
-    if (char === '\r') {
+    if (char === '\n') {
+      next.push(current)
       current = ''
       continue
     }
-    if (char === '\n') {
+    if (char === '\r') {
       next.push(current)
       current = ''
       continue
     }
     current += char
   }
-  next.push(current)
+  if (current.length > 0) next.push(current)
   rawLogs.value = next.slice(-MAX_LINES)
 }
+
+// ─────────────────────────── 交互 ───────────────────────────
 
 function handleClear() {
   rawLogs.value = []
@@ -385,9 +337,10 @@ function handleClear() {
 }
 
 function handleExport() {
-  const content = sanitizedLogs.value.join('\n')
+  // 严格使用 100% 原始日志导出，界面高亮不影响文件内容
+  const content = rawLogs.value.join('\n')
   const blob = new Blob([
-    `=== Scoop UI 执行日志 ===\n导出时间: ${new Date().toLocaleString()}\n\n${content}`,
+    `=== Scoop UI 执行日志（终端原文） ===\n导出时间: ${new Date().toLocaleString()}\n\n${content}`,
   ], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -395,7 +348,7 @@ function handleExport() {
   link.download = `scoop-task-log-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.txt`
   link.click()
   URL.revokeObjectURL(url)
-  message.success('日志已导出')
+  message.success('日志已导出（终端原文）')
 }
 
 function handleClose() {
@@ -442,6 +395,72 @@ function handleLogEnd() {
   void refreshCommandState()
 }
 
+function taskStatusText(task: PipelineTask): string {
+  if (task.status === 'success') {
+    if (task.type === 'install') return '已安装'
+    if (task.type === 'uninstall') return '已卸载'
+    if (task.type === 'update') return '已更新'
+    return '已完成'
+  }
+  if (task.status === 'error') return '异常'
+  if (task.status === 'running') {
+    if (task.type === 'install') return '安装中'
+    if (task.type === 'uninstall') return '卸载中'
+    if (task.type === 'update') return '更新中'
+    return '执行中'
+  }
+  return '等待中'
+}
+
+function taskDotIcon(task: PipelineTask): string {
+  if (task.status === 'success') return '🟢'
+  if (task.status === 'error') return '🔴'
+  if (task.status === 'running') return '🔵'
+  return '⚪'
+}
+
+// ─────────────────────────── 自动滚动置底（平滑追踪） ───────────────────────────
+
+function isNearBottom(el: HTMLElement | null, threshold = 80): boolean {
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+}
+
+function scrollToBottom(smooth = true) {
+  const el = logContainerRef.value
+  if (!el) return
+  el.scrollTo({
+    top: el.scrollHeight,
+    behavior: smooth ? 'smooth' : 'auto',
+  })
+}
+
+function handleScroll() {
+  autoScroll.value = isNearBottom(logContainerRef.value)
+}
+
+watch(
+  () => rawLogs.value.length,
+  () => {
+    if (!autoScroll.value) return
+    void nextTick(() => scrollToBottom(true))
+  }
+)
+
+watch(
+  () => props.show,
+  (next) => {
+    if (next) {
+      void nextTick(() => {
+        autoScroll.value = true
+        scrollToBottom(false)
+      })
+    }
+  }
+)
+
+// ─────────────────────────── 生命周期 ───────────────────────────
+
 onMounted(() => {
   refreshCommandState()
   window.addEventListener(LOCAL_TERMINAL_LOG_EVENT, handleLocalTerminalLog)
@@ -470,149 +489,79 @@ onBeforeUnmount(() => {
     placement="right"
     :mask-closable="!commandState.active"
     :close-on-esc="!commandState.active"
+    display-directive="show"
   >
     <NDrawerContent
       :native-scrollbar="false"
-      body-content-style="padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden"
+      header-style="display:none"
+      body-content-style="padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0d10"
     >
-      <template #header>
-        <div class="flex items-center justify-between w-full pr-1">
-          <div class="flex items-center gap-3 min-w-0">
-            <NBadge dot :processing="drawerPhase === 'running'" :type="headerBadgeType" />
-            <div class="min-w-0">
-              <div class="text-sm font-semibold text-zinc-100 tracking-tight">{{ headerText }}</div>
-              <div class="text-[11px] text-zinc-500 font-mono">
-                {{ pipelineTasks.length }} tasks / {{ sanitizedLogs.length }} logs
-              </div>
-            </div>
-          </div>
-          <div
-            class="hidden sm:flex items-center gap-2 rounded-md border border-amber-400/15 bg-amber-400/[0.06] px-2.5 py-1 text-[11px] font-medium text-amber-200/80"
-          >
-            Task Pipeline
-          </div>
-        </div>
-      </template>
-
       <div
-        class="command-drawer-shell flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-[#10100e] text-zinc-200"
+        class="cmd-shell"
         :style="{ fontFamily: drawerFontFamily }"
       >
-        <div class="p-4 space-y-4">
-          <section class="current-action-card">
-            <div class="flex items-start gap-4">
-              <div class="spin-orbit">
-                <NSpin v-if="drawerPhase === 'running'" size="medium" />
-                <NIcon
-                  v-else-if="drawerPhase === 'success'"
-                  :component="CheckmarkDoneOutline"
-                  size="24"
-                  class="text-emerald-300"
-                />
-                <NIcon
-                  v-else-if="drawerPhase === 'error'"
-                  :component="StopCircleOutline"
-                  size="24"
-                  class="text-rose-300"
-                />
-                <span v-else class="idle-dot" />
-              </div>
-
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="text-[11px] uppercase tracking-[0.18em] text-amber-200/60">Current Action</span>
-                  <span v-if="currentAction.appName" class="action-chip">{{ currentAction.appName }}</span>
-                </div>
-                <div class="text-[20px] leading-tight font-semibold text-zinc-50 tracking-tight">
-                  {{ currentAction.statusText }}
-                </div>
-                <div class="mt-3 h-6 overflow-hidden rounded-md border border-white/[0.06] bg-zinc-950/55">
-                  <div class="log-crawl px-3 py-1 text-[12px] font-mono text-zinc-400 whitespace-nowrap">
-                    {{ currentAction.detailText || '等待下一条关键日志...' }}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="pipeline-panel">
-            <div class="flex items-center justify-between gap-3 px-1">
-              <div>
-                <h3 class="text-sm font-semibold text-zinc-100">任务流水线</h3>
-                <p class="text-[12px] text-zinc-500 mt-0.5">
-                  {{ completedTaskCount }} 完成 / {{ failedTaskCount }} 异常 / {{ pipelineTasks.length }} 总计
-                </p>
-              </div>
+        <!-- ─── 顶栏：任务流水线充当 Header ─────────────────────────── -->
+        <header class="pipeline-header">
+          <div class="pipeline-header__row">
+            <div class="pipeline-header__title min-w-0">
+              <span class="pipeline-header__label" :class="headerLabelClass">{{ headerLabel }}</span>
+              <span class="pipeline-header__arrow">➔</span>
+              <span class="pipeline-header__summary">{{ headerSummary }}</span>
             </div>
 
-            <div v-if="pipelineTasks.length === 0" class="pipeline-empty">
-              <NIcon :component="DocumentTextOutline" size="22" />
-              <span>等待 Scoop 任务进入队列</span>
+            <div class="pipeline-header__badge" :class="drawerPhase === 'running' ? 'is-live' : 'is-idle'">
+              <span class="live-dot" />
+              <span>Live Stream</span>
             </div>
+          </div>
 
-            <div v-else class="mt-3 space-y-2">
-              <div
-                v-for="task in pipelineTasks"
-                :key="`${task.type}:${task.name}`"
-                class="pipeline-item"
-                :class="`pipeline-item--${task.status}`"
-              >
-                <div class="pipeline-icon">
-                  <NSpin v-if="task.status === 'running'" size="small" />
-                  <NIcon
-                    v-else-if="task.status === 'success'"
-                    :component="CheckmarkDoneOutline"
-                    size="18"
-                  />
-                  <NIcon
-                    v-else-if="task.status === 'error'"
-                    :component="StopCircleOutline"
-                    size="18"
-                  />
-                  <span v-else class="waiting-ring" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <span class="truncate text-sm font-semibold">{{ task.name }}</span>
-                    <span v-if="task.versionInfo" class="version-pill">{{ task.versionInfo }}</span>
-                  </div>
-                  <div class="mt-0.5 truncate text-[12px] opacity-75">
-                    {{ taskActionLabel(task) }}
-                    <template v-if="task.latestLine"> · {{ task.latestLine }}</template>
-                  </div>
-                </div>
-              </div>
+          <div v-if="pipelineTasks.length > 0" class="pipeline-chips">
+            <div
+              v-for="task in pipelineTasks"
+              :key="`${task.type}:${task.name}`"
+              class="chip"
+              :class="`chip--${task.status}`"
+              :title="`${task.name}${task.versionInfo ? ' ' + task.versionInfo : ''} · ${taskStatusText(task)}`"
+            >
+              <span class="chip__dot">{{ taskDotIcon(task) }}</span>
+              <span class="chip__name">{{ task.name }}</span>
+              <span class="chip__status">{{ taskStatusText(task) }}</span>
             </div>
-          </section>
+          </div>
+        </header>
 
-          <NCollapse arrow-placement="right" display-directive="show" class="raw-log-collapse">
-            <NCollapseItem name="raw">
-              <template #header>
-                <div class="flex items-center gap-2">
-                  <NIcon :component="DocumentTextOutline" size="15" />
-                  <span class="text-sm font-medium">高级日志</span>
-                  <span class="text-[11px] text-zinc-500 font-mono">{{ sanitizedLogs.length }} lines</span>
-                </div>
-              </template>
+        <!-- ─── 主体：无缝平铺的真·控制台 ─────────────────────────── -->
+        <div
+          ref="logContainerRef"
+          class="terminal"
+          @scroll="handleScroll"
+        >
+          <div v-if="!hasLogs" class="terminal__empty">
+            <span class="cursor">█</span>
+            <span class="ml-2">等待 Scoop 输出...</span>
+          </div>
 
-              <div v-if="sanitizedLogs.length === 0" class="raw-log-empty">
-                还没有可展示的日志。
-              </div>
-              <div v-else class="raw-log-box">
-                <div
-                  v-for="(line, index) in sanitizedLogs"
-                  :key="`${index}:${line}`"
-                  class="raw-log-line"
-                  :class="`raw-log-line--${logLineKind(line)}`"
-                >
-                  {{ line }}
-                </div>
-              </div>
-            </NCollapseItem>
-          </NCollapse>
+          <div v-else class="terminal__stream">
+            <div
+              v-for="line in uiLogs"
+              :key="line.id"
+              :class="line.rowClass"
+            >{{ line.text }}</div>
+          </div>
         </div>
+
+        <!-- ─── 悬浮"跳至最新"按钮：用户上翻时才浮出 ─── -->
+        <button
+          v-if="!autoScroll && hasLogs"
+          class="scroll-follow"
+          type="button"
+          @click="() => { autoScroll = true; scrollToBottom(true) }"
+        >
+          跳至最新 ↓
+        </button>
       </div>
 
+      <!-- ─── 底部：操作栏 ─────────────────────────── -->
       <template #footer>
         <div class="flex items-center justify-between gap-3 w-full">
           <div class="flex items-center gap-2">
@@ -620,7 +569,7 @@ onBeforeUnmount(() => {
               <template #icon>
                 <NIcon :component="DownloadOutline" />
               </template>
-              导出日志
+              导出原文
             </NButton>
             <NButton tertiary size="small" :disabled="!hasLogs" @click="handleClear">
               <template #icon>
@@ -660,6 +609,9 @@ onBeforeUnmount(() => {
               :disabled="commandState.active"
               @click="handleClose"
             >
+              <template #icon>
+                <NIcon :component="DocumentTextOutline" />
+              </template>
               关闭窗口
             </NButton>
           </div>
@@ -670,238 +622,289 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.command-drawer-shell {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(161, 161, 170, 0.36) transparent;
-}
-
-.command-drawer-shell::-webkit-scrollbar {
-  width: 6px;
-}
-
-.command-drawer-shell::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.command-drawer-shell::-webkit-scrollbar-thumb {
-  background: rgba(161, 161, 170, 0.3);
-  border-radius: 999px;
-}
-
-.current-action-card {
+/* ─── 抽屉整体外壳：单一深色底，无嵌套边框 ─── */
+.cmd-shell {
   position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(251, 191, 36, 0.16);
-  border-radius: 12px;
-  background:
-    linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(24, 24, 27, 0.78) 42%),
-    rgba(24, 24, 27, 0.82);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 48px -30px rgba(251, 191, 36, 0.45);
-  padding: 18px;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0d0d10;
+  color: #d4d4d8;
 }
 
-.current-action-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
-  transform: translateX(-100%);
-  animation: action-sheen 4.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-.spin-orbit {
-  width: 46px;
-  height: 46px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* ─── 顶栏：任务流水线作为 Header ─── */
+.pipeline-header {
   flex: 0 0 auto;
-  border-radius: 999px;
-  border: 1px solid rgba(251, 191, 36, 0.18);
-  background: rgba(250, 204, 21, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(63, 63, 70, 0.35);
+  background: linear-gradient(180deg, rgba(24, 24, 27, 0.72) 0%, rgba(13, 13, 16, 0.9) 100%);
 }
 
-.idle-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: #71717a;
+.pipeline-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.action-chip,
-.version-pill {
+.pipeline-header__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   min-width: 0;
-  max-width: 190px;
+}
+
+.pipeline-header__label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex: 0 0 auto;
+}
+
+.pipeline-header__arrow {
+  color: #52525b;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.pipeline-header__summary {
+  font-size: 12.5px;
+  color: #a1a1aa;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid rgba(251, 191, 36, 0.18);
-  border-radius: 6px;
-  background: rgba(251, 191, 36, 0.08);
-  padding: 2px 7px;
-  color: rgba(253, 230, 138, 0.9);
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 11px;
 }
 
-.log-crawl {
-  animation: log-crawl 14s linear infinite;
-}
-
-.pipeline-panel {
-  border: 1px solid rgba(113, 113, 122, 0.18);
-  border-radius: 12px;
-  background: rgba(24, 24, 27, 0.58);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  padding: 14px;
-}
-
-.pipeline-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  border: 1px dashed rgba(161, 161, 170, 0.22);
-  border-radius: 10px;
-  padding: 18px;
-  color: #71717a;
-  font-size: 13px;
-}
-
-.pipeline-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 58px;
-  border: 1px solid rgba(113, 113, 122, 0.18);
-  border-radius: 10px;
-  padding: 10px 12px;
-  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.24s ease, background 0.24s ease;
-}
-
-.pipeline-item--running {
-  border-color: rgba(56, 189, 248, 0.34);
-  background: rgba(14, 165, 233, 0.1);
-  color: #e0f2fe;
-  animation: breathing-card 2.8s ease-in-out infinite;
-}
-
-.pipeline-item--success {
-  border-color: rgba(52, 211, 153, 0.22);
-  background: rgba(16, 185, 129, 0.08);
-  color: #d1fae5;
-}
-
-.pipeline-item--error {
-  border-color: rgba(251, 113, 133, 0.34);
-  background: rgba(244, 63, 94, 0.1);
-  color: #ffe4e6;
-}
-
-.pipeline-item--waiting {
-  color: #a1a1aa;
-  background: rgba(39, 39, 42, 0.36);
-}
-
-.pipeline-icon {
-  width: 30px;
-  height: 30px;
+.pipeline-header__badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  background: rgba(16, 185, 129, 0.08);
+  color: #6ee7b7;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  transition: opacity 0.24s ease;
   flex: 0 0 auto;
+}
+
+.pipeline-header__badge.is-idle {
+  opacity: 0.45;
+  border-color: rgba(82, 82, 91, 0.4);
+  background: rgba(39, 39, 42, 0.4);
+  color: #a1a1aa;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
 }
 
-.waiting-ring {
-  width: 10px;
-  height: 10px;
-  border: 1px solid rgba(161, 161, 170, 0.75);
+.is-live .live-dot {
+  animation: live-pulse 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.is-idle .live-dot {
+  background: #71717a;
+  box-shadow: none;
+}
+
+/* ─── 流水线 chip 平铺 ─── */
+.pipeline-chips {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 88px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(82, 82, 91, 0.35) transparent;
+}
+.pipeline-chips::-webkit-scrollbar {
+  width: 4px;
+}
+.pipeline-chips::-webkit-scrollbar-thumb {
+  background: rgba(82, 82, 91, 0.35);
   border-radius: 999px;
 }
 
-.raw-log-collapse {
-  border: 1px solid rgba(113, 113, 122, 0.18);
-  border-radius: 12px;
-  background: rgba(24, 24, 27, 0.5);
-  padding: 0 12px;
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(63, 63, 70, 0.5);
+  background: rgba(24, 24, 27, 0.65);
+  font-size: 11.5px;
+  line-height: 1.25;
+  max-width: 100%;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
 }
 
-.raw-log-empty {
-  padding: 22px 4px 26px;
-  color: #71717a;
-  font-size: 13px;
+.chip__dot {
+  font-size: 9px;
+  line-height: 1;
+  flex: 0 0 auto;
+  filter: saturate(1.1);
 }
 
-.raw-log-box {
-  max-height: 360px;
-  overflow: auto;
-  padding: 8px 2px 14px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.raw-log-line {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  border-radius: 6px;
-  padding: 2px 4px;
-  color: #71717a;
-}
-
-.raw-log-line--error {
-  margin: 4px 0;
-  border-left: 2px solid #f43f5e;
-  background: rgba(244, 63, 94, 0.1);
-  color: #fb7185;
-  padding: 4px 8px;
-}
-
-.raw-log-line--active {
-  color: #60a5fa;
+.chip__name {
   font-weight: 600;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.raw-log-line--success {
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.06);
+.chip__status {
+  opacity: 0.78;
+  font-size: 10.5px;
 }
 
-@keyframes action-sheen {
-  0% {
-    transform: translateX(-100%);
-  }
-  46%,
-  100% {
-    transform: translateX(100%);
-  }
+.chip--running {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: rgba(14, 165, 233, 0.14);
+  color: #bae6fd;
+  animation: chip-breathe 2.4s ease-in-out infinite;
 }
 
-@keyframes breathing-card {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-1px);
-  }
+.chip--success {
+  border-color: rgba(52, 211, 153, 0.32);
+  background: rgba(16, 185, 129, 0.1);
+  color: #a7f3d0;
 }
 
-@keyframes log-crawl {
-  0%,
-  18% {
-    transform: translateX(0);
-  }
-  82%,
-  100% {
-    transform: translateX(-18%);
-  }
+.chip--error {
+  border-color: rgba(251, 113, 133, 0.42);
+  background: rgba(244, 63, 94, 0.12);
+  color: #fecaca;
+}
+
+.chip--waiting {
+  color: #a1a1aa;
+}
+
+/* ─── 终端主体：100% 平铺，无外层边框/内边距容器 ─── */
+.terminal {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 0 16px;
+  background: #0d0d10;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(82, 82, 91, 0.45) transparent;
+}
+.terminal::-webkit-scrollbar {
+  width: 6px;
+}
+.terminal::-webkit-scrollbar-thumb {
+  background: rgba(82, 82, 91, 0.5);
+  border-radius: 999px;
+}
+.terminal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal__empty {
+  display: flex;
+  align-items: center;
+  padding: 8px 18px;
+  color: #52525b;
+  font-size: 12.5px;
+}
+
+.cursor {
+  color: #10b981;
+  animation: cursor-blink 1s steps(2) infinite;
+}
+
+.terminal__stream {
+  display: block;
+}
+
+/* ─── 每行日志：block 级 + 强制换行 + 继承全局字体 ─── */
+.log-line {
+  /* 关键：不指定 font-family —— 沿用 body / drawerFontFamily 继承的全局字体 */
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  padding: 2px 18px;
+}
+
+.log-line--default {
+  color: #a1a1aa;
+}
+
+.log-line--active {
+  color: #7dd3fc;
+}
+
+.log-line--success {
+  color: #6ee7b7;
+  font-weight: 500;
+}
+
+.log-line--progress {
+  color: rgba(252, 211, 77, 0.85);
+}
+
+.log-line--error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.06);
+  border-left: 2px solid #ef4444;
+  padding: 4px 18px 4px 16px;
+  margin: 2px 0;
+  font-weight: 500;
+}
+
+/* ─── 悬浮"跳至最新"按钮 ─── */
+.scroll-follow {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  padding: 5px 12px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.14);
+  backdrop-filter: blur(8px);
+  color: #7dd3fc;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  box-shadow: 0 6px 18px -8px rgba(14, 165, 233, 0.6);
+}
+.scroll-follow:hover {
+  background: rgba(14, 165, 233, 0.28);
+  transform: translateY(-1px);
+}
+
+/* ─── 动画 ─── */
+@keyframes chip-breathe {
+  0%, 100% { transform: translateY(0); box-shadow: 0 0 0 rgba(56, 189, 248, 0); }
+  50% { transform: translateY(-1px); box-shadow: 0 4px 12px -8px rgba(56, 189, 248, 0.6); }
+}
+
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
 }
 </style>
