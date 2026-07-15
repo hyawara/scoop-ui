@@ -520,7 +520,9 @@ function findScoopRootByScan(): string {
  * 解决：非默认路径安装（如 ~/install/scoop）且 $SCOOP 为空时，换源误判 buckets 目录不存在。
  */
 async function resolveScoopRoot(): Promise<string> {
-  const envRoot = (process.env['SCOOP'] || '').trim()
+  // envRoot 理论上是 Windows 用户环境变量，应为绝对路径；但仍套一层 tilde 展开
+  // 作为防御性兜底，避免个别工具链把 SCOOP 设成了字面量 `~/xxx`。
+  const envRoot = expandUserPath((process.env['SCOOP'] || '').trim())
   if (envRoot) return envRoot
   try {
     const { stdout } = await execPowerShell('scoop config root_path')
@@ -550,6 +552,12 @@ interface SearchEngineStatus {
   installed: boolean
   engine: SearchEngineName
   path?: string
+  /**
+   * 已展开 ~ 的 Scoop 根目录（绝对路径）。用于在调用 scoop-search 前注入
+   * SCOOP 环境变量：scoop-search 是 Go 二进制，`os.Open` 不会展开 tilde，
+   * 若 `scoop config root_path` 存的是字面量 `~/xxx`，会因 buckets 目录打不开而返回空结果。
+   */
+  scoopRoot?: string
 }
 
 interface SearchPackageResult {
@@ -593,11 +601,26 @@ async function detectScoopSearchInstalled(force = false): Promise<SearchEngineSt
 
   const found = candidates.find(candidate => existsSync(candidate))
   const value: SearchEngineStatus = found
-    ? { installed: true, engine: 'scoop-search', path: found }
-    : { installed: false, engine: 'native' }
+    ? { installed: true, engine: 'scoop-search', path: found, scoopRoot }
+    : { installed: false, engine: 'native', scoopRoot }
 
   searchEngineCache = { value, checkedAt: now }
   return value
+}
+
+/**
+ * 构造 `scoop-search` 的 git-bash 命令。
+ * 关键：把已展开 tilde 的 scoopRoot 作为 SCOOP 环境变量注入，规避 scoop-search
+ * (Go) 不展开 `~/install/scoop` 而抛「Could not open the buckets directory」的问题。
+ */
+function buildScoopSearchCommand(query: string, scoopRoot?: string): string {
+  const base = `scoop-search ${bashQuoteMain(query)}`
+  if (!scoopRoot) return base
+  // 转换成 bash 友好的 POSIX 路径：C:\Users\x\scoop → /c/Users/x/scoop
+  const posix = scoopRoot
+    .replace(/\\/g, '/')
+    .replace(/^([A-Za-z]):\//, (_all, drive) => `/${drive.toLowerCase()}/`)
+  return `export SCOOP=${bashQuoteMain(posix)}; ${base}`
 }
 
 function pickString(obj: Record<string, any>, keys: string[]): string {
@@ -1143,7 +1166,7 @@ export function registerScoopIPC(): void {
     const normalized = validateSearchQuery(query)
     const status = await detectScoopSearchInstalled()
     const { stdout } = status.installed
-      ? await execGitBash(`scoop-search ${bashQuoteMain(normalized)}`)
+      ? await execGitBash(buildScoopSearchCommand(normalized, status.scoopRoot))
       : await execScoop(`search ${normalized}`)
     return stdout
   })
@@ -1205,7 +1228,7 @@ export function registerScoopIPC(): void {
     const status = await detectScoopSearchInstalled()
     const engine = status.installed ? 'scoop-search' : 'native'
     const { stdout } = status.installed
-      ? await execGitBash(`scoop-search ${bashQuoteMain(normalized)}`)
+      ? await execGitBash(buildScoopSearchCommand(normalized, status.scoopRoot))
       : await execScoop(`search ${normalized}`)
     return parseSearchOutput(stdout, engine)
   })
@@ -2048,8 +2071,9 @@ export function registerScoopIPC(): void {
     }
 
     try {
-      // 3. 查找 scoop 应用目录
-      const scoopPath = process.env['SCOOP'] || join(homedir(), 'scoop')
+      // 3. 查找 scoop 应用目录（走统一的 resolveScoopRoot：会处理 ~/install/scoop 的 tilde 展开
+      //    与 $SCOOP 未设时的扫描兜底，避免非默认路径下图标提取全部失败）
+      const scoopPath = await resolveScoopRoot()
       const appDir = join(scoopPath, 'apps', packageName, 'current')
       if (!existsSync(appDir)) {
         iconMemoryCache.set(packageName, null)
@@ -2586,12 +2610,14 @@ export function registerScoopIPC(): void {
 
     try {
       const { stdout } = await execPowerShell('scoop config root_path')
-      scoop = stdout.trim()
+      // cleanScoopConfigPath 会剔除警告/空行并识别 "not set" 语义；
+      // 展开 ~，避免渲染层展示 `~/install/scoop` 字面量或后续拼接失效。
+      scoop = expandUserPath(cleanScoopConfigPath(stdout))
     } catch { /* scoop not installed */ }
 
     try {
       const { stdout } = await execPowerShell('scoop config global_path')
-      globalPath = stdout.trim()
+      globalPath = expandUserPath(cleanScoopConfigPath(stdout))
     } catch { /* global_path not set */ }
 
     return { scoop, global: globalPath }
