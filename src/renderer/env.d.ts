@@ -10,6 +10,7 @@ interface InstallOptions {
   global?: boolean
   skipCheck?: boolean
   independent?: boolean
+  noUpdateScoop?: boolean
 }
 
 interface ProgressData {
@@ -149,6 +150,33 @@ interface CheckUpdatesResult {
   elapsedMs: number
 }
 
+interface CheckUpdatesOptions {
+  syncBuckets?: boolean
+}
+
+interface ScoopSourceStatus {
+  lastUpdate?: string
+  lastUpdateMs?: number
+  ageMs?: number
+  intervalMs: number
+  stale: boolean
+  nextUpdateAt?: string
+  checkedAt: string
+  error?: string
+}
+
+interface ScoopSourceSyncResult {
+  success: boolean
+  skipped: boolean
+  reason?: 'fresh' | 'busy' | 'running'
+  status: ScoopSourceStatus
+  code?: number | null
+  stdout: string
+  stderr: string
+  aborted?: boolean
+  error?: string
+}
+
 // 主进程 electron-updater 统一推送的更新事件（与 src/main/ipc/updater.ts 保持一致）
 type UpdateEvent =
   | { status: 'checking' }
@@ -181,7 +209,9 @@ interface Window {
     cache: () => Promise<{ size: number; unit: string; files: number }>
     clearCache: () => Promise<void>
     listInstalled: () => Promise<{ name: string; version: string; bucket: string; global: boolean }[]>
-    checkUpdates: () => Promise<CheckUpdatesResult>
+    getSourceStatus: () => Promise<ScoopSourceStatus>
+    syncSources: (options?: { force?: boolean; reason?: string }) => Promise<ScoopSourceSyncResult>
+    checkUpdates: (options?: CheckUpdatesOptions) => Promise<CheckUpdatesResult>
     listUpdatable: () => Promise<{ name: string; oldVersion: string; newVersion: string }[]>
     checkAria2: () => Promise<{ installed: boolean; enabled: boolean }>
     setAria2Enabled: (enabled: boolean) => Promise<{ success: boolean }>

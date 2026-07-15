@@ -19,7 +19,7 @@ import SearchPanel from '@/components/SearchPanel.vue'
 import Onboarding from '@/components/Onboarding.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import UpdateManager from '@/components/UpdateManager.vue'
-import TerminalDrawer from '@/components/TerminalDrawer.vue'
+import CommandProgressDrawer from '@/components/CommandProgressDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
 import { resolvePreset, DEFAULT_PRESET } from '@/theme/presets'
 
@@ -36,7 +36,7 @@ const colorPreset = ref(DEFAULT_PRESET)
 const searchQuery = ref('')
 const committedSearch = ref('')
 const showSettings = ref(false)
-const showTerminalDrawer = ref(false)
+const showCommandProgressDrawer = ref(false)
 const autoCheckUpdate = ref(true)
 
 // Shared update state for UpdateManager + SettingsPanel.
@@ -439,7 +439,6 @@ provide('fontSize', fontSize)
 provide('colorPreset', colorPreset)
 provide('showSettings', showSettings)
 provide('openTerminal', openTerminal)
-provide('showTerminalDrawer', showTerminalDrawer)
 provide('appDownloading', appDownloading)
 provide('autoCheckUpdate', autoCheckUpdate)
 provide('suppressUpdateToast', suppressUpdateToast)
@@ -547,8 +546,8 @@ onMounted(async () => {
       settingsStore.loadProxy(),
     ])
 
-    // 异步自检：主进程并行同步 buckets，再在内存中对比 manifest。
-    packagesStore.refreshUpdatable()
+    // 首屏只读本地缓存；若软件源过期，再让后台同步悄悄补齐，不挡用户点安装。
+    void packagesStore.refreshUpdatable({ sync: 'auto', background: true, reason: 'startup' })
   }
 })
 
@@ -586,7 +585,7 @@ function openSettings() {
 }
 
 function openTerminal() {
-  showTerminalDrawer.value = true
+  showCommandProgressDrawer.value = true
 }
 </script>
 
@@ -636,7 +635,7 @@ function openTerminal() {
         <SettingsPanel v-model:show="showSettings" />
 
         <!-- 全局终端日志流（单例，关闭不销毁，历史日志永久保留） -->
-        <TerminalDrawer v-model:show="showTerminalDrawer" />
+        <CommandProgressDrawer v-model:show="showCommandProgressDrawer" />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

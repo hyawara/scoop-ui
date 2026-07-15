@@ -1,6 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { PackageInfo, UpdatableInfo, ManifestChangedInfo, InstallOptions, ProgressData } from '@/types'
+import type {
+  PackageInfo,
+  UpdatableInfo,
+  ManifestChangedInfo,
+  InstallOptions,
+  ProgressData,
+  CheckUpdatesOptions,
+  ScoopSourceStatus,
+  ScoopSourceSyncResult,
+} from '@/types'
 
 export const usePackagesStore = defineStore('packages', () => {
   const installed = ref<PackageInfo[]>([])
@@ -25,6 +34,11 @@ export const usePackagesStore = defineStore('packages', () => {
   const updateCheckText = ref('')
   const updateCheckWarnings = ref<string[]>([])
   const updateCheckElapsedMs = ref(0)
+  const sourceStatus = ref<ScoopSourceStatus | null>(null)
+  const sourceSyncPhase = ref<'idle' | 'checking' | 'syncing' | 'done' | 'skipped' | 'error'>('idle')
+  const sourceSyncText = ref('')
+  const sourceSyncError = ref('')
+  let sourceSyncPromise: Promise<ScoopSourceSyncResult | null> | null = null
 
   async function loadInstalled() {
     loading.value = true
@@ -37,9 +51,78 @@ export const usePackagesStore = defineStore('packages', () => {
     }
   }
 
-  async function loadUpdatable() {
+  async function loadSourceStatus() {
+    sourceSyncPhase.value = sourceSyncPhase.value === 'syncing' ? 'syncing' : 'checking'
+    try {
+      sourceStatus.value = await window.scoopAPI.getSourceStatus()
+      if (sourceStatus.value.error) {
+        sourceSyncPhase.value = 'error'
+        sourceSyncError.value = sourceStatus.value.error
+        sourceSyncText.value = '无法读取软件源状态'
+      } else if (sourceStatus.value.stale) {
+        sourceSyncPhase.value = 'idle'
+        sourceSyncText.value = '软件源需要同步'
+      } else {
+        sourceSyncPhase.value = 'done'
+        sourceSyncText.value = '软件源状态新鲜'
+      }
+      return sourceStatus.value
+    } catch (error: any) {
+      sourceSyncPhase.value = 'error'
+      sourceSyncError.value = error?.message || String(error)
+      sourceSyncText.value = '无法读取软件源状态'
+      sourceStatus.value = {
+        intervalMs: 3 * 60 * 60 * 1000,
+        stale: true,
+        checkedAt: new Date().toISOString(),
+        error: sourceSyncError.value,
+      }
+      return sourceStatus.value
+    }
+  }
+
+  async function syncSources(options: { force?: boolean; reason?: string } = {}) {
+    if (sourceSyncPromise) return sourceSyncPromise
+
+    sourceSyncPhase.value = 'syncing'
+    sourceSyncError.value = ''
+    sourceSyncText.value = options.force
+      ? '正在同步 Scoop 与软件源...'
+      : '软件源过期，正在后台同步...'
+
+    sourceSyncPromise = (async () => {
+      try {
+        const result = await window.scoopAPI.syncSources(options)
+        sourceStatus.value = result.status
+        if (result.success) {
+          sourceSyncPhase.value = result.skipped ? 'skipped' : 'done'
+          sourceSyncText.value = result.skipped ? '软件源仍然新鲜' : '软件源同步完成'
+        } else if (result.reason === 'busy') {
+          sourceSyncPhase.value = 'skipped'
+          sourceSyncText.value = '已有 Scoop 命令在运行，稍后再同步'
+          sourceSyncError.value = result.error || ''
+        } else {
+          sourceSyncPhase.value = 'error'
+          sourceSyncText.value = '软件源同步失败'
+          sourceSyncError.value = result.error || result.stderr || '未知错误'
+        }
+        return result
+      } catch (error: any) {
+        sourceSyncPhase.value = 'error'
+        sourceSyncText.value = '软件源同步失败'
+        sourceSyncError.value = error?.message || String(error)
+        return null
+      } finally {
+        sourceSyncPromise = null
+      }
+    })()
+
+    return sourceSyncPromise
+  }
+
+  async function loadUpdatable(options: CheckUpdatesOptions = {}) {
     updateCheckPhase.value = 'syncing'
-    updateCheckText.value = '正在同步 Bucket 仓库...'
+    updateCheckText.value = options.syncBuckets ? '正在同步 Bucket 仓库...' : '正在读取本地软件清单...'
     updateCheckWarnings.value = []
     try {
       const phaseTimer = window.setTimeout(() => {
@@ -48,7 +131,7 @@ export const usePackagesStore = defineStore('packages', () => {
       }, 350)
 
       try {
-        const result = await window.scoopAPI.checkUpdates()
+        const result = await window.scoopAPI.checkUpdates({ syncBuckets: options.syncBuckets === true })
         updatable.value = result.updates
         manifestChanged.value = result.changed || []
         updateCheckSkipped.value = result.skipped || []
@@ -74,9 +157,38 @@ export const usePackagesStore = defineStore('packages', () => {
     }
   }
 
-  // 启动自检：直接使用主进程的并行 git 同步 + 内存 manifest 对比。
-  async function refreshUpdatable() {
-    await loadUpdatable()
+  // 统一入口：按策略同步软件源，再做本地 manifest 对比。
+  async function refreshUpdatable(options: {
+    sync?: 'none' | 'auto' | 'force'
+    background?: boolean
+    reason?: string
+  } = {}) {
+    const syncMode = options.sync ?? 'auto'
+    const status = await loadSourceStatus()
+    const shouldSync = syncMode === 'force' || (syncMode === 'auto' && status.stale)
+
+    if (!shouldSync) {
+      await loadUpdatable({ syncBuckets: false })
+      return
+    }
+
+    if (options.background) {
+      void syncSources({ force: syncMode === 'force', reason: options.reason }).then(async (result) => {
+        if (result?.success) {
+          await loadUpdatable({ syncBuckets: false })
+        }
+      })
+      await loadUpdatable({ syncBuckets: false })
+      return
+    }
+
+    const result = await syncSources({ force: syncMode === 'force', reason: options.reason })
+    if (!result || !result.success) {
+      await loadUpdatable({ syncBuckets: false })
+      return
+    }
+
+    await loadUpdatable({ syncBuckets: false })
   }
 
   async function search(query: string) {
@@ -173,6 +285,7 @@ export const usePackagesStore = defineStore('packages', () => {
       const result = await window.scoopAPI.update(name)
       await loadInstalled()
       await loadUpdatable()
+      await loadSourceStatus()
       if (!result.success) {
         throw new Error(result.error || '更新失败')
       }
@@ -185,6 +298,7 @@ export const usePackagesStore = defineStore('packages', () => {
   return {
     installed, updatable, manifestChanged, updateCheckSkipped, searchResults, loading, searching, progress, descriptionsLoading,
     searchEngine, updateCheckPhase, updateCheckText, updateCheckWarnings, updateCheckElapsedMs,
-    loadInstalled, loadUpdatable, refreshUpdatable, search, loadSearchEngineStatus, installSearchEngine, install, uninstall, update
+    sourceStatus, sourceSyncPhase, sourceSyncText, sourceSyncError,
+    loadInstalled, loadSourceStatus, syncSources, loadUpdatable, refreshUpdatable, search, loadSearchEngineStatus, installSearchEngine, install, uninstall, update
   }
 })

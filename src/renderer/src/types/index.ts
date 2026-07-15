@@ -35,8 +35,38 @@ export interface ManifestChangedInfo {
 
 export interface InstallOptions {
   global?: boolean
+  /** 跳过哈希校验，等价于 scoop install --skip-hash-check。 */
   skipCheck?: boolean
   independent?: boolean
+  /** 跳过 Scoop 自更新，避免安装动作被源同步阻塞；默认开启。 */
+  noUpdateScoop?: boolean
+}
+
+export interface ScoopSourceStatus {
+  lastUpdate?: string
+  lastUpdateMs?: number
+  ageMs?: number
+  intervalMs: number
+  stale: boolean
+  nextUpdateAt?: string
+  checkedAt: string
+  error?: string
+}
+
+export interface ScoopSourceSyncResult {
+  success: boolean
+  skipped: boolean
+  reason?: 'fresh' | 'busy' | 'running'
+  status: ScoopSourceStatus
+  code?: number | null
+  stdout: string
+  stderr: string
+  aborted?: boolean
+  error?: string
+}
+
+export interface CheckUpdatesOptions {
+  syncBuckets?: boolean
 }
 
 export interface ScoopCommandResult {

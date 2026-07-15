@@ -34,6 +34,30 @@ let sudoCache: { available: boolean; checkedAt: number } | null = null
 let adminCache: { elevated: boolean; checkedAt: number } | null = null
 const SUDO_CACHE_TTL = 30_000
 const ADMIN_CACHE_TTL = 30_000
+const SCOOP_SOURCE_SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000
+
+interface ScoopSourceStatus {
+  lastUpdate?: string
+  lastUpdateMs?: number
+  ageMs?: number
+  intervalMs: number
+  stale: boolean
+  nextUpdateAt?: string
+  checkedAt: string
+  error?: string
+}
+
+interface ScoopSourceSyncResult {
+  success: boolean
+  skipped: boolean
+  reason?: 'fresh' | 'busy' | 'running'
+  status: ScoopSourceStatus
+  code?: number | null
+  stdout: string
+  stderr: string
+  aborted?: boolean
+  error?: string
+}
 
 function getCommandState(event?: {
   status: CancellableScoopTaskStatus
@@ -129,6 +153,196 @@ function extractCommandDiagnostics(stdout: string, stderr: string): string[] {
     result.push(text)
   }
   return result.slice(-8)
+}
+
+let activeSourceSync: {
+  promise: Promise<ScoopSourceSyncResult>
+  controller: AbortController
+  task: CancellableScoopTask
+} | null = null
+
+function parseScoopConfigOutput(stdout: string): Record<string, string> {
+  const config: Record<string, string> = {}
+  for (const line of stdout.split('\n')) {
+    const match = line.match(/^\s*(\S[\S ]*?)\s*:\s*(.*)$/)
+    if (!match) continue
+    const key = match[1].trim()
+    const val = match[2].trim()
+    if (key) config[key] = val
+  }
+  return config
+}
+
+async function readScoopConfigMap(): Promise<Record<string, string>> {
+  const { stdout } = await execScoop('config')
+  return parseScoopConfigOutput(stdout)
+}
+
+function parseScoopDate(value?: string): number | null {
+  if (!value) return null
+  const normalized = value.trim()
+  const parsed = Date.parse(normalized)
+  if (Number.isFinite(parsed)) return parsed
+
+  const chineseDate = normalized.match(
+    /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/i
+  )
+  if (chineseDate) {
+    const [, year, month, day, hour = '0', minute = '0', second = '0'] = chineseDate
+    const time = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime()
+    return Number.isFinite(time) ? time : null
+  }
+
+  const scoopWeekdayDate = normalized.match(
+    /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})(?:[./-][^\s]+)?(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/i
+  )
+  if (scoopWeekdayDate) {
+    const [, year, month, day, hour = '0', minute = '0', second = '0'] = scoopWeekdayDate
+    const time = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)).getTime()
+    return Number.isFinite(time) ? time : null
+  }
+
+  const localDate = normalized.match(
+    /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/i
+  )
+  if (localDate) {
+    const [, first, secondPart, year, hour = '0', minute = '0', second = '0'] = localDate
+    const firstNumber = Number(first)
+    const secondNumber = Number(secondPart)
+    // Scoop 在部分区域设置下会输出 dd/MM/yyyy；若首段大于 12，可明确按 day-first 解析。
+    const day = firstNumber > 12 ? firstNumber : secondNumber > 12 ? secondNumber : firstNumber
+    const month = firstNumber > 12 ? secondNumber : secondNumber > 12 ? firstNumber : secondNumber
+    const time = new Date(Number(year), month - 1, day, Number(hour), Number(minute), Number(second)).getTime()
+    return Number.isFinite(time) ? time : null
+  }
+
+  return null
+}
+
+async function getScoopSourceStatus(): Promise<ScoopSourceStatus> {
+  const checkedAtMs = Date.now()
+  const checkedAt = new Date(checkedAtMs).toISOString()
+
+  try {
+    const config = await readScoopConfigMap()
+    const lastUpdate = Object.entries(config).find(([key]) => key.toLowerCase() === 'last_update')?.[1]
+    const lastUpdateMs = parseScoopDate(lastUpdate)
+    const ageMs = lastUpdateMs === null ? undefined : Math.max(0, checkedAtMs - lastUpdateMs)
+    const stale = ageMs === undefined || ageMs >= SCOOP_SOURCE_SYNC_INTERVAL_MS
+
+    return {
+      lastUpdate,
+      lastUpdateMs: lastUpdateMs ?? undefined,
+      ageMs,
+      intervalMs: SCOOP_SOURCE_SYNC_INTERVAL_MS,
+      stale,
+      nextUpdateAt: lastUpdateMs === null
+        ? undefined
+        : new Date(lastUpdateMs + SCOOP_SOURCE_SYNC_INTERVAL_MS).toISOString(),
+      checkedAt,
+    }
+  } catch (error: any) {
+    return {
+      intervalMs: SCOOP_SOURCE_SYNC_INTERVAL_MS,
+      stale: true,
+      checkedAt,
+      error: error?.message || String(error),
+    }
+  }
+}
+
+async function stopActiveSourceSyncForPackageCommand(win: BrowserWindow | null) {
+  if (!activeSourceSync) return
+
+  sendProgress(win, {
+    type: 'message',
+    package: 'scoop',
+    message: '后台软件源同步已让路，先执行当前软件操作。',
+  })
+
+  activeSourceSync.controller.abort()
+  try {
+    await activeSourceSync.promise
+  } catch {
+    // 同步让路失败不阻断用户操作，后续命令会按 Scoop 自身规则继续执行。
+  }
+}
+
+async function syncScoopSources(
+  win: BrowserWindow | null,
+  options: { force?: boolean; reason?: string } = {}
+): Promise<ScoopSourceSyncResult> {
+  if (activeSourceSync) {
+    return activeSourceSync.promise
+  }
+
+  const currentStatus = await getScoopSourceStatus()
+  if (!options.force && !currentStatus.stale) {
+    return {
+      success: true,
+      skipped: true,
+      reason: 'fresh',
+      status: currentStatus,
+      stdout: '',
+      stderr: '',
+      code: 0,
+    }
+  }
+
+  if (activeScoopTasks.size > 0) {
+    return {
+      success: false,
+      skipped: true,
+      reason: 'busy',
+      status: currentStatus,
+      stdout: '',
+      stderr: '已有 Scoop 命令正在执行，跳过本次软件源同步。',
+      code: null,
+      error: '已有 Scoop 命令正在执行，稍后再同步软件源。',
+    }
+  }
+
+  const controller = new AbortController()
+  const task = beginScoopTask('message', '软件源同步', ['scoop', 'buckets'])
+
+  const promise = (async (): Promise<ScoopSourceSyncResult> => {
+    try {
+      const { stdout, stderr, code, aborted } = await execScoopRaw(['update'], (data, stream) => {
+        sendProgress(win, {
+          type: 'message',
+          package: 'scoop',
+          stream,
+          message: data,
+        })
+      }, controller.signal)
+
+      const status = await getScoopSourceStatus()
+      const success = code === 0 && !aborted
+      const error = success
+        ? undefined
+        : normalizeExitError('Update', 'Scoop sources', stdout, stderr, code, aborted)
+
+      return {
+        success,
+        skipped: false,
+        status,
+        stdout,
+        stderr,
+        code,
+        aborted,
+        error,
+      }
+    } finally {
+      finishScoopTask(task, controller.signal.aborted ? 'aborted' : 'ended')
+      const currentSourceSync = activeSourceSync as { task: CancellableScoopTask } | null
+      if (currentSourceSync?.task.id === task.id) {
+        activeSourceSync = null
+      }
+    }
+  })()
+
+  activeSourceSync = { promise, controller, task }
+  return promise
 }
 
 function sendCommandFailure(
@@ -856,6 +1070,15 @@ export function registerScoopIPC(): void {
     return { success: true, aborted: tasks.length }
   })
 
+  ipcMain.handle('scoop:getSourceStatus', async () => {
+    return getScoopSourceStatus()
+  })
+
+  ipcMain.handle('scoop:syncSources', async (event, options?: { force?: boolean; reason?: string }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return syncScoopSources(win, options)
+  })
+
   // Check if Scoop is installed
   ipcMain.handle('scoop:check', async () => {
     const { stdout } = await execPowerShell(`
@@ -931,10 +1154,11 @@ export function registerScoopIPC(): void {
 
   ipcMain.handle('scoop:installSearchEngine', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
+    await stopActiveSourceSyncForPackageCommand(win)
     const task = beginScoopTask('install', 'scoop-search', ['scoop-search'])
 
     try {
-      const { stdout, stderr, code, aborted } = await execScoopRaw(['install', 'scoop-search'], (data, stream) => {
+      const { stdout, stderr, code, aborted } = await execScoopRaw(['install', 'scoop-search', '--no-update-scoop'], (data, stream) => {
         sendProgress(win, {
           type: 'install',
           package: 'scoop-search',
@@ -1240,16 +1464,18 @@ export function registerScoopIPC(): void {
   })
 
   // Install a package
-  ipcMain.handle('scoop:install', async (event, name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) => {
+  ipcMain.handle('scoop:install', async (event, name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean; noUpdateScoop?: boolean }) => {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
     const args = ['install', name]
     if (options?.global) args.push('--global')
-    if (options?.skipCheck) args.push('--skip')
+    if (options?.skipCheck) args.push('--skip-hash-check')
     if (options?.independent) args.push('--independent')
+    if (options?.noUpdateScoop !== false) args.push('--no-update-scoop')
 
     const win = BrowserWindow.fromWebContents(event.sender)
+    await stopActiveSourceSyncForPackageCommand(win)
     const task = beginScoopTask('install', name, [name])
 
     try {
@@ -1319,6 +1545,7 @@ export function registerScoopIPC(): void {
     }
 
     const win = BrowserWindow.fromWebContents(event.sender)
+    await stopActiveSourceSyncForPackageCommand(win)
     const { stdout, stderr, code } = await execScoopRaw(['reset', name], (data, stream) => {
       sendProgress(win, {
         type: 'message',
@@ -1346,6 +1573,7 @@ export function registerScoopIPC(): void {
     const args = ['uninstall', name]
     if (global) args.push('--global')
     const win = BrowserWindow.fromWebContents(event.sender)
+    await stopActiveSourceSyncForPackageCommand(win)
     const task = beginScoopTask('uninstall', name, [name])
 
     try {
@@ -1418,6 +1646,7 @@ export function registerScoopIPC(): void {
 
     const args = names.length > 0 ? ['update', ...names] : ['update', '--all']
     const win = BrowserWindow.fromWebContents(event.sender)
+    await stopActiveSourceSyncForPackageCommand(win)
     const pkgLabel = names.length === 1 ? names[0] : (names.length > 1 ? names.join(' ') : '*')
     const task = beginScoopTask('update', pkgLabel, names)
 
@@ -1470,14 +1699,8 @@ export function registerScoopIPC(): void {
   // 不更新已安装应用。完成后由前端再跑 scoop status 同步可更新列表。
   ipcMain.handle('scoop:updateSelf', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const { stdout, stderr, code } = await execScoop('update', (data) => {
-      sendProgress(win, {
-        type: 'message',
-        package: 'scoop',
-        message: data.trim(),
-      })
-    })
-    return { success: code === 0, stdout, stderr }
+    const result = await syncScoopSources(win, { force: true, reason: 'legacy-update-self' })
+    return { success: result.success, stdout: result.stdout, stderr: result.stderr }
   })
 
   // ── 旧版本测量：纯 Node.js（异步并发） ──
@@ -1775,9 +1998,9 @@ export function registerScoopIPC(): void {
     })
   })
 
-  // Fast update check: parallel git sync + in-memory manifest comparison.
-  ipcMain.handle('scoop:check-updates', async () => {
-    return checkScoopUpdatesFast()
+  // 快速更新检查：默认只读本地 manifest；同步源由 scoop:syncSources 显式负责。
+  ipcMain.handle('scoop:check-updates', async (_event, options?: { syncBuckets?: boolean }) => {
+    return checkScoopUpdatesFast(options)
   })
 
   // List updatable packages. Kept for compatibility, now backed by the fast service.
@@ -2483,24 +2706,12 @@ export function registerScoopIPC(): void {
 
   // Get scoop config key-value pairs
   ipcMain.handle('scoop:config', async () => {
-    const { stdout } = await execScoop('config')
-    const lines = stdout.split('\n')
-    const config: Record<string, string> = {}
-    for (const line of lines) {
-      // Format: "key               : value"
-      const match = line.match(/^\s*(\S[\S ]*?)\s*:\s*(.*)$/)
-      if (match) {
-        const key = match[1].trim()
-        const val = match[2].trim()
-        if (key) config[key] = val
-      }
-    }
-    return config
+    return readScoopConfigMap()
   })
 
   // Set a single scoop config value
   ipcMain.handle('scoop:setConfig', async (_event, key: string, value: string) => {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9\-]{0,100}$/.test(key)) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(key)) {
       throw new Error('Invalid config key')
     }
     // Remove the config key if value is empty

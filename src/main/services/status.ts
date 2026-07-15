@@ -61,6 +61,14 @@ export interface CheckUpdatesResult {
   elapsedMs: number
 }
 
+export interface CheckUpdatesOptions {
+  /**
+   * 是否在比较版本前同步 bucket 仓库。
+   * 默认关闭：普通刷新只读本地缓存，避免把“看一眼状态”变成隐式网络更新。
+   */
+  syncBuckets?: boolean
+}
+
 interface BucketRepo {
   name: string
   path: string
@@ -502,11 +510,19 @@ async function classifyVersionChange(app: FastInstalledApp, latest: LatestManife
   }
 }
 
-export async function checkScoopUpdatesFast(): Promise<CheckUpdatesResult> {
+export async function checkScoopUpdatesFast(options: CheckUpdatesOptions = {}): Promise<CheckUpdatesResult> {
   const startedAt = Date.now()
   const scoopRoot = await resolveScoopRootFast()
   const buckets = await listBucketRepos(scoopRoot)
-  const bucketResults = await Promise.all(buckets.map(syncBucket))
+  const syncBuckets = options.syncBuckets === true
+  const bucketResults = syncBuckets
+    ? await Promise.all(buckets.map(syncBucket))
+    : buckets.map((bucket) => ({
+        bucket: bucket.name,
+        path: bucket.path,
+        ok: true,
+        message: '使用本地缓存，未同步远程源',
+      }))
   const installed = await readInstalledApps(scoopRoot)
 
   const latestPairs = await Promise.all(installed.map(async (app) => ({

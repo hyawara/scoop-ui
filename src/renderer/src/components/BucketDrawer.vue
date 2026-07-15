@@ -24,6 +24,7 @@ import {
   TrashOutline,
 } from '@vicons/ionicons5'
 import { APP_DRAWER_WIDTH } from '@/constants/layout'
+import { usePackagesStore } from '@/stores/packages'
 
 interface BucketItem {
   id: string
@@ -51,7 +52,9 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const packagesStore = usePackagesStore()
 const loading = ref(false)
+const refreshingAll = ref(false)
 const addModal = ref(false)
 const newName = ref('')
 const newUrl = ref('')
@@ -205,6 +208,21 @@ async function fetchBuckets() {
   }
 }
 
+// 顶部刷新按钮：与 Dashboard「检查更新」共用同一条路径 —— 强制同步 Scoop 自身 + 所有 bucket，再检查可更新列表；完成后重拉 bucket 列表 UI。
+async function handleRefreshAll() {
+  if (refreshingAll.value) return
+  refreshingAll.value = true
+  try {
+    await packagesStore.refreshUpdatable({ sync: 'force', reason: 'bucket-drawer-refresh' })
+    await fetchBuckets()
+    message.success('软件源已同步')
+  } catch (e: any) {
+    message.error('同步失败: ' + (e?.message || e))
+  } finally {
+    refreshingAll.value = false
+  }
+}
+
 async function handleRemove(name: string) {
   if (name.toLowerCase() === 'main') {
     message.warning('main 是 Scoop 核心源，不建议移除')
@@ -279,7 +297,7 @@ onMounted(() => {
             <div class="flex items-center justify-between gap-3 px-4 py-2.5 border-b dark:border-white/[0.04] border-black/[0.06] flex-shrink-0">
               <span class="text-sm text-gray-500">已添加 {{ buckets.length }} 个源</span>
               <div class="flex items-center gap-2">
-                <NButton size="tiny" quaternary class="!rounded-md" :loading="loading" @click="fetchBuckets">
+                <NButton size="tiny" quaternary class="!rounded-md" :loading="refreshingAll || loading" @click="handleRefreshAll">
                   <template #icon><NIcon :component="RefreshOutline" size="14" /></template>
                   刷新
                 </NButton>

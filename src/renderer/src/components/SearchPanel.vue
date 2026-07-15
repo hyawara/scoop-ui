@@ -6,6 +6,7 @@ import { usePackagesStore } from '@/stores/packages'
 import AppDetailDrawer, { type AppDetailPayload } from '@/components/AppDetailDrawer.vue'
 import AppListItem from '@/components/AppListItem.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
+import { useSourceSyncPreflight } from '@/composables/useSourceSyncPreflight'
 import type { InstallOptions } from '@/types'
 
 const props = defineProps<{ query: string }>()
@@ -16,6 +17,7 @@ const showSpeedupBanner = ref(false)
 const installingSearchEngine = ref(false)
 
 const pkgProgress = usePackageProgress()
+const { ensureSourceReadyBeforeCommand } = useSourceSyncPreflight()
 const openTerminal = inject<() => void>('openTerminal', () => {})
 const installingSet = ref<Set<string>>(new Set())
 
@@ -63,6 +65,8 @@ watch(
 
 async function installSearchEngine() {
   if (installingSearchEngine.value) return
+  const shouldContinue = await ensureSourceReadyBeforeCommand('安装 scoop-search', 'before-search-engine-install')
+  if (!shouldContinue) return
   installingSearchEngine.value = true
   openTerminal()
   try {
@@ -101,12 +105,14 @@ function showPkgLogs(_name: string) {
 
 async function quickInstall(pkgName: string, options?: InstallOptions) {
   if (installingSet.value.has(pkgName)) return
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`安装 ${pkgName}`, 'before-search-install')
+  if (!shouldContinue) return
   openTerminal()
   installingSet.value = new Set([...installingSet.value, pkgName])
   pkgProgress.startProcessing(pkgName)
   try {
     // 直接调用 API，绕过 store.install 的全局进度监听（避免冲突）
-    const result = await window.scoopAPI.install(pkgName, options || { global: false, skipCheck: false, independent: false })
+    const result = await window.scoopAPI.install(pkgName, options || { global: false, skipCheck: false, independent: false, noUpdateScoop: true })
     assertScoopCommandSuccess(result, `${pkgName} 安装`)
     message.success(`${pkgName} 安装完成`)
     // 刷新已安装列表（静默）

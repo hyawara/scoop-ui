@@ -32,6 +32,7 @@ const installOptions = ref<InstallOptions>({
   global: false,
   skipCheck: false,
   independent: false,
+  noUpdateScoop: true,
 })
 
 watch(() => props.pkg, () => {
@@ -152,7 +153,11 @@ const manifestJson = computed(() => {
               <NSwitch v-model:value="installOptions.global" size="small" />
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-sm text-slate-300">跳过哈希检查 (--skip)</span>
+              <span class="text-sm text-slate-300">不在安装前同步源 (--no-update-scoop)</span>
+              <NSwitch v-model:value="installOptions.noUpdateScoop" size="small" />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-slate-300">跳过哈希检查 (--skip-hash-check)</span>
               <NSwitch v-model:value="installOptions.skipCheck" size="small" />
             </div>
             <div class="flex items-center justify-between">

@@ -78,6 +78,7 @@ async function refreshAll() {
     await Promise.all([
       packagesStore.loadInstalled(),
       packagesStore.loadUpdatable(),
+      packagesStore.loadSourceStatus(),
       settingsStore.loadEnv(),
       settingsStore.loadCacheInfo(),
       settingsStore.loadDiskSpace(),

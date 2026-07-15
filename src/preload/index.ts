@@ -14,18 +14,20 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   getAppVersions: (appName: string) => ipcRenderer.invoke('scoop:getAppVersions', appName),
   fetchPackageInfo: (name: string) => ipcRenderer.invoke('scoop:info', name),
   checkverLatest: (name: string) => ipcRenderer.invoke('scoop:checkverLatest', name),
-  install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean }) =>
+  install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean; noUpdateScoop?: boolean }) =>
     ipcRenderer.invoke('scoop:install', name, options),
   reset: (appName: string) => ipcRenderer.invoke('scoop:reset', appName),
   uninstall: (name: string, global?: boolean) =>
     ipcRenderer.invoke('scoop:uninstall', name, global),
-  update: (name?: string) => ipcRenderer.invoke('scoop:update', name),
+  update: (name?: string | string[]) => ipcRenderer.invoke('scoop:update', name),
   updateSelf: () => ipcRenderer.invoke('scoop:updateSelf'),
   cleanup: () => ipcRenderer.invoke('scoop:cleanup'),
   cache: () => ipcRenderer.invoke('scoop:cache'),
   clearCache: () => ipcRenderer.invoke('scoop:clearCache'),
   listInstalled: () => ipcRenderer.invoke('scoop:listInstalled'),
-  checkUpdates: () => ipcRenderer.invoke('scoop:check-updates'),
+  getSourceStatus: () => ipcRenderer.invoke('scoop:getSourceStatus'),
+  syncSources: (options?: { force?: boolean; reason?: string }) => ipcRenderer.invoke('scoop:syncSources', options),
+  checkUpdates: (options?: { syncBuckets?: boolean }) => ipcRenderer.invoke('scoop:check-updates', options),
   listUpdatable: () => ipcRenderer.invoke('scoop:listUpdatable'),
   checkAria2: () => ipcRenderer.invoke('scoop:checkAria2'),
   setAria2Enabled: (enabled: boolean) => ipcRenderer.invoke('scoop:setAria2Enabled', enabled),

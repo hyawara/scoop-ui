@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch, inject } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, nextTick, watch, inject } from 'vue'
 import {
   NCard,
   NTabs,
@@ -36,6 +36,7 @@ import BucketDrawer from '@/components/BucketDrawer.vue'
 import AppDiscoverDrawer from '@/components/AppDiscoverDrawer.vue'
 import AppDetailDrawer, { type AppDetailPayload } from '@/components/AppDetailDrawer.vue'
 import { usePackageProgress } from '@/composables/usePackageProgress'
+import { useSourceSyncPreflight } from '@/composables/useSourceSyncPreflight'
 import {
   buildMultiVersionIndex,
   getMultiVersionFamily as getIndexedMultiVersionFamily,
@@ -54,6 +55,7 @@ const batchUninstallDialogReforge = ref<ReturnType<typeof dialog.warning> | null
 
 // 行内进度系统
 const pkgProgress = usePackageProgress()
+const { ensureSourceReadyBeforeCommand } = useSourceSyncPreflight()
 const openTerminal = inject<() => void>('openTerminal', () => {})
 const nativeUpdateCount = ref(0)
 
@@ -186,7 +188,6 @@ const categories: Category[] = [
       { name: 'everything', icon: 'E', desc: '极速文件搜索', gradient: 'from-cyan-500 to-teal-500' },
       { name: 'trafficmonitor', icon: 'T', desc: '网速与系统监控', gradient: 'from-green-500 to-emerald-500' },
       { name: 'nilesoft-shell', icon: 'N', desc: '右键菜单增强', gradient: 'from-purple-500 to-violet-500' },
-      { name: 'scoop', icon: 'S', desc: '命令行包管理器', gradient: 'from-red-500 to-orange-500' },
     ],
   },
 ]
@@ -459,6 +460,8 @@ function appendUpdateStatusDiagnostic(failedByStatus: string[], result: any) {
 
 async function handleDetailInstall(name: string, options: InstallOptions) {
   if (storeInstallingSet.value.has(name)) return
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`安装 ${name}`, 'before-detail-install')
+  if (!shouldContinue) return
   openTerminal()
   const s = new Set(storeInstallingSet.value)
   s.add(name)
@@ -508,6 +511,10 @@ function handleDetailUpdate(name: string) {
 }
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
+const sourceClockNow = ref(Date.now())
+const lastManualCheckAt = ref<number | null>(null)
+let sourceClockTimer: number | null = null
+let checkButtonResetTimer: number | null = null
 
 // Batch selection state
 const selectedPackages = ref<Set<string>>(new Set())
@@ -621,22 +628,97 @@ const selectedUpdatableNames = computed(() =>
   packagesStore.updatable.filter((p: any) => selectedPackages.value.has(p.name)).map((p: any) => p.name)
 )
 
+const sourceSyncing = computed(() => packagesStore.sourceSyncPhase === 'syncing')
+
+function formatDuration(ms?: number): string {
+  if (ms === undefined || !Number.isFinite(ms)) return '未知时间'
+  if (ms < 60_000) return '刚刚'
+  const minutes = Math.max(1, Math.floor(ms / 60_000))
+  if (minutes < 60) return `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `${hours} 小时`
+  return `${Math.floor(hours / 24)} 天`
+}
+
+const sourceDisplayAgeMs = computed(() => {
+  const status = packagesStore.sourceStatus
+  if (!status?.lastUpdateMs) return status?.ageMs
+  return Math.max(0, sourceClockNow.value - status.lastUpdateMs)
+})
+
+const sourceDisplayStale = computed(() => {
+  const status = packagesStore.sourceStatus
+  const ageMs = sourceDisplayAgeMs.value
+  if (!status || ageMs === undefined) return status?.stale ?? false
+  return ageMs >= status.intervalMs
+})
+
+const sourceStatusLabel = computed(() => {
+  if (sourceSyncing.value) return '软件源同步中'
+  if (packagesStore.sourceSyncPhase === 'error') return '软件源异常'
+  const status = packagesStore.sourceStatus
+  if (!status) return '软件源状态未知'
+  if (!status.lastUpdate) return '软件源未同步'
+  const ageMs = sourceDisplayAgeMs.value
+  if (ageMs === undefined) return '软件源时间待识别'
+  // < 1 分钟：单独用"刚刚同步 / 刚刚未同步"，避免出现"刚刚前同步"这种奇怪的措辞。
+  if (ageMs < 60_000) return sourceDisplayStale.value ? '软件源未同步' : '软件源刚刚同步'
+  if (sourceDisplayStale.value) return `软件源 ${formatDuration(ageMs)}未同步`
+  return `软件源 ${formatDuration(ageMs)}前同步`
+})
+
+const sourceStatusClass = computed(() => {
+  if (sourceSyncing.value) return 'dark:text-sky-300 text-sky-700 dark:bg-sky-500/10 bg-sky-50 dark:border-sky-400/20 border-sky-200'
+  if (packagesStore.sourceSyncPhase === 'error') return 'dark:text-rose-300 text-rose-700 dark:bg-rose-500/10 bg-rose-50 dark:border-rose-400/20 border-rose-200'
+  if (!packagesStore.sourceStatus) return 'dark:text-zinc-300 text-zinc-600 dark:bg-white/[0.04] bg-zinc-50 dark:border-white/[0.08] border-zinc-200'
+  if (sourceDisplayStale.value) return 'dark:text-amber-300 text-amber-700 dark:bg-amber-500/10 bg-amber-50 dark:border-amber-400/20 border-amber-200'
+  return 'dark:text-emerald-300 text-emerald-700 dark:bg-emerald-500/10 bg-emerald-50 dark:border-emerald-400/20 border-emerald-200'
+})
+
+const sourceDotClass = computed(() => {
+  if (sourceSyncing.value) return 'bg-sky-400 animate-pulse'
+  if (packagesStore.sourceSyncPhase === 'error') return 'bg-rose-400'
+  if (!packagesStore.sourceStatus) return 'bg-zinc-400'
+  if (sourceDisplayStale.value) return 'bg-amber-400'
+  return 'bg-emerald-400'
+})
+
+const sourceStatusTitle = computed(() => {
+  const status = packagesStore.sourceStatus
+  if (packagesStore.sourceSyncError) return packagesStore.sourceSyncError
+  if (!status?.lastUpdate) return '尚未读取到 Scoop last_update'
+  if (!status.lastUpdateMs) return `Scoop last_update：${status.lastUpdate}；当前版本尚无法解析此时间格式`
+  const lastUpdateText = status.lastUpdateMs
+    ? new Date(status.lastUpdateMs).toLocaleString('zh-CN')
+    : status.lastUpdate
+  return status.nextUpdateAt
+    ? `上次同步：${lastUpdateText}；下次建议同步：${new Date(status.nextUpdateAt).toLocaleString('zh-CN')}`
+    : `上次同步：${lastUpdateText}`
+})
+
+const checkUpdateButtonText = computed(() => {
+  if (sourceSyncing.value) return '同步中'
+  if (checkingUpdates.value) return '检查中'
+  if (lastManualCheckAt.value && sourceClockNow.value - lastManualCheckAt.value < 8_000) return '已检查'
+  return '检查更新'
+})
+
 async function checkUpdatesFast(manual = false) {
   if (checkingUpdates.value) return
   checkingUpdates.value = true
   try {
-    await packagesStore.loadUpdatable()
+    await packagesStore.refreshUpdatable({
+      sync: manual ? 'force' : 'none',
+      reason: manual ? 'manual-check' : 'local-refresh',
+    })
     if (manual) {
-      if (packagesStore.updateCheckPhase === 'error') {
-        message.error('更新检查失败')
-      } else if (packagesStore.updateCheckWarnings.length > 0) {
-        message.warning(`检查完成，${packagesStore.updateCheckWarnings.length} 个软件源同步失败，已使用本地缓存对比`)
-      } else if (packagesStore.manifestChanged.length > 0) {
-        message.info(`检查完成，${packagesStore.manifestChanged.length} 个清单变更需要手动确认`)
-      } else {
-        const ms = packagesStore.updateCheckElapsedMs
-        message.success(ms > 0 ? `检查完成，用时 ${ms}ms` : '检查完成')
-      }
+      lastManualCheckAt.value = Date.now()
+      sourceClockNow.value = Date.now()
+      if (checkButtonResetTimer !== null) window.clearTimeout(checkButtonResetTimer)
+      checkButtonResetTimer = window.setTimeout(() => {
+        sourceClockNow.value = Date.now()
+        checkButtonResetTimer = null
+      }, 8_000)
     }
   } finally {
     checkingUpdates.value = false
@@ -646,7 +728,21 @@ async function checkUpdatesFast(manual = false) {
 onMounted(() => {
   loadSelectedFromConfig()
   loadPinnedFromConfig()
-  checkUpdatesFast(false)
+  sourceClockNow.value = Date.now()
+  sourceClockTimer = window.setInterval(() => {
+    sourceClockNow.value = Date.now()
+  }, 30_000)
+})
+
+onBeforeUnmount(() => {
+  if (sourceClockTimer !== null) {
+    window.clearInterval(sourceClockTimer)
+    sourceClockTimer = null
+  }
+  if (checkButtonResetTimer !== null) {
+    window.clearTimeout(checkButtonResetTimer)
+    checkButtonResetTimer = null
+  }
 })
 
 watch(() => packagesStore.installed.length, () => {
@@ -684,9 +780,11 @@ const recommendedPackages = [
 ]
 
 async function handleInstall(name: string) {
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`安装 ${name}`, 'before-recommended-install')
+  if (!shouldContinue) return
   openTerminal()
   try {
-    await packagesStore.install(name, { global: false, skipCheck: false, independent: false })
+    await packagesStore.install(name, { global: false, skipCheck: false, independent: false, noUpdateScoop: true })
     message.success(`${name} 安装完成`)
   } catch (e: any) {
     message.error(e?.message || `${name} 安装失败`)
@@ -708,13 +806,15 @@ const scoopIsProcessing = computed(() =>
 
 async function storeQuickInstall(pkgName: string) {
   if (storeInstallingSet.value.has(pkgName)) return
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`安装 ${pkgName}`, 'before-store-install')
+  if (!shouldContinue) return
   openTerminal()
   const s = new Set(storeInstallingSet.value)
   s.add(pkgName)
   storeInstallingSet.value = s
   pkgProgress.startProcessing(pkgName)
   try {
-    const result = await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false })
+    const result = await window.scoopAPI.install(pkgName, { global: false, skipCheck: false, independent: false, noUpdateScoop: true })
     assertScoopCommandSuccess(result, `${pkgName} 安装`)
     message.success(`${pkgName} 安装完成`)
     packagesStore.loadInstalled()
@@ -845,13 +945,15 @@ function handleCardClick(app: StoreApp) {
 
 async function handleDiscoverInstall(manifestName: string) {
   if (storeInstallingSet.value.has(manifestName)) return
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`安装 ${manifestName}`, 'before-discover-install')
+  if (!shouldContinue) return
   openTerminal()
   const s = new Set(storeInstallingSet.value)
   s.add(manifestName)
   storeInstallingSet.value = s
   pkgProgress.startProcessing(manifestName)
   try {
-    const result = await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false })
+    const result = await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false, noUpdateScoop: true })
     assertScoopCommandSuccess(result, `${manifestName} 安装`)
     message.success(`${manifestName} 安装完成`)
     packagesStore.loadInstalled()
@@ -928,6 +1030,10 @@ async function refreshAfterNativeUpdate(names: string[]) {
   return names.filter((name) => stillUpdatable.has(name))
 }
 
+async function ensureSourceReadyForUpdate() {
+  return ensureSourceReadyBeforeCommand('执行更新', 'before-native-update')
+}
+
 /**
  * 原生批量更新：不再由前端循环调度，直接一次 IPC → 一次 spawn → `scoop update a b c`。
  * 完成后只按 `scoop status/list` 的真实结果做终态对齐，不从日志里猜成功失败。
@@ -936,13 +1042,19 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
   const uniqueNames = [...new Set(names)].filter(Boolean)
   if (uniqueNames.length === 0 || flag.value) return
 
-  openTerminal()
   flag.value = true
-  nativeUpdateCount.value = uniqueNames.length
-  // 亮起全局呼吸条；先把首个软件设为激活行，随后由日志流嗅探自动随动切换
-  pkgProgress.startProcessing(uniqueNames[0])
+  let processingStarted = false
 
   try {
+    const shouldContinue = await ensureSourceReadyForUpdate()
+    if (!shouldContinue) return
+
+    openTerminal()
+    nativeUpdateCount.value = uniqueNames.length
+    // 亮起全局呼吸条；先把首个软件设为激活行，随后由日志流嗅探自动随动切换
+    pkgProgress.startProcessing(uniqueNames[0])
+    processingStarted = true
+
     const result = await window.scoopAPI.update(uniqueNames)
     const failedByStatus = await refreshAfterNativeUpdate(uniqueNames)
 
@@ -966,7 +1078,7 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
     message.error((e as Error)?.message || '更新失败')
   } finally {
     // 全流程收尾：熄灭呼吸条 + 清除所有行高亮
-    pkgProgress.finishProcessing()
+    if (processingStarted) pkgProgress.finishProcessing()
     flag.value = false
     nativeUpdateCount.value = 0
   }
@@ -1123,6 +1235,14 @@ function openBucketDrawer() {
                 <NIcon :component="Cube" size="14" />
                 <span>软件源</span>
               </button>
+              <span
+                class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium select-none whitespace-nowrap min-w-[132px]"
+                :class="sourceStatusClass"
+                :title="sourceStatusTitle"
+              >
+                <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :class="sourceDotClass" />
+                <span class="tabular-nums">{{ sourceStatusLabel }}</span>
+              </span>
             </div>
           </template>
 
@@ -1218,15 +1338,15 @@ function openBucketDrawer() {
                         {{ packagesStore.manifestChanged.length }} 个清单变更待确认
                       </span>
                       <button
-                        :disabled="batchUpdating || updatingAll"
+                        :disabled="batchUpdating || updatingAll || checkingUpdates || sourceSyncing"
                         @click="checkUpdatesFast(true)"
                         class="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md transition-all select-none"
-                        :class="batchUpdating || updatingAll
+                        :class="batchUpdating || updatingAll || checkingUpdates || sourceSyncing
                           ? 'bg-transparent dark:text-zinc-500 text-gray-500 cursor-not-allowed'
                           : 'bg-transparent dark:text-zinc-400 text-gray-500 hover:bg-black/[0.06] dark:hover:bg-white/[0.10] cursor-pointer'"
                       >
-                        <NIcon :component="RefreshOutline" :size="15" />
-                        检查更新
+                        <NIcon :component="RefreshOutline" :size="15" :class="checkingUpdates || sourceSyncing ? 'animate-spin' : ''" />
+                        {{ checkUpdateButtonText }}
                       </button>
                       <button
                         :disabled="selectedUpdatableNames.length === 0 || batchUpdating || updatingAll"

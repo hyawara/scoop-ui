@@ -95,6 +95,7 @@ const installOptions = ref<InstallOptions>({
   global: false,
   skipCheck: false,
   independent: false,
+  noUpdateScoop: true,
 })
 
 // ─── Manifest 自动补齐 ───────────────────────────────
@@ -124,7 +125,7 @@ watch(
     if (show && props.pkg) {
       manifest.value = null
       // 抽屉打开时重置安装选项，避免继承上一次残留
-      installOptions.value = { global: false, skipCheck: false, independent: false }
+      installOptions.value = { global: false, skipCheck: false, independent: false, noUpdateScoop: true }
       loadManifestIfNeeded()
     }
   },
@@ -221,8 +222,9 @@ const cliCommand = computed(() => {
   if (!installName.value) return ''
   const parts = ['scoop install', installName.value]
   if (installOptions.value.global) parts.push('--global')
-  if (installOptions.value.skipCheck) parts.push('--skip')
+  if (installOptions.value.skipCheck) parts.push('--skip-hash-check')
   if (installOptions.value.independent) parts.push('--independent')
+  if (installOptions.value.noUpdateScoop !== false) parts.push('--no-update-scoop')
   return parts.join(' ')
 })
 
@@ -545,8 +547,15 @@ async function copyManifest() {
                 </label>
                 <label class="flex items-center justify-between cursor-pointer">
                   <div class="flex flex-col">
+                    <span class="text-[13px] dark:text-slate-200 text-gray-800">不在安装前同步源</span>
+                    <span class="text-[10px] dark:text-slate-500 text-gray-500 font-mono">--no-update-scoop（避免安装被自更新阻塞）</span>
+                  </div>
+                  <NSwitch v-model:value="installOptions.noUpdateScoop" size="small" />
+                </label>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <div class="flex flex-col">
                     <span class="text-[13px] dark:text-slate-200 text-gray-800">跳过哈希检查</span>
-                    <span class="text-[10px] dark:text-slate-500 text-gray-500 font-mono">--skip（不校验文件完整性）</span>
+                    <span class="text-[10px] dark:text-slate-500 text-gray-500 font-mono">--skip-hash-check（不校验文件完整性）</span>
                   </div>
                   <NSwitch v-model:value="installOptions.skipCheck" size="small" />
                 </label>
