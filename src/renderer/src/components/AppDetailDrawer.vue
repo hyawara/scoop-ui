@@ -45,6 +45,7 @@ import {
   DocumentTextOutline,
   OptionsOutline,
   CodeSlashOutline,
+  CloseOutline,
 } from '@vicons/ionicons5'
 import type { InstallOptions } from '@/types'
 import { APP_DRAWER_WIDTH } from '@/constants/layout'
@@ -83,7 +84,7 @@ const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
   (e: 'install', name: string, options: InstallOptions): void
   (e: 'uninstall', name: string, global: boolean): void
-  (e: 'update', name: string): void
+  (e: 'update', name: string, global?: boolean): void
   /** 点击某个依赖项，父层可用于跳转到该包的详情。 */
   (e: 'depend-click', dep: string): void
 }>()
@@ -255,11 +256,15 @@ function handleUninstall() {
 
 function handleUpdate() {
   if (!props.pkg) return
-  emit('update', props.pkg.name)
+  emit('update', props.pkg.name, props.pkg.global ?? false)
 }
 
 function handleDependClick(dep: string) {
   emit('depend-click', dep)
+}
+
+function closeDrawer() {
+  emit('update:show', false)
 }
 
 const cliCopied = ref(false)
@@ -296,45 +301,58 @@ async function copyManifest() {
     placement="right"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
-    <NDrawerContent closable content-class="!p-0 flex flex-col h-full overflow-hidden">
+    <NDrawerContent content-class="!p-0 flex flex-col h-full overflow-hidden">
       <!-- ═══ Header：软件名 + 版本 + Bucket / 状态标签，去除首字母大头像 ═══ -->
       <template #header>
-        <div v-if="pkg" class="flex items-baseline gap-2.5 w-full min-w-0">
-          <h2 class="text-[17px] font-bold dark:text-white/95 text-zinc-900 truncate leading-none">
-            {{ pkg.name }}
-          </h2>
-          <span
-            v-if="displayVersion"
-            class="text-[12px] font-mono dark:text-slate-400 text-slate-500 flex-shrink-0 leading-none"
-          >v{{ displayVersion }}</span>
-          <div class="flex items-center gap-1.5 ml-auto pr-2 flex-shrink-0">
-            <NTag
-              v-if="pkg.bucket"
-              size="small"
-              :bordered="false"
-              class="!bg-violet-500/15 !text-violet-400 font-mono"
-            >{{ pkg.bucket }}</NTag>
-            <NTag
-              v-if="isInstalled"
-              size="small"
-              :bordered="false"
-              class="!bg-emerald-500/15 !text-emerald-500"
-            >已安装</NTag>
-            <NTag
-              v-else
-              size="small"
-              :bordered="false"
-              class="dark:!bg-white/[0.06] !bg-black/[0.04] dark:!text-slate-300 !text-slate-600"
-            >未安装</NTag>
-            <NTag
-              v-if="isInstalled && updatable"
-              size="small"
-              :bordered="false"
-              class="!bg-amber-500/15 !text-amber-500"
-            >可更新</NTag>
+        <div class="flex items-center gap-3 w-full min-w-0 pr-10">
+          <div class="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+            <h2 class="text-[17px] font-bold dark:text-white/95 text-zinc-900 truncate leading-none">
+              {{ pkg?.name || '软件详情' }}
+            </h2>
+            <span
+              v-if="pkg && displayVersion"
+              class="text-[12px] font-mono dark:text-slate-400 text-slate-500 flex-shrink-0 leading-none"
+            >v{{ displayVersion }}</span>
+            <div v-if="pkg" class="flex items-center gap-1.5 flex-shrink-0 min-w-0">
+              <NTag
+                v-if="pkg.bucket"
+                size="small"
+                :bordered="false"
+                class="!bg-violet-500/15 !text-violet-400 font-mono"
+              >{{ pkg.bucket }}</NTag>
+              <NTag
+                v-if="isInstalled"
+                size="small"
+                :bordered="false"
+                class="!bg-emerald-500/15 !text-emerald-500"
+              >已安装</NTag>
+              <NTag
+                v-else
+                size="small"
+                :bordered="false"
+                class="dark:!bg-white/[0.06] !bg-black/[0.04] dark:!text-slate-300 !text-slate-600"
+              >未安装</NTag>
+              <NTag
+                v-if="isInstalled && updatable"
+                size="small"
+                :bordered="false"
+                class="!bg-amber-500/15 !text-amber-500"
+              >可更新</NTag>
+            </div>
           </div>
+
+          <NButton
+            quaternary
+            circle
+            size="small"
+            aria-label="关闭"
+            title="关闭"
+            class="detail-close-btn !text-zinc-400/80 hover:!text-zinc-100 hover:!bg-zinc-800/60 transition-all duration-200"
+            @click="closeDrawer"
+          >
+            <template #icon><NIcon :component="CloseOutline" size="14" /></template>
+          </NButton>
         </div>
-        <span v-else class="text-base font-semibold dark:text-white/90 text-zinc-900">软件详情</span>
       </template>
 
       <!-- ═══ 无数据兜底 ═══ -->
@@ -345,51 +363,53 @@ async function copyManifest() {
 
       <div v-else class="flex-1 flex flex-col overflow-hidden">
         <!-- ═══ Action Bar：紧跟头部，按 isInstalled 分流 ═══ -->
-        <div class="px-5 py-3 flex items-center gap-2 border-b dark:border-white/[0.04] border-black/[0.06] flex-shrink-0">
-          <template v-if="!isInstalled">
+        <div v-if="!isInstalled" class="px-5 py-3">
+          <NButton
+            type="primary"
+            size="medium"
+            class="w-full"
+            :loading="processing"
+            :disabled="processing"
+            @click="handleInstall"
+          >
+            <template #icon><NIcon :component="DownloadOutline" size="16" /></template>
+            安装 {{ pkg.name }}
+          </NButton>
+        </div>
+
+        <div v-else class="px-5 py-4">
+          <div class="grid grid-cols-2 gap-3">
             <NButton
-              type="primary"
+              quaternary
               size="medium"
-              class="flex-1"
-              :loading="processing"
-              :disabled="processing"
-              @click="handleInstall"
-            >
-              <template #icon><NIcon :component="DownloadOutline" size="16" /></template>
-              安装 {{ pkg.name }}
-            </NButton>
-          </template>
-          <template v-else>
-            <NButton
-              v-if="updatable"
-              type="warning"
-              size="medium"
-              class="flex-1"
+              class="detail-action-btn detail-action-btn--update"
               :loading="processing"
               :disabled="processing"
               @click="handleUpdate"
             >
               <template #icon><NIcon :component="ArrowUpCircleOutline" size="16" /></template>
-              更新{{ newVersion ? ` → ${newVersion}` : '' }}
+              <span class="detail-action-label">{{ updatable && newVersion ? '强制更新 → ' + newVersion : '强制更新' }}</span>
             </NButton>
+
             <NPopconfirm @positive-click="handleUninstall">
               <template #trigger>
                 <NButton
-                  type="error"
+                  quaternary
                   size="medium"
-                  :class="updatable ? '' : 'flex-1'"
+                  class="detail-action-btn detail-action-btn--danger"
+                  :loading="processing"
                   :disabled="processing"
                 >
                   <template #icon><NIcon :component="TrashOutline" size="16" /></template>
-                  卸载
+                  <span class="detail-action-label">卸载</span>
                 </NButton>
               </template>
               <span class="text-[13px]">确定要彻底卸载 <strong>{{ pkg.name }}</strong> 吗？</span>
             </NPopconfirm>
-          </template>
+          </div>
         </div>
 
-        <!-- 微型进行中状态条 -->
+        <!-- 微型进行中状态条 -->        <!-- 微型进行中状态条 -->
         <div
           v-if="processing"
           class="px-5 py-2 flex items-center gap-2 border-b dark:border-white/[0.04] border-black/[0.06] flex-shrink-0"
@@ -662,4 +682,57 @@ async function copyManifest() {
 .manifest-collapse :deep(.n-collapse-item__content-inner) {
   padding-top: 0 !important;
 }
+
+.detail-close-btn {
+  border: 1px solid transparent;
+}
+
+.detail-action-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  transition: transform 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.detail-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.detail-action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-action-btn--update {
+  color: rgb(251 191 36) !important;
+  background-color: rgb(245 158 11 / 0.14) !important;
+  border: 1px solid rgb(245 158 11 / 0.22) !important;
+}
+
+.detail-action-btn--update:hover {
+  color: rgb(253 230 138) !important;
+  background-color: rgb(245 158 11 / 0.20) !important;
+  border-color: rgb(245 158 11 / 0.30) !important;
+}
+
+
+.detail-action-btn--danger {
+  color: rgb(248 113 113) !important;
+  background-color: rgb(127 29 29 / 0.18) !important;
+  border: 1px solid rgb(185 28 28 / 0.28) !important;
+}
+
+.detail-action-btn--danger:hover {
+  color: rgb(254 202 202) !important;
+  background-color: rgb(153 27 27 / 0.26) !important;
+  border-color: rgb(248 113 113 / 0.38) !important;
+}
+
 </style>

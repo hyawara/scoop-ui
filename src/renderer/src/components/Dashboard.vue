@@ -505,9 +505,9 @@ async function handleDetailUninstall(name: string, global: boolean) {
   }
 }
 
-function handleDetailUpdate(name: string) {
+function handleDetailUpdate(name: string, global = false) {
   showAppDetailDrawer.value = false
-  runNativeUpdate([name], batchUpdating)
+  return handleUpdate({ name, global })
 }
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
@@ -1086,7 +1086,29 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
 
 async function handleUpdate(pkg: any) {
   if (pkgProgress.isProcessing.value) return
-  await runNativeUpdate([pkg.name], batchUpdating)
+  const name = typeof pkg === 'string' ? pkg : pkg?.name
+  if (!name) return
+  const global = typeof pkg === 'object' ? !!pkg?.global : false
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`强制更新 ${name}`, 'before-force-update')
+  if (!shouldContinue) return
+
+  openTerminal()
+  pkgProgress.startProcessing(name)
+  try {
+    const result = await window.scoopAPI.update(name, { force: true, global })
+    assertScoopCommandSuccess(result, `${name} 强制更新`)
+    await Promise.all([
+      packagesStore.loadInstalled(),
+      packagesStore.loadUpdatable(),
+    ])
+    window.scoopAPI.clearAppIcon(name).catch(() => {})
+    fetchIcon(name)
+    message.success(`${name} 强制更新完成`)
+  } catch (e: any) {
+    message.error(e?.message || `强制更新 ${name} 失败`)
+  } finally {
+    pkgProgress.finishProcessing()
+  }
 }
 
 function handleBatchUpdate() {

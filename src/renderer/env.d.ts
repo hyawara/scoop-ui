@@ -203,7 +203,7 @@ interface Window {
     install: (name: string, options?: InstallOptions) => Promise<ScoopCommandResult>
     reset: (appName: string) => Promise<ResetResult>
     uninstall: (name: string, global?: boolean) => Promise<ScoopCommandResult>
-    update: (name?: string | string[]) => Promise<UpdateResult>
+    update: (name?: string | string[], options?: { force?: boolean; global?: boolean }) => Promise<UpdateResult>
     updateSelf: () => Promise<{ success: boolean; stdout: string; stderr: string }>
     cleanup: () => Promise<CleanupResult>
     cache: () => Promise<{ size: number; unit: string; files: number }>

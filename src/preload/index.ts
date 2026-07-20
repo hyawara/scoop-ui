@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   reset: (appName: string) => ipcRenderer.invoke('scoop:reset', appName),
   uninstall: (name: string, global?: boolean) =>
     ipcRenderer.invoke('scoop:uninstall', name, global),
-  update: (name?: string | string[]) => ipcRenderer.invoke('scoop:update', name),
+  update: (name?: string | string[], options?: { force?: boolean; global?: boolean }) => ipcRenderer.invoke('scoop:update', name, options),
   updateSelf: () => ipcRenderer.invoke('scoop:updateSelf'),
   cleanup: () => ipcRenderer.invoke('scoop:cleanup'),
   cache: () => ipcRenderer.invoke('scoop:cache'),

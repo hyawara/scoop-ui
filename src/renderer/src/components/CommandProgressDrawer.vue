@@ -46,6 +46,7 @@ interface PipelineTask {
   type: 'install' | 'update' | 'uninstall' | 'message'
   status: 'waiting' | 'running' | 'success' | 'error'
   versionInfo?: string
+  label?: string
   order: number
 }
 
@@ -168,19 +169,21 @@ const pipelineTasks = computed<PipelineTask[]>(() => {
     name: string,
     type: PipelineTask['type'] = 'message',
     status: PipelineTask['status'] = 'waiting',
-    versionInfo?: string
+    versionInfo?: string,
+    label?: string
   ) => {
     const key = name.toLowerCase()
     const existing = map.get(key)
     if (existing) {
       existing.type = type === 'message' ? existing.type : type
       existing.versionInfo = versionInfo || existing.versionInfo
+      existing.label = label || existing.label
       if (existing.status !== 'success' && existing.status !== 'error') {
         existing.status = status
       }
       return existing
     }
-    const task: PipelineTask = { name, type, status, versionInfo, order: order++ }
+    const task: PipelineTask = { name, type, status, versionInfo, label, order: order++ }
     map.set(key, task)
     return task
   }
@@ -188,7 +191,7 @@ const pipelineTasks = computed<PipelineTask[]>(() => {
   for (const task of commandState.value.tasks) {
     const names = task.packages.length > 0 ? task.packages : [task.label]
     for (const name of names.filter(Boolean)) {
-      ensureTask(name, task.type, commandState.value.active ? 'waiting' : 'success')
+      ensureTask(name, task.type, commandState.value.active ? 'waiting' : 'success', undefined, task.label)
     }
   }
 
@@ -521,10 +524,10 @@ onBeforeUnmount(() => {
               :key="`${task.type}:${task.name}`"
               class="chip"
               :class="`chip--${task.status}`"
-              :title="`${task.name}${task.versionInfo ? ' ' + task.versionInfo : ''} · ${taskStatusText(task)}`"
+              :title="`${task.label || task.name}${task.versionInfo ? ' ' + task.versionInfo : ''} · ${taskStatusText(task)}`"
             >
               <span class="chip__dot">{{ taskDotIcon(task) }}</span>
-              <span class="chip__name">{{ task.name }}</span>
+              <span class="chip__name">{{ task.label || task.name }}</span>
               <span class="chip__status">{{ taskStatusText(task) }}</span>
             </div>
           </div>
@@ -631,6 +634,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   background: #0d0d10;
   color: #d4d4d8;
+  -webkit-app-region: no-drag;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* ─── 顶栏：任务流水线作为 Header ─── */
@@ -804,6 +810,9 @@ onBeforeUnmount(() => {
   background: #0d0d10;
   scrollbar-width: thin;
   scrollbar-color: rgba(82, 82, 91, 0.45) transparent;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 .terminal::-webkit-scrollbar {
   width: 6px;
@@ -831,6 +840,8 @@ onBeforeUnmount(() => {
 
 .terminal__stream {
   display: block;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* ─── 每行日志：block 级 + 强制换行 + 继承全局字体 ─── */
@@ -842,6 +853,9 @@ onBeforeUnmount(() => {
   word-break: break-all;
   overflow-wrap: anywhere;
   padding: 2px 18px;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .log-line--default {

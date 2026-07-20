@@ -89,12 +89,14 @@ async function installSearchEngine() {
 }
 
 function selectPackage(pkg: any) {
+  const installed = packagesStore.installed.find((p: any) => p.name === pkg.name)
   selectedPackage.value = {
     name: pkg.name,
     version: pkg.version,
     bucket: pkg.bucket,
     description: pkg.description,
     homepage: pkg.website,
+    global: installed?.global ?? pkg.global,
   }
   showDetailDrawer.value = true
 }
@@ -137,6 +139,28 @@ async function handleDrawerUninstall(name: string, global: boolean) {
     showDetailDrawer.value = false
   } catch (e) {
     message.error((e as Error).message || `${name} 卸载失败`)
+  }
+}
+
+async function handleDrawerUpdate(name: string, global = false) {
+  if (pkgProgress.isProcessing.value) return
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`强制更新 ${name}`, 'before-search-force-update')
+  if (!shouldContinue) return
+
+  openTerminal()
+  pkgProgress.startProcessing(name)
+  try {
+    const result = await window.scoopAPI.update(name, { force: true, global })
+    assertScoopCommandSuccess(result, `${name} 强制更新`)
+    message.success(`${name} 强制更新完成`)
+    await Promise.all([
+      packagesStore.loadInstalled(),
+      packagesStore.loadUpdatable(),
+    ])
+  } catch (e: any) {
+    message.error(e?.message || `强制更新 ${name} 失败`)
+  } finally {
+    pkgProgress.finishProcessing()
   }
 }
 
@@ -234,9 +258,10 @@ const skeletonItems = Array.from({ length: 5 })
       v-model:show="showDetailDrawer"
       :pkg="selectedPackage"
       :is-installed="!!selectedPackage && installedNames.has(selectedPackage.name)"
-      :processing="!!selectedPackage && installingSet.has(selectedPackage.name)"
+      :processing="!!selectedPackage && (installingSet.has(selectedPackage.name) || pkgProgress.isCurrent(selectedPackage.name))"
       @install="(name: string, options: InstallOptions) => quickInstall(name, options)"
       @uninstall="handleDrawerUninstall"
+      @update="handleDrawerUpdate"
     />
   </div>
 </template>

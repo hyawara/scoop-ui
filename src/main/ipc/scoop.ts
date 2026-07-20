@@ -1660,7 +1660,7 @@ export function registerScoopIPC(): void {
   })
 
   // Update packages —— 原生批量：一次 spawn 执行 `scoop update a b c`，日志只做 raw stream 转发
-  ipcMain.handle('scoop:update', async (event, target?: string | string[]) => {
+  ipcMain.handle('scoop:update', async (event, target?: string | string[], options?: { force?: boolean; global?: boolean }) => {
     const names = Array.isArray(target) ? target : (target ? [target] : [])
     const invalid = names.find((name) => !/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name))
     if (invalid) {
@@ -1668,6 +1668,8 @@ export function registerScoopIPC(): void {
     }
 
     const args = names.length > 0 ? ['update', ...names] : ['update', '--all']
+    if (options?.global && names.length > 0) args.push('--global')
+    if (options?.force) args.push('--force')
     const win = BrowserWindow.fromWebContents(event.sender)
     await stopActiveSourceSyncForPackageCommand(win)
     const pkgLabel = names.length === 1 ? names[0] : (names.length > 1 ? names.join(' ') : '*')

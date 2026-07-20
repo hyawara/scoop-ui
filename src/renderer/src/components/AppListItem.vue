@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NCheckbox, NButton, NIcon, NPopconfirm, NTooltip, NText } from 'naive-ui'
-import { DownloadOutline, TrashOutline, ArrowUpCircleOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
+import { NCheckbox, NIcon, NPopconfirm, NText, NTooltip } from 'naive-ui'
+import { ArrowUpCircleOutline, DownloadOutline, TrashOutline } from '@vicons/ionicons5'
 
 interface PackageInfo {
   name: string
@@ -101,101 +101,99 @@ const emit = defineEmits<{
       <span v-if="mode === 'search' && isInstalled" class="ml-3 px-2 py-0.5 text-[11px] font-medium dark:text-zinc-500 text-zinc-600 font-mono flex-shrink-0 rounded-md dark:bg-white/[0.04] bg-zinc-100">已安装</span>
     </div>
 
-    <!-- 右侧操作区：固定宽度，绝对垂直居中 -->
-    <div class="flex-shrink-0 flex items-center self-center justify-end gap-1.5">
-      <!-- 激活态：极简「执行中」标签，不显示任何按钮 -->
-      <span
-        v-if="active"
-        class="text-[11px] font-medium text-emerald-500 select-none tracking-wide"
-      >执行中</span>
+    <!-- 右侧操作区：常驻显示的统一 28px 图标按钮组 -->
+    <div class="flex-shrink-0 ml-3 flex items-center gap-1.5 opacity-80 transition-opacity hover:opacity-100">
+      <!-- 1. 更新按钮（统一强制更新） -->
+      <NTooltip v-if="mode !== 'search'" trigger="hover">
+        <template #trigger>
+          <button
+            type="button"
+            class="inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/30 disabled:cursor-not-allowed disabled:opacity-50"
+            :class="newVersion && !active
+              ? 'text-amber-400 hover:bg-amber-400/10'
+              : 'text-zinc-500 hover:text-amber-300 hover:bg-amber-400/10'"
+            :disabled="disabled || active"
+            :title="newVersion && !active ? '更新至新版本' : '强制更新此应用'"
+            :aria-label="newVersion && !active ? '更新至新版本' : '强制更新此应用'"
+            @click.stop="emit('update', pkg)"
+          >
+            <NIcon :component="ArrowUpCircleOutline" size="16" />
+          </button>
+        </template>
+        {{ newVersion && !active ? `更新至 ${newVersion}` : '强制更新此应用' }}
+      </NTooltip>
 
-      <!-- idle 静止态：操作按钮组 -->
-      <div v-else class="flex items-center gap-1.5">
-        <!-- 更新按钮：有新版本时常驻高亮显现（琥珀色引导暗示） -->
-        <NButton
-          v-if="newVersion"
-          text size="small"
-          class="!text-amber-500 hover:!text-amber-400 transition-colors duration-200 cursor-pointer"
-          title="更新到新版本"
-          @click.stop="emit('update', pkg)"
-        >
-          <template #icon><NIcon :component="ArrowUpCircleOutline" size="16" /></template>
-        </NButton>
-        <!-- 多版本激活按钮：属于 appVersionMaps 家族时常驻显示 -->
-        <NTooltip v-if="mode !== 'search' && resettable">
-          <template #trigger>
-            <NButton
-              text
-              size="small"
-              :loading="resetting"
-              :disabled="resetting"
-              class="!text-zinc-500 dark:!text-zinc-600 hover:!text-cyan-400 dark:hover:!text-cyan-400 transition-colors duration-200 cursor-pointer"
-              title="设为活动版本"
-              @click.stop="emit('reset', pkg.name)"
-            >
-              <template #icon>
-                <NIcon
-                  :component="SwapHorizontalOutline"
-                  size="15"
-                />
-              </template>
-            </NButton>
-          </template>
-          将此版本设为系统的默认活动版本 (scoop reset)
-        </NTooltip>
-        <!-- 置顶按钮：静默常驻低亮，Hover 高亮 -->
-        <template v-if="mode !== 'search'">
+      <!-- 2. 固定按钮 -->
+      <NTooltip v-if="mode !== 'search'" trigger="hover">
+        <template #trigger>
           <button
             v-if="pinned"
-            class="pin-btn flex items-center justify-center w-5 h-5 rounded transition-colors duration-200 cursor-pointer"
-            title="取消置顶"
+            type="button"
+            class="pin-btn pin-btn--active inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-200 cursor-pointer"
+            title="取消固定到顶部"
+            aria-label="取消固定到顶部"
             @click.stop="emit('toggle-pin', pkg.name)"
           >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
               <path d="M16 3v2l-1 1v5l3 3v1h-5v6l-1 1-1-1v-6H5v-1l3-3V6L7 5V3h9z"/>
             </svg>
           </button>
           <button
             v-else
-            class="pin-btn flex items-center justify-center w-5 h-5 rounded transition-colors duration-200 dark:text-zinc-600 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] cursor-pointer"
-            title="置顶"
+            type="button"
+            class="pin-btn inline-flex h-7 w-7 items-center justify-center rounded transition-colors duration-200 cursor-pointer text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/70"
+            title="固定到顶部"
+            aria-label="固定到顶部"
             @click.stop="emit('toggle-pin', pkg.name)"
           >
-            <svg class="w-3.5 h-3.5 -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+            <svg class="w-3.5 h-3.5 -rotate-45" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
               <path d="M16 3v2l-1 1v5l3 3v1h-5v6l-1 1-1-1v-6H5v-1l3-3V6L7 5V3h9z"/>
             </svg>
           </button>
         </template>
-        <!-- 卸载按钮：静默常驻低亮，Hover 变红，带 NPopconfirm 二次确认 -->
-        <template v-if="mode !== 'search'">
-          <NPopconfirm
-            @positive-click.stop="emit('uninstall', pkg)"
-            :show-icon="false"
-          >
+        {{ pinned ? '取消固定' : '固定到顶部' }}
+      </NTooltip>
+
+      <!-- 3. 卸载按钮 -->
+      <NPopconfirm
+        v-if="mode !== 'search'"
+        :show-icon="false"
+        @positive-click.stop="emit('uninstall', pkg)"
+      >
+        <template #trigger>
+          <NTooltip trigger="hover">
             <template #trigger>
-              <NButton
-                text size="small"
-                class="!text-zinc-500 dark:!text-zinc-600 hover:!text-rose-400 dark:hover:!text-rose-400 transition-colors duration-200 cursor-pointer"
-                title="卸载"
+              <button
+                type="button"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/30"
+                title="卸载此应用"
+                aria-label="卸载此应用"
                 @click.stop
               >
-                <template #icon><NIcon :component="TrashOutline" size="15" /></template>
-              </NButton>
+                <NIcon :component="TrashOutline" size="16" />
+              </button>
             </template>
-            <span class="text-[13px]">确定要完全卸载 <strong>{{ pkg.name }}</strong> 吗？</span>
-          </NPopconfirm>
+            卸载此应用
+          </NTooltip>
         </template>
-        <!-- 安装按钮（搜索模式）：静默常驻低亮，Hover 高亮 -->
-        <NButton
-          v-if="mode === 'search' && !isInstalled"
-          text size="small"
-          class="!text-zinc-500 dark:!text-zinc-600 hover:!text-zinc-800 dark:hover:!text-white transition-colors duration-200 cursor-pointer"
-          title="安装"
-          @click.stop="emit('install', pkg.name)"
-        >
-          <template #icon><NIcon :component="DownloadOutline" size="15" /></template>
-        </NButton>
-      </div>
+        <span class="text-[13px]">确定要完全卸载 <strong>{{ pkg.name }}</strong> 吗？</span>
+      </NPopconfirm>
+
+      <!-- 搜索模式：安装按钮仍保持常驻，尺寸与语义一致 -->
+      <NTooltip v-if="mode === 'search' && !isInstalled" trigger="hover">
+        <template #trigger>
+          <button
+            type="button"
+            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:text-zinc-100 hover:bg-zinc-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500/30"
+            title="安装"
+            aria-label="安装"
+            @click.stop="emit('install', pkg.name)"
+          >
+            <NIcon :component="DownloadOutline" size="16" />
+          </button>
+        </template>
+        安装
+      </NTooltip>
     </div>
   </div>
 </template>
@@ -216,15 +214,6 @@ const emit = defineEmits<{
   width: 2px;
   background-color: var(--app-primary);
   border-radius: 0 2px 2px 0;
-}
-
-/* ─── 已置顶图钉：跟随全局主题色高亮 ─── */
-.is-pinned-btn {
-  color: var(--app-primary);
-  background-color: color-mix(in srgb, var(--app-primary) 14%, transparent);
-}
-.is-pinned-btn:hover {
-  background-color: color-mix(in srgb, var(--app-primary) 22%, transparent);
 }
 
 /* ─── 当前激活行：淡淡的翠色半透明染底 + 左侧翠色引导条 ─── */
@@ -263,6 +252,20 @@ const emit = defineEmits<{
   width: 2px;
   background-color: rgb(245 158 11);
   border-radius: 0 2px 2px 0;
+}
+
+/* ─── 图钉按钮：沿用原始扁平图钉 SVG，保证形状不变形 ─── */
+.pin-btn {
+  position: relative;
+}
+
+.pin-btn--active {
+  color: var(--app-primary);
+  background-color: color-mix(in srgb, var(--app-primary) 14%, transparent);
+}
+
+.pin-btn--active:hover {
+  background-color: color-mix(in srgb, var(--app-primary) 22%, transparent);
 }
 
 .version-pop {
