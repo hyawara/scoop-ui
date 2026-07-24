@@ -35,6 +35,9 @@ export interface ManifestChangedInfo {
 
 export interface InstallOptions {
   global?: boolean
+  isGlobal?: boolean
+  useSudo?: boolean
+  force?: boolean
   /** 跳过哈希校验，等价于 scoop install --skip-hash-check。 */
   skipCheck?: boolean
   independent?: boolean

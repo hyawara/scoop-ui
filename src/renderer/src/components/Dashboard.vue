@@ -483,14 +483,14 @@ async function handleDetailInstall(name: string, options: InstallOptions) {
   }
 }
 
-async function handleDetailUninstall(name: string, global: boolean) {
+async function handleDetailUninstall(name: string, global: boolean, options?: { purge?: boolean }) {
   if (uninstallingSet.value.has(name)) return
   openTerminal()
   const s = new Set(uninstallingSet.value)
   s.add(name)
   uninstallingSet.value = s
   try {
-    const result = await window.scoopAPI.uninstall(name, global)
+    const result = await window.scoopAPI.uninstall(name, global, options)
     assertScoopCommandSuccess(result, `${name} 卸载`)
     await packagesStore.loadInstalled()
     await packagesStore.loadUpdatable()
@@ -505,9 +505,12 @@ async function handleDetailUninstall(name: string, global: boolean) {
   }
 }
 
-function handleDetailUpdate(name: string, global = false) {
+function handleDetailUpdate(name: string, global = false, options?: { useSudo?: boolean; isGlobal?: boolean; action?: 'update' | 'reinstall' }) {
   showAppDetailDrawer.value = false
-  return handleUpdate({ name, global })
+  if (options?.action === 'reinstall' || (options?.useSudo && options.action !== 'update')) {
+    return handleReinstall({ name, global }, { useSudo: options?.useSudo })
+  }
+  return handleUpdate({ name, global: options?.isGlobal ?? global, useSudo: options?.useSudo })
 }
 const checkingUpdates = ref(false)
 const updatingAll = ref(false)
@@ -943,7 +946,7 @@ function handleCardClick(app: StoreApp) {
   }
 }
 
-async function handleDiscoverInstall(manifestName: string) {
+async function handleDiscoverInstall(manifestName: string, options?: InstallOptions) {
   if (storeInstallingSet.value.has(manifestName)) return
   const shouldContinue = await ensureSourceReadyBeforeCommand(`安装 ${manifestName}`, 'before-discover-install')
   if (!shouldContinue) return
@@ -953,7 +956,7 @@ async function handleDiscoverInstall(manifestName: string) {
   storeInstallingSet.value = s
   pkgProgress.startProcessing(manifestName)
   try {
-    const result = await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false, noUpdateScoop: true })
+    const result = await window.scoopAPI.install(manifestName, { global: false, skipCheck: false, independent: false, noUpdateScoop: true, ...options })
     assertScoopCommandSuccess(result, `${manifestName} 安装`)
     message.success(`${manifestName} 安装完成`)
     packagesStore.loadInstalled()
@@ -1084,18 +1087,43 @@ async function runNativeUpdate(names: string[], flag: { value: boolean }) {
   }
 }
 
+async function handleReinstall(pkg: any, options?: { useSudo?: boolean; isGlobal?: boolean }) {
+  if (pkgProgress.isProcessing.value) return
+  const name = typeof pkg === 'string' ? pkg : pkg?.name
+  if (!name) return
+  const global = typeof pkg === 'object' ? !!pkg?.global : false
+  const shouldContinue = await ensureSourceReadyBeforeCommand(`重装 ${name}`, 'before-reinstall')
+  if (!shouldContinue) return
+
+  openTerminal()
+  pkgProgress.startProcessing(name)
+  try {
+    const result = await window.scoopAPI.reinstall(name, { global: options?.isGlobal ?? global, isGlobal: options?.isGlobal, useSudo: options?.useSudo })
+    assertScoopCommandSuccess(result, `${name} 重装`)
+    await Promise.all([packagesStore.loadInstalled(), packagesStore.loadUpdatable()])
+    window.scoopAPI.clearAppIcon(name).catch(() => {})
+    fetchIcon(name)
+    message.success(`${name} 重装完成`)
+  } catch (e: any) {
+    message.error(e?.message || `重装 ${name} 失败`)
+  } finally {
+    pkgProgress.finishProcessing()
+  }
+}
+
 async function handleUpdate(pkg: any) {
   if (pkgProgress.isProcessing.value) return
   const name = typeof pkg === 'string' ? pkg : pkg?.name
   if (!name) return
   const global = typeof pkg === 'object' ? !!pkg?.global : false
+  const useSudo = typeof pkg === 'object' ? !!pkg?.useSudo : false
   const shouldContinue = await ensureSourceReadyBeforeCommand(`强制更新 ${name}`, 'before-force-update')
   if (!shouldContinue) return
 
   openTerminal()
   pkgProgress.startProcessing(name)
   try {
-    const result = await window.scoopAPI.update(name, { force: true, global })
+    const result = await window.scoopAPI.update(name, { force: true, global, useSudo })
     assertScoopCommandSuccess(result, `${name} 强制更新`)
     await Promise.all([
       packagesStore.loadInstalled(),
@@ -1135,14 +1163,14 @@ function handleUpdateAllConfirm() {
   })
 }
 
-async function handleUninstall(pkg: any) {
+async function handleUninstall(pkg: any, options?: { purge?: boolean }) {
   if (uninstallingSet.value.has(pkg.name)) return
   openTerminal()
   const s = new Set(uninstallingSet.value)
   s.add(pkg.name)
   uninstallingSet.value = s
   try {
-    const result = await window.scoopAPI.uninstall(pkg.name, pkg.global)
+    const result = await window.scoopAPI.uninstall(pkg.name, pkg.global, options)
     assertScoopCommandSuccess(result, `${pkg.name} 卸载`)
     const r = new Set(removingSet.value)
     r.add(pkg.name)
@@ -1450,6 +1478,7 @@ function openBucketDrawer() {
                     :icon="getIcon(pkg.name)"
                     @toggle-check="toggleSelect"
                     @update="handleUpdate"
+                    @reinstall="handleReinstall"
                     @uninstall="handleUninstall"
                     @reset="handleResetActive"
                     @show-logs="showPkgLogs"

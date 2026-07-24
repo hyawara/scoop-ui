@@ -5,6 +5,9 @@ import {
   NDrawerContent,
   NButton,
   NIcon,
+  NPopover,
+  NRadio,
+  NRadioGroup,
   NTag,
   NTooltip,
   useMessage,
@@ -18,7 +21,7 @@ import {
   RefreshOutline,
   SwapHorizontalOutline,
 } from '@vicons/ionicons5'
-import type { DiscoverApp, AppVersion } from '@/types'
+import type { DiscoverApp, AppVersion, InstallOptions } from '@/types'
 import { APP_DRAWER_WIDTH } from '@/constants/layout'
 
 const props = defineProps<{
@@ -34,7 +37,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
-  (e: 'install', manifestName: string): void
+  (e: 'install', manifestName: string, options?: InstallOptions): void
   (e: 'reset', manifestName: string, familyKey: string): void
 }>()
 
@@ -45,6 +48,8 @@ const manifestForCheckver = ref<Record<string, any> | null>(null)
 const officialRefreshing = ref(false)
 const officialLatestVersion = ref('')
 const officialLatestUrl = ref('')
+type InstallMode = 'standard' | 'global'
+const installMode = ref<InstallMode>('standard')
 let manifestRequestId = 0
 
 function handleClose() {
@@ -151,10 +156,20 @@ function isVersionSelected(version: AppVersion): boolean {
   return selectedVersion.value ? getVersionKey(selectedVersion.value) === getVersionKey(version) : false
 }
 
-function handleInstall(version: AppVersion) {
+function handleInstall(version: AppVersion, options?: InstallOptions) {
   const installName = getInstallName(version)
   if (props.installingSet.has(installName)) return
-  emit('install', installName)
+  emit('install', installName, options)
+}
+
+function installOptionsByMode(): InstallOptions {
+  if (installMode.value === 'global') return { global: true, isGlobal: true }
+  return {}
+}
+
+function confirmInstallFromPopover(version: AppVersion) {
+  handleInstall(version, installOptionsByMode())
+  installMode.value = 'standard'
 }
 
 function handleReset(version: AppVersion) {
@@ -386,17 +401,35 @@ async function refreshOfficialVersion() {
                   </NTooltip>
                 </template>
                 <template v-else>
-                  <NButton
-                    secondary
-                    size="tiny"
-                    :loading="installingSet.has(getInstallName(ver))"
-                    :disabled="installingSet.has(getInstallName(ver))"
-                    class="!rounded-md opacity-70 hover:opacity-100 !transition-opacity cursor-pointer"
-                    @click.stop="handleInstall(ver)"
-                  >
-                    <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
-                    安装
-                  </NButton>
+                  <NPopover trigger="click" placement="bottom-end" style="width: 288px; padding: 12px;" @click.stop>
+                    <template #trigger>
+                      <NButton
+                        secondary
+                        size="tiny"
+                        :loading="installingSet.has(getInstallName(ver))"
+                        :disabled="installingSet.has(getInstallName(ver))"
+                        class="!rounded-md opacity-70 hover:opacity-100 !transition-opacity cursor-pointer"
+                        @click.stop
+                      >
+                        <template #icon><NIcon :component="DownloadOutline" size="14" /></template>
+                        安装
+                      </NButton>
+                    </template>
+                    <div class="space-y-3">
+                      <div class="text-xs font-bold dark:text-zinc-200 text-zinc-800">安装 {{ getInstallName(ver) }} ({{ ver.version }})</div>
+                      <NRadioGroup v-model:value="installMode" name="discover-install-mode" size="small">
+                        <div class="space-y-1.5">
+                          <NRadio value="standard">标准安装 (Standard)</NRadio>
+                          <NRadio value="global">🌐 全局安装 (-g)</NRadio>
+                        </div>
+                      </NRadioGroup>
+                      <div class="text-[12px] leading-5 dark:text-zinc-500 text-zinc-500">如果安装需要管理员权限，请以管理员身份启动 Scoop UI 后再安装。</div>
+                      <div class="flex justify-end gap-2 pt-2 border-t dark:border-zinc-700/40 border-zinc-200">
+                        <NButton size="tiny" quaternary @click="installMode = 'standard'">取消</NButton>
+                        <NButton size="tiny" type="primary" @click="confirmInstallFromPopover(ver)">确认安装</NButton>
+                      </div>
+                    </div>
+                  </NPopover>
                 </template>
                 <NButton
                   text
@@ -452,6 +485,8 @@ async function refreshOfficialVersion() {
         <NIcon :component="CubeOutline" size="40" class="opacity-30 mb-3" />
         <p class="text-sm">未选择软件</p>
       </div>
+
+
     </NDrawerContent>
   </NDrawer>
 </template>

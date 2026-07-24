@@ -14,12 +14,14 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   getAppVersions: (appName: string) => ipcRenderer.invoke('scoop:getAppVersions', appName),
   fetchPackageInfo: (name: string) => ipcRenderer.invoke('scoop:info', name),
   checkverLatest: (name: string) => ipcRenderer.invoke('scoop:checkverLatest', name),
-  install: (name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean; noUpdateScoop?: boolean }) =>
+  install: (name: string, options?: { global?: boolean; isGlobal?: boolean; useSudo?: boolean; force?: boolean; skipCheck?: boolean; independent?: boolean; noUpdateScoop?: boolean }) =>
     ipcRenderer.invoke('scoop:install', name, options),
+  reinstall: (name: string, options?: { global?: boolean; isGlobal?: boolean; useSudo?: boolean }) =>
+    ipcRenderer.invoke('scoop:reinstall', { appName: name, ...options }),
   reset: (appName: string) => ipcRenderer.invoke('scoop:reset', appName),
-  uninstall: (name: string, global?: boolean) =>
-    ipcRenderer.invoke('scoop:uninstall', name, global),
-  update: (name?: string | string[], options?: { force?: boolean; global?: boolean }) => ipcRenderer.invoke('scoop:update', name, options),
+  uninstall: (name: string, global?: boolean, options?: { purge?: boolean }) =>
+    ipcRenderer.invoke('scoop:uninstall', name, global, options),
+  update: (name?: string | string[], options?: { force?: boolean; global?: boolean; useSudo?: boolean }) => ipcRenderer.invoke('scoop:update', name, options),
   updateSelf: () => ipcRenderer.invoke('scoop:updateSelf'),
   cleanup: () => ipcRenderer.invoke('scoop:cleanup'),
   cache: () => ipcRenderer.invoke('scoop:cache'),
@@ -52,6 +54,7 @@ contextBridge.exposeInMainWorld('scoopAPI', {
   getAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:getAppIcon', packageName),
   clearAppIcon: (packageName: string) => ipcRenderer.invoke('scoop:clearAppIcon', packageName),
   getCommandState: () => ipcRenderer.invoke('scoop:getCommandState'),
+  isElevated: () => ipcRenderer.invoke('scoop:isElevated'),
   abortCommand: () => ipcRenderer.invoke('scoop:abortCommand'),
 
   onProgress: (callback: (data: any) => void) => {

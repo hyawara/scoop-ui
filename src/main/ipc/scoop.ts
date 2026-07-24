@@ -412,28 +412,53 @@ async function ensureGlobalPrivilege(
   win: BrowserWindow | null,
   type: CancellableScoopTaskType,
   label: string,
-  global?: boolean
+  global?: boolean,
+  useSudo?: boolean
 ): Promise<{ ok: true; useSudo: boolean } | { ok: false; error: string }> {
-  if (!global) return { ok: true, useSudo: false }
+  if (!global && !useSudo) return { ok: true, useSudo: false }
 
   if (await detectProcessElevated()) {
+    sendProgress(win, {
+      type,
+      package: label,
+      message: useSudo || global
+        ? '当前 Scoop UI 已以管理员身份运行，将直接执行高权限操作。'
+        : '当前进程已具备管理员权限。',
+    })
     return { ok: true, useSudo: false }
   }
 
-  const sudoAvailable = await detectSudoAvailable()
-  if (!sudoAvailable) {
-    return {
-      ok: false,
-      error: 'Global 操作需要管理员权限。请先执行 `scoop install sudo`，或以管理员身份运行 Scoop UI。',
-    }
-  }
+  const error = useSudo
+    ? '当前 Scoop UI 未以管理员身份运行。请右键 Scoop UI 选择“以管理员身份运行”后，再执行管理员安装/重装。'
+    : 'Global 操作需要管理员权限。请右键 Scoop UI 选择“以管理员身份运行”后再试。'
 
   sendProgress(win, {
     type,
     package: label,
-    message: '检测到 global 操作，正在通过 sudo 请求管理员权限...',
+    message: `ERROR: ${error}`,
   })
-  return { ok: true, useSudo: true }
+  return { ok: false, error }
+}
+
+interface ScoopInstallOptions {
+  global?: boolean
+  isGlobal?: boolean
+  useSudo?: boolean
+  force?: boolean
+  skipCheck?: boolean
+  independent?: boolean
+  noUpdateScoop?: boolean
+}
+
+function normalizeScoopInstallPayload(
+  nameOrPayload: string | { appName?: string; name?: string } | undefined,
+  options?: ScoopInstallOptions
+): { name: string; options: ScoopInstallOptions } {
+  if (typeof nameOrPayload === 'object' && nameOrPayload) {
+    const { appName, name, ...payloadOptions } = nameOrPayload as any
+    return { name: String(appName || name || ''), options: { ...payloadOptions, ...options } }
+  }
+  return { name: String(nameOrPayload || ''), options: options || {} }
 }
 
 /**
@@ -1487,12 +1512,15 @@ export function registerScoopIPC(): void {
   })
 
   // Install a package
-  ipcMain.handle('scoop:install', async (event, name: string, options?: { global?: boolean; skipCheck?: boolean; independent?: boolean; noUpdateScoop?: boolean }) => {
+  ipcMain.handle('scoop:install', async (event, nameOrPayload: string | { appName?: string; name?: string }, rawOptions?: ScoopInstallOptions) => {
+    const { name, options } = normalizeScoopInstallPayload(nameOrPayload, rawOptions)
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
+    const isGlobal = options?.isGlobal ?? options?.global
     const args = ['install', name]
-    if (options?.global) args.push('--global')
+    if (isGlobal) args.push('--global')
+    if (options?.force || options?.useSudo) args.push('--force')
     if (options?.skipCheck) args.push('--skip-hash-check')
     if (options?.independent) args.push('--independent')
     if (options?.noUpdateScoop !== false) args.push('--no-update-scoop')
@@ -1502,7 +1530,7 @@ export function registerScoopIPC(): void {
     const task = beginScoopTask('install', name, [name])
 
     try {
-      const privilege = await ensureGlobalPrivilege(win, 'install', name, options?.global)
+      const privilege = await ensureGlobalPrivilege(win, 'install', name, isGlobal, options?.useSudo)
       if (!privilege.ok) {
         sendCommandFailure(win, 'install', name, 'Install', privilege.error)
         sendLogEnd(win, {
@@ -1561,6 +1589,46 @@ export function registerScoopIPC(): void {
     }
   })
 
+  // Reinstall a package: Scoop 没有独立 reinstall 子命令，这里统一映射为 `scoop update <app> --force`。
+  ipcMain.handle('scoop:reinstall', async (event, payload: string | { appName?: string; name?: string; useSudo?: boolean; isGlobal?: boolean; global?: boolean }) => {
+    const { name, options } = normalizeScoopInstallPayload(payload)
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
+      throw new Error('Invalid package name')
+    }
+    const isGlobal = options?.isGlobal ?? options?.global
+    const args = ['update', name, '--force']
+    if (isGlobal) args.push('--global')
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    await stopActiveSourceSyncForPackageCommand(win)
+    const task = beginScoopTask('update', name, [name])
+
+    try {
+      const privilege = await ensureGlobalPrivilege(win, 'update', name, isGlobal, options?.useSudo)
+      if (!privilege.ok) {
+        sendCommandFailure(win, 'update', name, 'Update', privilege.error)
+        sendLogEnd(win, { package: name, packages: [name], success: false, code: null })
+        return { success: false, package: name, code: null, stdout: '', stderr: privilege.error, error: privilege.error }
+      }
+
+      const { stdout, stderr, code, aborted } = await execScoopRaw(args, (data, stream) => {
+        sendProgress(win, { type: 'update', package: name, stream, message: data })
+      }, task.controller.signal, undefined, privilege.useSudo)
+
+      const success = code === 0 && !aborted
+      const error = success ? undefined : normalizeExitError('Update', name, stdout, stderr, code, aborted)
+      if (!success && error) sendCommandFailure(win, 'update', name, 'Update', error, aborted)
+      sendLogEnd(win, { package: name, packages: [name], success, code, aborted })
+      return { success, package: name, code, stdout, stderr, aborted, elevated: privilege.useSudo, error }
+    } finally {
+      finishScoopTask(task, task.controller.signal.aborted ? 'aborted' : 'ended')
+    }
+  })
+
+  ipcMain.handle('scoop:isElevated', async () => ({
+    elevated: await detectProcessElevated(true),
+  }))
+
   // Reset / activate an installed package version (`scoop reset <appname>`)
   ipcMain.handle('scoop:reset', async (event, name: string) => {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-+]{0,100}$/.test(name)) {
@@ -1589,12 +1657,13 @@ export function registerScoopIPC(): void {
   })
 
   // Uninstall a package
-  ipcMain.handle('scoop:uninstall', async (event, name: string, global?: boolean) => {
+  ipcMain.handle('scoop:uninstall', async (event, name: string, global?: boolean, options?: { purge?: boolean }) => {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name)) {
       throw new Error('Invalid package name')
     }
     const args = ['uninstall', name]
     if (global) args.push('--global')
+    if (options?.purge) args.push('--purge')
     const win = BrowserWindow.fromWebContents(event.sender)
     await stopActiveSourceSyncForPackageCommand(win)
     const task = beginScoopTask('uninstall', name, [name])
@@ -1660,7 +1729,7 @@ export function registerScoopIPC(): void {
   })
 
   // Update packages —— 原生批量：一次 spawn 执行 `scoop update a b c`，日志只做 raw stream 转发
-  ipcMain.handle('scoop:update', async (event, target?: string | string[], options?: { force?: boolean; global?: boolean }) => {
+  ipcMain.handle('scoop:update', async (event, target?: string | string[], options?: { force?: boolean; global?: boolean; useSudo?: boolean }) => {
     const names = Array.isArray(target) ? target : (target ? [target] : [])
     const invalid = names.find((name) => !/^[a-zA-Z0-9][a-zA-Z0-9._\-/]{0,100}$/.test(name))
     if (invalid) {
@@ -1676,6 +1745,13 @@ export function registerScoopIPC(): void {
     const task = beginScoopTask('update', pkgLabel, names)
 
     try {
+      const privilege = await ensureGlobalPrivilege(win, 'update', pkgLabel, options?.global, options?.useSudo)
+      if (!privilege.ok) {
+        sendCommandFailure(win, 'update', pkgLabel, 'Update', privilege.error)
+        sendLogEnd(win, { package: pkgLabel, packages: names, success: false, code: null })
+        return { success: false, package: pkgLabel, packages: names, code: null, stdout: '', stderr: privilege.error, error: privilege.error }
+      }
+
       const { stdout, stderr, code, aborted } = await execScoopRaw(args, (data, stream) => {
         sendProgress(win, {
           type: 'update',
@@ -1683,7 +1759,7 @@ export function registerScoopIPC(): void {
           stream,
           message: data,
         })
-      }, task.controller.signal)
+      }, task.controller.signal, undefined, privilege.useSudo)
 
       const success = code === 0 && !aborted
       const diagnostics = extractCommandDiagnostics(stdout, stderr)

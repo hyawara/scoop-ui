@@ -22,20 +22,24 @@ import {
   NDrawerContent,
   NScrollbar,
   NButton,
+  NCheckbox,
   NIcon,
+  NPopover,
+  NRadio,
+  NRadioGroup,
   NTag,
   NSwitch,
   NSpace,
   NCollapse,
   NCollapseItem,
   NSkeleton,
-  NPopconfirm,
   useMessage,
 } from 'naive-ui'
 import {
   DownloadOutline,
   TrashOutline,
   ArrowUpCircleOutline,
+  SparklesOutline,
   OpenOutline,
   CopyOutline,
   CheckmarkDoneOutline,
@@ -83,13 +87,20 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
   (e: 'install', name: string, options: InstallOptions): void
-  (e: 'uninstall', name: string, global: boolean): void
-  (e: 'update', name: string, global?: boolean): void
+  (e: 'uninstall', name: string, global: boolean, options?: { purge?: boolean }): void
+  (e: 'update', name: string, global?: boolean, options?: { useSudo?: boolean; isGlobal?: boolean; action?: 'update' | 'reinstall' }): void
   /** 点击某个依赖项，父层可用于跳转到该包的详情。 */
   (e: 'depend-click', dep: string): void
 }>()
 
 const message = useMessage()
+type InstallMode = 'standard' | 'global'
+const showInstallPopover = ref(false)
+const showUpdatePopover = ref(false)
+const showReinstallPopover = ref(false)
+const showUninstallPopover = ref(false)
+const installMode = ref<InstallMode>('standard')
+const uninstallPurge = ref(false)
 
 // ─── 安装选项（仅未安装时启用）───────────────────────
 const installOptions = ref<InstallOptions>({
@@ -244,19 +255,35 @@ function openHomepage() {
   window.scoopAPI.openExternal(displayHomepage.value)
 }
 
+function installOptionsByMode(): InstallOptions {
+  if (installMode.value === 'global') return { global: true, isGlobal: true }
+  return {}
+}
+
 function handleInstall() {
   if (!props.pkg) return
-  emit('install', props.pkg.name, { ...installOptions.value })
+  showInstallPopover.value = false
+  emit('install', props.pkg.name, { ...installOptions.value, ...installOptionsByMode() })
+  installMode.value = 'standard'
 }
 
 function handleUninstall() {
   if (!props.pkg) return
-  emit('uninstall', props.pkg.name, props.pkg.global ?? false)
+  showUninstallPopover.value = false
+  emit('uninstall', props.pkg.name, props.pkg.global ?? false, uninstallPurge.value ? { purge: true } : undefined)
+  uninstallPurge.value = false
 }
 
 function handleUpdate() {
   if (!props.pkg) return
-  emit('update', props.pkg.name, props.pkg.global ?? false)
+  showUpdatePopover.value = false
+  emit('update', props.pkg.name, props.pkg.global ?? false, { action: 'update' })
+}
+
+function handleReinstall() {
+  if (!props.pkg) return
+  showReinstallPopover.value = false
+  emit('update', props.pkg.name, props.pkg.global ?? false, { action: 'reinstall' })
 }
 
 function handleDependClick(dep: string) {
@@ -363,49 +390,114 @@ async function copyManifest() {
 
       <div v-else class="flex-1 flex flex-col overflow-hidden">
         <!-- ═══ Action Bar：紧跟头部，按 isInstalled 分流 ═══ -->
-        <div v-if="!isInstalled" class="px-5 py-3">
-          <NButton
-            type="primary"
-            size="medium"
-            class="w-full"
-            :loading="processing"
-            :disabled="processing"
-            @click="handleInstall"
-          >
-            <template #icon><NIcon :component="DownloadOutline" size="16" /></template>
-            安装 {{ pkg.name }}
-          </NButton>
+        <div v-if="!isInstalled" class="px-5 py-3 space-y-2">
+          <NPopover v-model:show="showInstallPopover" trigger="click" placement="bottom-end" style="width: 288px; padding: 12px;">
+            <template #trigger>
+              <NButton
+                type="primary"
+                size="large"
+                class="w-full !h-11 !rounded-xl !font-bold"
+                :loading="processing"
+                :disabled="processing"
+              >
+                <template #icon><NIcon :component="DownloadOutline" size="18" /></template>
+                安装软件
+              </NButton>
+            </template>
+            <div class="space-y-3">
+              <div class="text-xs font-bold dark:text-zinc-200 text-zinc-800">安装 {{ pkg.name }} ({{ displayVersion || 'latest' }})</div>
+              <NRadioGroup v-model:value="installMode" name="detail-install-mode" size="small">
+                <div class="space-y-1.5">
+                  <NRadio value="standard">标准安装 (Standard)</NRadio>
+                  <NRadio value="global">🌐 全局安装 (-g)</NRadio>
+                </div>
+              </NRadioGroup>
+              <div class="text-[12px] leading-5 dark:text-zinc-500 text-zinc-500">如果安装需要管理员权限，请以管理员身份启动 Scoop UI 后再安装。</div>
+              <div class="flex justify-end gap-2 pt-2 border-t dark:border-zinc-700/40 border-zinc-200">
+                <NButton size="tiny" quaternary @click="showInstallPopover = false; installMode = 'standard'">取消</NButton>
+                <NButton size="tiny" type="primary" @click="handleInstall">确认安装</NButton>
+              </div>
+            </div>
+          </NPopover>
         </div>
 
         <div v-else class="px-5 py-4">
-          <div class="grid grid-cols-2 gap-3">
-            <NButton
-              quaternary
-              size="medium"
-              class="detail-action-btn detail-action-btn--update"
-              :loading="processing"
-              :disabled="processing"
-              @click="handleUpdate"
-            >
-              <template #icon><NIcon :component="ArrowUpCircleOutline" size="16" /></template>
-              <span class="detail-action-label">{{ updatable && newVersion ? '强制更新 → ' + newVersion : '强制更新' }}</span>
-            </NButton>
+          <div class="space-y-3 p-4 rounded-xl border dark:border-zinc-800/80 border-zinc-200/80 dark:bg-zinc-900/50 bg-white/65">
+            <div :class="updatable ? 'flex items-center gap-2.5 w-full' : 'grid grid-cols-2 gap-3 w-full'">
+              <NPopover
+                v-if="updatable"
+                v-model:show="showUpdatePopover"
+                trigger="click"
+                placement="bottom"
+                style="width: 280px; padding: 12px;"
+              >
+                <template #trigger>
+                  <button
+                    type="button"
+                    class="flex-1 h-10 flex items-center justify-center gap-1.5 px-4 rounded-lg bg-amber-500/20 text-amber-300 font-medium border border-amber-500/30 hover:bg-amber-500/30 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    :disabled="processing"
+                    @click.stop
+                  >
+                    <NIcon :component="SparklesOutline" size="16" />
+                    <span class="truncate">更新至 {{ newVersion || '最新版本' }}</span>
+                  </button>
+                </template>
+                <div class="space-y-2.5">
+                  <div class="text-xs font-bold dark:text-zinc-200 text-zinc-800">确认更新 {{ pkg.name }}？</div>
+                  <div class="text-[12px] leading-5 dark:text-zinc-500 text-zinc-500">如果更新需要管理员权限，请以管理员身份启动 Scoop UI 后再更新。</div>
+                  <div class="flex justify-end gap-2 pt-2 border-t dark:border-zinc-700/40 border-zinc-200">
+                    <NButton size="tiny" quaternary @click="showUpdatePopover = false">取消</NButton>
+                    <NButton size="tiny" type="primary" @click="handleUpdate">开始更新</NButton>
+                  </div>
+                </div>
+              </NPopover>
 
-            <NPopconfirm @positive-click="handleUninstall">
-              <template #trigger>
-                <NButton
-                  quaternary
-                  size="medium"
-                  class="detail-action-btn detail-action-btn--danger"
-                  :loading="processing"
-                  :disabled="processing"
-                >
-                  <template #icon><NIcon :component="TrashOutline" size="16" /></template>
-                  <span class="detail-action-label">卸载</span>
-                </NButton>
-              </template>
-              <span class="text-[13px]">确定要彻底卸载 <strong>{{ pkg.name }}</strong> 吗？</span>
-            </NPopconfirm>
+              <NPopover v-model:show="showReinstallPopover" trigger="click" placement="bottom" style="width: 280px; padding: 12px;">
+                <template #trigger>
+                  <button
+                    type="button"
+                    class="h-10 flex items-center justify-center gap-1.5 px-4 rounded-lg dark:bg-zinc-800/80 bg-zinc-100 text-zinc-500 dark:text-zinc-300 border dark:border-zinc-700/50 border-zinc-200 hover:dark:bg-zinc-700/80 hover:bg-zinc-200/80 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    :class="updatable ? '' : 'w-full'"
+                    :disabled="processing"
+                    @click.stop
+                  >
+                    <NIcon :component="ArrowUpCircleOutline" size="16" />
+                    <span>{{ updatable ? '重装' : '强制重装' }}</span>
+                  </button>
+                </template>
+                <div class="space-y-2.5">
+                  <div class="text-xs font-bold dark:text-zinc-200 text-zinc-800">重新安装 {{ pkg.name }}</div>
+                  <div class="text-[12px] leading-5 dark:text-zinc-500 text-zinc-500">如果重装需要管理员权限，请以管理员身份启动 Scoop UI 后再重装。</div>
+                  <div class="flex justify-end gap-2 pt-2 border-t dark:border-zinc-700/40 border-zinc-200">
+                    <NButton size="tiny" quaternary @click="showReinstallPopover = false">取消</NButton>
+                    <NButton size="tiny" type="primary" @click="handleReinstall">确认重装</NButton>
+                  </div>
+                </div>
+              </NPopover>
+
+              <NPopover v-model:show="showUninstallPopover" trigger="click" placement="bottom-end" style="width: 280px; padding: 12px;">
+                <template #trigger>
+                  <button
+                    type="button"
+                    class="h-10 flex items-center justify-center gap-1.5 px-4 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    :class="updatable ? '' : 'w-full'"
+                    :disabled="processing"
+                    @click.stop
+                  >
+                    <NIcon :component="TrashOutline" size="16" />
+                    <span>{{ updatable ? '卸载' : '卸载应用' }}</span>
+                  </button>
+                </template>
+                <div class="space-y-2.5">
+                  <div class="text-xs font-bold text-rose-400">确定要卸载 {{ pkg.name }} 吗？</div>
+                  <NCheckbox v-model:checked="uninstallPurge">清除所有配置与缓存数据 (--purge)</NCheckbox>
+                  <div class="flex justify-end gap-2 pt-2 border-t dark:border-zinc-700/40 border-zinc-200">
+                    <NButton size="tiny" quaternary @click="showUninstallPopover = false; uninstallPurge = false">取消</NButton>
+                    <NButton size="tiny" type="error" @click="handleUninstall">确认卸载</NButton>
+                  </div>
+                </div>
+              </NPopover>
+            </div>
           </div>
         </div>
 
@@ -668,6 +760,7 @@ async function copyManifest() {
           </div>
         </NScrollbar>
       </div>
+
     </NDrawerContent>
   </NDrawer>
 </template>
@@ -687,52 +780,11 @@ async function copyManifest() {
   border: 1px solid transparent;
 }
 
-.detail-action-btn {
-  width: 100%;
-  min-width: 0;
-  min-height: 42px;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 12px;
-  letter-spacing: 0.01em;
-  overflow: hidden;
-  transition: transform 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
-}
-
-.detail-action-btn:hover {
-  transform: translateY(-1px);
-}
-
 .detail-action-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.detail-action-btn--update {
-  color: rgb(251 191 36) !important;
-  background-color: rgb(245 158 11 / 0.14) !important;
-  border: 1px solid rgb(245 158 11 / 0.22) !important;
-}
-
-.detail-action-btn--update:hover {
-  color: rgb(253 230 138) !important;
-  background-color: rgb(245 158 11 / 0.20) !important;
-  border-color: rgb(245 158 11 / 0.30) !important;
-}
-
-
-.detail-action-btn--danger {
-  color: rgb(248 113 113) !important;
-  background-color: rgb(127 29 29 / 0.18) !important;
-  border: 1px solid rgb(185 28 28 / 0.28) !important;
-}
-
-.detail-action-btn--danger:hover {
-  color: rgb(254 202 202) !important;
-  background-color: rgb(153 27 27 / 0.26) !important;
-  border-color: rgb(248 113 113 / 0.38) !important;
 }
 
 </style>

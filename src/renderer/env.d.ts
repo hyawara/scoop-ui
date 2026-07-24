@@ -8,6 +8,9 @@ declare module '*.vue' {
 
 interface InstallOptions {
   global?: boolean
+  isGlobal?: boolean
+  useSudo?: boolean
+  force?: boolean
   skipCheck?: boolean
   independent?: boolean
   noUpdateScoop?: boolean
@@ -201,9 +204,10 @@ interface Window {
     fetchPackageInfo: (name: string) => Promise<Record<string, any>>
     checkverLatest: (name: string) => Promise<CheckverLatestResult>
     install: (name: string, options?: InstallOptions) => Promise<ScoopCommandResult>
+    reinstall: (name: string, options?: { global?: boolean; isGlobal?: boolean; useSudo?: boolean }) => Promise<ScoopCommandResult>
     reset: (appName: string) => Promise<ResetResult>
-    uninstall: (name: string, global?: boolean) => Promise<ScoopCommandResult>
-    update: (name?: string | string[], options?: { force?: boolean; global?: boolean }) => Promise<UpdateResult>
+    uninstall: (name: string, global?: boolean, options?: { purge?: boolean }) => Promise<ScoopCommandResult>
+    update: (name?: string | string[], options?: { force?: boolean; global?: boolean; useSudo?: boolean }) => Promise<UpdateResult>
     updateSelf: () => Promise<{ success: boolean; stdout: string; stderr: string }>
     cleanup: () => Promise<CleanupResult>
     cache: () => Promise<{ size: number; unit: string; files: number }>
@@ -267,6 +271,7 @@ interface Window {
     onLogEnd: (callback: (data: { package: string; packages?: string[]; success: boolean; code?: number | null; aborted?: boolean }) => void) => void
     removeLogEndListener: () => void
     getCommandState: () => Promise<ScoopCommandState>
+    isElevated: () => Promise<{ elevated: boolean }>
     abortCommand: () => Promise<{ success: boolean; aborted: number }>
     onCommandState: (callback: (data: ScoopCommandState) => void) => void
     removeCommandStateListener: () => void

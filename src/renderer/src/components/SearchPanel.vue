@@ -129,10 +129,10 @@ async function quickInstall(pkgName: string, options?: InstallOptions) {
   }
 }
 
-async function handleDrawerUninstall(name: string, global: boolean) {
+async function handleDrawerUninstall(name: string, global: boolean, options?: { purge?: boolean }) {
   openTerminal()
   try {
-    const result = await window.scoopAPI.uninstall(name, global)
+    const result = await window.scoopAPI.uninstall(name, global, options)
     assertScoopCommandSuccess(result, `${name} 卸载`)
     message.success(`${name} 已卸载`)
     packagesStore.loadInstalled()
@@ -242,7 +242,7 @@ const skeletonItems = Array.from({ length: 5 })
           :disabled="installingSet.has(pkg.name)"
           :active="pkgProgress.isCurrent(pkg.name)"
           @select="selectPackage"
-          @install="(name: string) => quickInstall(name)"
+          @install="(name: string, options?: InstallOptions) => quickInstall(name, options)"
           @show-logs="showPkgLogs"
         />
       </div>

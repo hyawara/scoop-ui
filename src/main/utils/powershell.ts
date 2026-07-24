@@ -336,16 +336,12 @@ export function execScoopRaw(
   useSudo = false
 ): Promise<PSResult> {
   return new Promise((resolve, reject) => {
-    const command = [
-      ...(useSudo ? ['sudo', 'scoop'] : ['scoop']),
-      ...args.map(bashQuote),
-    ].join(' ')
+    const command = ['scoop', ...args.map(bashQuote)].join(' ')
     const child: ChildProcess = spawn(BASH_EXE, ['--login', '-c', command], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        cwd: cwd || undefined,
-      }
-    )
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      cwd: cwd || undefined,
+    })
 
     let stdout = ''
     let stderr = ''
